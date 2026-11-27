@@ -86,7 +86,8 @@ final class CatalogConfigStorage
         }
         $payload = '';
         foreach ($keys as $index => $partKey) {
-            if (!isset($byKey[$partKey]) || (int) $byKey[$partKey]['id'] !== $manifest['row_ids'][$index]) throw new CommonException('后台目录配置分片缺失或索引变化，请管理员核对或重新导入');
+            if (!isset($byKey[$partKey])
+                || (int) $byKey[$partKey]['id'] !== $manifest['row_ids'][$index]) throw new CommonException('后台目录配置分片缺失或索引变化，请管理员核对或重新导入');
             $part = self::decode($byKey[$partKey]['value'] ?? null);
             if (($part[self::MARKER] ?? null) !== self::PART_VERSION || ($part['base_key'] ?? null) !== $key
                 || ($part['generation'] ?? null) !== $manifest['generation'] || ($part['index'] ?? null) !== $index
@@ -249,7 +250,14 @@ final class CatalogConfigStorage
             Db::name('sys_config')->where('site_id', $site)->where('id', $old['id'])->where('config_key', $key)
                 ->update(['value' => $json, 'update_time' => $now]);
         } else {
-            $id = (int) Db::name('sys_config')->insertGetId(['site_id' => $site, 'config_key' => $key, 'value' => $json, 'status' => 1, 'create_time' => $now, 'update_time' => $now]);
+            $id = (int) Db::name('sys_config')->insertGetId([
+                    'site_id' => $site,
+                    'config_key' => $key,
+                    'value' => $json,
+                    'status' => 1,
+                    'create_time' => $now,
+                    'update_time' => $now
+                ]);
         }
         $saved = self::rowById($site, $key, $id, true);
         if (!$saved || !is_string($saved['value']) || !hash_equals($json, $saved['value'])) {

@@ -59,7 +59,12 @@ final class PaymentOrderRecovery
             foreach ($pays as $pay) {
                 if ((int) $pay['status'] === (int) PayDict::STATUS_FINISH) {
                     try {
-                        PaymentService::confirm(['site_id' => $site, 'trade_type' => PaymentService::TRADE_TYPE, 'trade_id' => $id, 'out_trade_no' => $pay['out_trade_no']]);
+                        PaymentService::confirm([
+                                'site_id' => $site,
+                                'trade_type' => PaymentService::TRADE_TYPE,
+                                'trade_id' => $id,
+                                'out_trade_no' => $pay['out_trade_no']
+                            ]);
                     } catch (\Throwable $error) {
                         return $this->result(Store::row('coop_order', $site, $id, true), 'paid_pending', '已确认收款，正在恢复会员权益，请稍后重试核对，不要再次付款');
                     }

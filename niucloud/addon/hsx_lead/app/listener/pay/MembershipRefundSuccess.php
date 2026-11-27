@@ -49,7 +49,10 @@ final class MembershipRefundSuccess
             $source = Store::query('coop_order', $site)->where('out_trade_no', $refund['out_trade_no'])->where('purpose', 'membership')->where('status', 'paid')->lock(true)->find();
             if (!$source) return true;
             $pay = Db::name('pay')->where('site_id', $site)->where('out_trade_no', $refund['out_trade_no'])->where('trade_type', PaymentService::TRADE_TYPE)->where('trade_id', $source['id'])->where('status', PayDict::STATUS_FINISH)->lock(true)->find();
-            if (!$pay || $pay['main_type'] !== PayDict::MEMBER || (int) $pay['main_id'] !== (int) $source['member_id'] || Rules::cents((string) $pay['money']) !== Rules::cents((string) $source['amount'])) throw new CommonException('原会员收款无法核对，未变更主体权益，请平台核对');
+            if (!$pay
+                || $pay['main_type'] !== PayDict::MEMBER
+                || (int) $pay['main_id'] !== (int) $source['member_id']
+                || Rules::cents((string) $pay['money']) !== Rules::cents((string) $source['amount'])) throw new CommonException('原会员收款无法核对，未变更主体权益，请平台核对');
             if (Rules::cents((string) $refund['money']) === 0) return true;
             if (Rules::cents((string) $refund['money']) > Rules::cents((string) $pay['money'])) throw new CommonException('主体会员退款金额异常，未变更权益');
             EntityMembershipService::refund($site, $source, $refund);

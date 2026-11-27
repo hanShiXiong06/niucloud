@@ -35,7 +35,8 @@ final class MembershipVirtualProductService
         $ids = [];
         foreach ($products as $row) {
             if (!is_array($row))throw new CommonException('会员微信商品关联格式无效');
-            foreach (['level_code', 'cycle', 'product_id'] as $field)if (isset($row[$field]) && !is_string($row[$field]))throw new CommonException('会员微信商品关联标识请使用字符串');
+            foreach (['level_code', 'cycle', 'product_id'] as $field)if (isset($row[$field])
+                && !is_string($row[$field]))throw new CommonException('会员微信商品关联标识请使用字符串');
             $on = self::flag($row['enabled'] ?? false);
             $source = $row['source'] ?? null;
             if ($source !== null && !in_array($source, ['catalog', 'special_quote', 'order_quote'], true))throw new CommonException('会员微信商品关联来源无效');
@@ -62,7 +63,8 @@ final class MembershipVirtualProductService
             $tier = $catalog[$key] ?? null;
             $unchanged = self::findPrevious($row, $old);
             // Historical unmatched quotations are preserved, never invented by a config POST.
-            $special = $source === 'special_quote' || ($source === null && (!$tier || self::centsOrZero($row['amount_cents'] ?? null) !== $tier['amount_cents']));
+            $special = $source === 'special_quote'
+                || ($source === null && (!$tier || self::centsOrZero($row['amount_cents'] ?? null) !== $tier['amount_cents']));
             if ($special) {
                 if ($unchanged === null)throw new CommonException('特殊报价关联只能沿用已有记录，请使用现有会员套餐关联微信商品');
                 $row = $unchanged;
@@ -143,7 +145,8 @@ final class MembershipVirtualProductService
     {
         if (($config['payment_mode'] ?? 'standard') !== 'virtual')return;
         $active = [];
-        foreach ($config['products'] ?? [] as $row)if (is_array($row) && self::flag($row['enabled'] ?? false))$active[$row['product_id']] = self::centsOrZero($row['amount_cents'] ?? null);
+        foreach ($config['products'] ?? [] as $row)if (is_array($row)
+            && self::flag($row['enabled'] ?? false))$active[$row['product_id']] = self::centsOrZero($row['amount_cents'] ?? null);
         if (!$active)return;
         $native = new CoreWeappConfigService();
         $app = (string) ($native->getWeappConfig($site)['app_id'] ?? '');
@@ -152,15 +155,24 @@ final class MembershipVirtualProductService
         $env = (int) ($config['env'] ?? 0);
         foreach (Db::name('pay_channel')->where('channel', 'weapp')->where('type', VirtualPaySettings::TYPE)->where('status', 1)->where('site_id', '<>', $site)->field('site_id,config')->select()->toArray() as $other) {
             $raw = Data::decode($other['config']);
-            if (($raw['payment_mode'] ?? 'standard') !== 'virtual' || (string) ($raw['offer_id'] ?? '') !== $offer || (int) ($raw['env'] ?? 0) !== $env)continue;
+            if (($raw['payment_mode'] ?? 'standard') !== 'virtual'
+                || (string) ($raw['offer_id'] ?? '') !== $offer
+                || (int) ($raw['env'] ?? 0) !== $env)continue;
             if ((string) ($native->getWeappConfig((int) $other['site_id'])['app_id'] ?? '') !== $app)continue;
             foreach ($raw['products'] ?? [] as $row) {
-                if (!is_array($row) || !self::flag($row['enabled'] ?? false) || !is_string($row['product_id'] ?? null) || !isset($active[$row['product_id']]))continue;
+                if (!is_array($row)
+                    || !self::flag($row['enabled'] ?? false)
+                    || !is_string($row['product_id'] ?? null)
+                    || !isset($active[$row['product_id']]))continue;
                 if (self::centsOrZero($row['amount_cents'] ?? null) !== $active[$row['product_id']])throw new CommonException('同一小程序商品ID已在其他站点使用不同价格，请管理员核对；未保存');
             }
         }
         try {
-            $pending = Db::name('hsx_lead_virtual_order')->where('app_id', $app)->where('offer_id', $offer)->where('env', $env)->whereIn('product_id', array_keys($active))->whereIn('status', ['prepared', 'pending', 'attention'])->field('product_id,amount_cents')->select()->toArray();
+            $pending = Db::name('hsx_lead_virtual_order')->where('app_id', $app)->where('offer_id', $offer)->where('env', $env)->whereIn('product_id', array_keys($active))->whereIn('status', [
+                    'prepared',
+                    'pending',
+                    'attention'
+                ])->field('product_id,amount_cents')->select()->toArray();
         } catch (\Throwable $error) {
             throw new CommonException('请先完成虚拟支付表结构检查，再启用微信商品关联；当前配置未保存');
         }
@@ -174,7 +186,8 @@ final class MembershipVirtualProductService
         foreach ($old as $prior) {
             if (!is_array($prior))continue;
             $tier = $catalog[self::key($prior)] ?? null;
-            $special = in_array($prior['source'] ?? '', ['special_quote', 'order_quote'], true) || (!isset($prior['source']) && (!$tier || self::centsOrZero($prior['amount_cents'] ?? null) !== $tier['amount_cents']));
+            $special = in_array($prior['source'] ?? '', ['special_quote', 'order_quote'], true)
+                || (!isset($prior['source']) && (!$tier || self::centsOrZero($prior['amount_cents'] ?? null) !== $tier['amount_cents']));
             if (!$special)continue;
             $found = false;
             foreach ($rows as $row) {
@@ -225,7 +238,9 @@ final class MembershipVirtualProductService
         $values = [];
         foreach (['level_code', 'cycle'] as $field) {
             $value = $row[$field] ?? '';
-            if (!is_string($value) || strlen($value) > 32 || ($value !== '' && !preg_match('/^[A-Za-z0-9_-]+$/D', $value)))throw new CommonException('会员等级或周期标识格式无效');
+            if (!is_string($value)
+                || strlen($value) > 32
+                || ($value !== '' && !preg_match('/^[A-Za-z0-9_-]+$/D', $value)))throw new CommonException('会员等级或周期标识格式无效');
             $values[] = $value;
         }
         return json_encode($values, JSON_UNESCAPED_UNICODE);

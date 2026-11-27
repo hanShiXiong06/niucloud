@@ -108,7 +108,9 @@ abstract class AbstractProvider implements ProviderContract
             }
         }
         $fetchedAt = $context['fetched_at'] ?? gmdate('Y-m-d\TH:i:s\Z');
-        if (!is_string($fetchedAt) || !preg_match('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+\-]\d{2}:\d{2})$/D', $fetchedAt) || strtotime($fetchedAt) === false) {
+        if (!is_string($fetchedAt)
+            || !preg_match('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+\-]\d{2}:\d{2})$/D', $fetchedAt)
+            || strtotime($fetchedAt) === false) {
             throw new ProviderException('invalid_scope', '库存采集时间格式不正确');
         }
         $images = array_values(array_unique(array_filter(array_map(fn ($url) => $this->url($url), $mapped['images'] ?? []))));

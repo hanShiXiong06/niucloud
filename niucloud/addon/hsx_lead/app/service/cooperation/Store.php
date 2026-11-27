@@ -36,7 +36,12 @@ final class Store
             if ($lock) $q->lock(true);
             $row = $q->find();
             if (!$row) {
-                $id = (int) self::query('partner', $site)->insertGetId(['site_id' => $site, 'merchant_id' => $merchantId, 'create_time' => time(), 'update_time' => time()]);
+                $id = (int) self::query('partner', $site)->insertGetId([
+                        'site_id' => $site,
+                        'merchant_id' => $merchantId,
+                        'create_time' => time(),
+                        'update_time' => time()
+                    ]);
                 $row = self::row('partner', $site, $id, $lock);
             }
             return $row;

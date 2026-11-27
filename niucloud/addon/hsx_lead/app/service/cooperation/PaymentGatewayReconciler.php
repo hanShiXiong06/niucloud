@@ -20,7 +20,10 @@ final class PaymentGatewayReconciler
     }
     public static function supports(array $pay): bool
     {
-        return in_array($pay['type'] ?? '', [PayDict::WECHATPAY, PayDict::ALIPAY, \addon\hsx_lead\app\service\virtualpay\VirtualPaySettings::TYPE], true) && in_array($pay['channel'] ?? '', ['weapp', 'wechat', 'h5', 'pc', 'app'], true) && is_string($pay['out_trade_no'] ?? null) && $pay['out_trade_no'] !== '';
+        return in_array($pay['type'] ?? '', [PayDict::WECHATPAY, PayDict::ALIPAY, \addon\hsx_lead\app\service\virtualpay\VirtualPaySettings::TYPE], true)
+            && in_array($pay['channel'] ?? '', ['weapp', 'wechat', 'h5', 'pc', 'app'], true)
+            && is_string($pay['out_trade_no'] ?? null)
+            && $pay['out_trade_no'] !== '';
     }
     /** Foreground polling and operator checks never initiate a channel close. */
     public function check(int $site, array $pay): array
@@ -79,7 +82,8 @@ final class PaymentGatewayReconciler
         try {
             $provider = $this->providerFactory ? ($this->providerFactory)($site, (string) $pay['channel'], (string) $pay['type']) : (new CorePayEventService())->init($site, (string) $pay['channel'], (string) $pay['type']);
             $result = $provider->getOrder((string) $pay['out_trade_no']);
-            if (is_array($result) && in_array($result['status'] ?? '', [OnlinePayDict::SUCCESS, OnlinePayDict::TRADE_FINISHED], true))return $this->paid($site, $pay);
+            if (is_array($result)
+                && in_array($result['status'] ?? '', [OnlinePayDict::SUCCESS, OnlinePayDict::TRADE_FINISHED], true))return $this->paid($site, $pay);
         } catch (\Throwable $error) {
         }
         return ['state' => 'paid_pending', 'message' => '原单曾返回收款，当前业务仍待核对；未关闭或再次扣款'];
@@ -100,7 +104,8 @@ final class PaymentGatewayReconciler
             $current = Db::name('pay')->where('site_id', $site)->where('id', (int) $pay['id'])->lock(true)->find();
             if (!$current)return ['state' => 'uncertain', 'message' => '原支付记录已变化，未关闭业务'];
             if ((int) $current['status'] === (int) PayDict::STATUS_FINISH)return $this->paid($site, $current);
-            if ((int) $current['status'] !== (int) PayDict::STATUS_CANCEL && PaymentCloseScope::run($site, (string) $pay['out_trade_no'], static fn () => (new CorePayService())->payClose($site, ['out_trade_no' => $pay['out_trade_no'], 'reason' => '渠道已确认关闭'])) !== true)return ['state' => 'uncertain', 'message' => '渠道已关闭，本地付款状态仍待核对'];
+            if ((int) $current['status'] !== (int) PayDict::STATUS_CANCEL
+                && PaymentCloseScope::run($site, (string) $pay['out_trade_no'], static fn () => (new CorePayService())->payClose($site, ['out_trade_no' => $pay['out_trade_no'], 'reason' => '渠道已确认关闭'])) !== true)return ['state' => 'uncertain', 'message' => '渠道已关闭，本地付款状态仍待核对'];
             return ['state' => 'closed', 'message' => '支付渠道已确认关闭'];
         });
     }
@@ -123,9 +128,15 @@ final class PaymentGatewayReconciler
             if ((int) $current['status'] !== (int) PayDict::STATUS_FINISH)(new CorePayService())->paySuccess($site, ['out_trade_no' => $pay['out_trade_no'], 'type' => $pay['type']]);
             // The registered PaySuccess hook normally confirms this. Calling
             // its idempotent business service also handles a missing hook cache.
-            PaymentService::confirm(['site_id' => $site, 'trade_type' => PaymentService::TRADE_TYPE, 'trade_id' => (int) $pay['trade_id'], 'out_trade_no' => $pay['out_trade_no']]);
+            PaymentService::confirm([
+                    'site_id' => $site,
+                    'trade_type' => PaymentService::TRADE_TYPE,
+                    'trade_id' => (int) $pay['trade_id'],
+                    'out_trade_no' => $pay['out_trade_no']
+                ]);
             $order = Store::row('coop_order', $site, (int) $pay['trade_id'], true);
-            if ($order['status'] !== 'paid' || !empty(Data::decode($order['rule_json'])['requires_manual_review']))return ['state' => 'paid_pending', 'message' => '原单已收款，业务结果仍待平台核对；未取消订单，请勿再次付款'];
+            if ($order['status'] !== 'paid'
+                || !empty(Data::decode($order['rule_json'])['requires_manual_review']))return ['state' => 'paid_pending', 'message' => '原单已收款，业务结果仍待平台核对；未取消订单，请勿再次付款'];
             return ['state' => 'paid', 'message' => '已核实原单收款，订单没有取消，请查看付款结果'];
         } catch (\Throwable $error) {
             // Return, never throw: an outer cancellation transaction must not

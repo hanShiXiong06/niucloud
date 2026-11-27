@@ -327,7 +327,13 @@ final class AutomaticAuthService
     private function revision(int $merchantId): string
     {
         $row = Data::query('connection', $this->context->site)->where('merchant_id', $merchantId)->find();
-        return hash('sha256', Data::json($row ? array_intersect_key($row, array_flip(['id', 'config_version', 'provider', 'expected_tenant_id', 'store_id'])) : []));
+        return hash('sha256', Data::json($row ? array_intersect_key($row, array_flip([
+                            'id',
+                            'config_version',
+                            'provider',
+                            'expected_tenant_id',
+                            'store_id'
+                        ])) : []));
     }
 
     private function sameClaim(#[\SensitiveParameter] array $state, #[\SensitiveParameter] array $claim): bool

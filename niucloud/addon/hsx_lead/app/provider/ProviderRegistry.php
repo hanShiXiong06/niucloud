@@ -53,7 +53,12 @@ final class ProviderRegistry
                     'scope_fields' => [$field('store_id', '来源店铺ID', 'text', true, false, 100)],
                     'renewal' => ['automatic' => false, 'mode' => 'manual_token', 'max_attempts' => 0, 'description' => '仅用于已有授权测试，到期后需要重新提供，不自动尝试密码登录']],
             ],
-            'notes' => ['默认使用账号密码登录并逐台核对来源门店，Token仅保留为临时测试入口', '按真实上下架和售出状态同步；已上架且未售设备参与匹配，不要求额外的数量字段', '不调用客户或财务接口，库存响应中的客户、成本和内部备注会剥离；分店ID不冒充认证门店ID', '库存预览后仍需明确启用，再完成完整分页同步；完整同步后消失的设备不再参与匹配'],
+            'notes' => [
+                '默认使用账号密码登录并逐台核对来源门店，Token仅保留为临时测试入口',
+                '按真实上下架和售出状态同步；已上架且未售设备参与匹配，不要求额外的数量字段',
+                '不调用客户或财务接口，库存响应中的客户、成本和内部备注会剥离；分店ID不冒充认证门店ID',
+                '库存预览后仍需明确启用，再完成完整分页同步；完整同步后消失的设备不再参与匹配'
+            ],
         ]), new ProviderDefinition([
             'key' => 'jixiaoer', 'name' => '机小二', 'aliases' => ['guanql'], 'adapter' => JixiaoerProvider::class, 'grade_field' => 'fineness',
             'verified_identity' => true, 'auth_mode' => 'password', 'auth_type' => 'password', 'renderer' => 'fields', 'read_only' => true,
@@ -80,7 +85,14 @@ final class ProviderRegistry
             'scope_fields' => [],
             'server_credential_fields' => [$field('user_id', '认证账号ID', 'text', true, false, 18), $field('merchant_id', '认证门店ID', 'text', true, false, 18),
                 $field('store_name', '认证门店名称', 'text', true, false, 120), $field('expires_at', '授权到期时间', 'text', true, false, 11)],
-            'interactive_auth' => ['type' => 'sms_code', 'credential_fields' => ['username'], 'fields' => [], 'code_length' => 4, 'default' => true, 'automatic_recognition' => false],
+            'interactive_auth' => [
+                'type' => 'sms_code',
+                'credential_fields' => ['username'],
+                'fields' => [],
+                'code_length' => 4,
+                'default' => true,
+                'automatic_recognition' => false
+            ],
             'renewal' => ['automatic' => false, 'mode' => 'interactive_login', 'max_attempts' => 0, 'description' => '主动获取短信验证码登录；有效期内自动同步，授权失效后重新验证，不自动发送短信'],
             'notes' => ['只读取短信授权账号状态1的已上架库存，不回写源平台', '完整分页后发布；汇总台数不作为记录总数，不导入ERP业务分类', '状态5为在库未上架，暂不纳入；仅已上架且有货的有效快照参与库存匹配，未上架不等于已售'],
         ])];

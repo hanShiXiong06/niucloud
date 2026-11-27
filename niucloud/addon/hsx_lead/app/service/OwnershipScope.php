@@ -36,7 +36,8 @@ final class OwnershipScope
         $keys = [];
         if (!$admin) {
             $ids = Data::decode($siteRole['role_ids'] ?? '');
-            $ids = array_values(array_filter($ids, static fn ($id): bool => (is_int($id) || is_string($id)) && preg_match('/^[1-9][0-9]*$/D', (string) $id) === 1));
+            $ids = array_values(array_filter($ids, static fn ($id): bool => (is_int($id) || is_string($id))
+                    && preg_match('/^[1-9][0-9]*$/D', (string) $id) === 1));
             if ($ids) foreach (Db::name('sys_role')->where('site_id', $this->context->site)->where('status', 1)->whereIn('role_id', $ids)->column('rules') as $rules) {
                 foreach (Data::decode($rules) as $key) if (is_string($key) && str_starts_with($key, 'hsx_lead')) $keys[] = $key;
             }

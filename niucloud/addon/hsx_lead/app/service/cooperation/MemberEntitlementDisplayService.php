@@ -129,7 +129,12 @@ final class MemberEntitlementDisplayService
                 $review = count($seats) > 1;
                 $merchant = $review || !$seats ? null : ($merchants[$seats[0]] ?? null);
             }
-            $out[$id] = ['merchant_id' => (int) ($merchant['id'] ?? 0), 'name' => (string) ($merchant['name'] ?? ''), 'owner' => $merchant && (int) $merchant['member_id'] === $id, 'review' => $review];
+            $out[$id] = [
+                'merchant_id' => (int) ($merchant['id'] ?? 0),
+                'name' => (string) ($merchant['name'] ?? ''),
+                'owner' => $merchant && (int) $merchant['member_id'] === $id,
+                'review' => $review
+            ];
         }
         return $out;
     }

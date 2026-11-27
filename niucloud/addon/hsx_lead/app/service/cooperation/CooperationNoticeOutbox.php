@@ -62,7 +62,8 @@ final class CooperationNoticeOutbox
                 self::finish($site, $id, $state, 'failed', '原协作记录已不存在，通知未发送，请平台核对');
                 return null;
             }
-            if (!is_string($state['action'] ?? null) || !in_array($state['action'], ['assigned', 'accept', 'accepted', 'reject', 'withdraw', 'cancel', 'deal', 'no_deal', 'paid'], true)
+            if (!is_string($state['action'] ?? null)
+                || !in_array($state['action'], ['assigned', 'accept', 'accepted', 'reject', 'withdraw', 'cancel', 'deal', 'no_deal', 'paid'], true)
                 || !is_numeric($state['assignment_version'] ?? null) || (int) $state['assignment_version'] <= 0 || !is_string($state['lead_status'] ?? null)) {
                 self::finish($site, $id, $state, 'failed', '通知事件快照不完整，通知未发送，请平台核对');
                 return null;
@@ -135,7 +136,9 @@ final class CooperationNoticeOutbox
     }
     private static function ownsAttempt(array $row, array $state, array $event): bool
     {
-        return $row['action'] === 'notice_pending' && ($state['status'] ?? '') === 'processing' && (int) ($state['attempts'] ?? 0) === (int) $event['outbox_attempt'];
+        return $row['action'] === 'notice_pending'
+            && ($state['status'] ?? '') === 'processing'
+            && (int) ($state['attempts'] ?? 0) === (int) $event['outbox_attempt'];
     }
     private static function defer(int $site, int $id, array $state, int $until, int $expires): void
     {

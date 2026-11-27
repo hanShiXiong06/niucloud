@@ -80,7 +80,11 @@ final class NoticeConfigService
         $channels[] = ['channel' => 'wecom', 'name' => '企业微信', 'route' => '', 'status' => 'unsupported', 'billable' => false, 'phases' => [],
             'message' => '当前企业微信通道面向员工uid；商户绑定的是会员member_id，不能直接当作员工发送，尚未建立合法身份绑定'];
         return ['templates' => $rows, 'wechat_templates' => $wechatRows, 'channel_settings' => $channels, 'portal_entry' => NoticePortalEntry::get($site),
-            'variables' => array_map(static fn ($key, $label) => ['key' => $key, 'label' => $label, 'field_types' => array_keys(array_filter(self::weappFieldRules(), static fn ($variables) => in_array($key, $variables, true)))], array_keys(self::VARIABLES), self::VARIABLES),
+            'variables' => array_map(static fn ($key, $label) => [
+                    'key' => $key,
+                    'label' => $label,
+                    'field_types' => array_keys(array_filter(self::weappFieldRules(), static fn ($variables) => in_array($key, $variables, true)))
+                ], array_keys(self::VARIABLES), self::VARIABLES),
             'notice' => '只登记本站管理员已核验的公共模板，不自动申请、开启或发送。公众号、小程序与短信使用牛云各自的模板和开关；短信可能计费。'];
     }
 
@@ -105,11 +109,14 @@ final class NoticeConfigService
                 if (!empty($row['kid_list']) || !empty($row['fields'])) throw new CommonException('清空模板时请同时清空关键词编号与字段');
                 $item = ['phase' => $phase, 'tid' => '', 'kid_list' => [], 'scene_desc' => '', 'fields' => []];
             } else {
-                if (!preg_match('/^[1-9][0-9]{0,19}$/D', $tid) || ($row['confirmed'] ?? false) !== true) throw new CommonException('请先在本站小程序官方后台核验公共模板编号、关键词与场景，并勾选确认');
+                if (!preg_match('/^[1-9][0-9]{0,19}$/D', $tid)
+                    || ($row['confirmed'] ?? false) !== true) throw new CommonException('请先在本站小程序官方后台核验公共模板编号、关键词与场景，并勾选确认');
                 $kids = $row['kid_list'] ?? null;
                 $fields = $row['fields'] ?? null;
                 if (!is_array($kids) || !\addon\hsx_lead\app\support\PhpRuntime::isList($kids) || !$kids || count($kids) > 10
-                    || !is_array($fields) || !\addon\hsx_lead\app\support\PhpRuntime::isList($fields) || count($fields) !== count($kids)) throw new CommonException('模板关键词与字段必须一一对应，最多10项');
+                    || !is_array($fields)
+                        || !\addon\hsx_lead\app\support\PhpRuntime::isList($fields)
+                        || count($fields) !== count($kids)) throw new CommonException('模板关键词与字段必须一一对应，最多10项');
                 $cleanKids = [];
                 foreach ($kids as $kid) {
                     if ((!is_int($kid) && !is_string($kid)) || !preg_match('/^[1-9]\d{0,2}$/D', (string) $kid)) throw new CommonException('关键词编号应为1—999整数');
@@ -123,8 +130,10 @@ final class NoticeConfigService
                     if (!is_array($field)) throw new CommonException('模板字段格式不正确');
                     $variable = Data::text($field, 'variable', 40, true);
                     $keyword = Data::text($field, 'keyword', 40, true);
-                    if (!isset(self::VARIABLES[$variable]) || !preg_match('/^(thing|character_string|time|date|phrase|number)([1-9]\d{0,2})$/D', $keyword, $parts)
-                        || !in_array((int) $parts[2], $cleanKids, true) || isset($fieldIds[$keyword])) throw new CommonException('仅允许安全通知变量，字段名编号必须与已核验关键词对应且不能重复');
+                    if (!isset(self::VARIABLES[$variable])
+                        || !preg_match('/^(thing|character_string|time|date|phrase|number)([1-9]\d{0,2})$/D', $keyword, $parts)
+                        || !in_array((int) $parts[2], $cleanKids, true)
+                            || isset($fieldIds[$keyword])) throw new CommonException('仅允许安全通知变量，字段名编号必须与已核验关键词对应且不能重复');
                     $fieldIds[$keyword] = true;
                     if (isset($variablesUsed[$variable])) throw new CommonException('同一通知变量请只映射一次，避免不同字段类型造成歧义');
                     $variablesUsed[$variable] = true;
@@ -134,7 +143,13 @@ final class NoticeConfigService
                 if (count(array_unique(array_map(static fn ($f) => (int) preg_replace('/\D/', '', $f['keyword']), $cleanFields))) !== count($cleanKids)) {
                     throw new CommonException('每个关键词编号必须恰好映射一个字段');
                 }
-                $item = ['phase' => $phase, 'tid' => $tid, 'kid_list' => $cleanKids, 'scene_desc' => Data::text($row, 'scene_desc', 100, true), 'fields' => $cleanFields];
+                $item = [
+                    'phase' => $phase,
+                    'tid' => $tid,
+                    'kid_list' => $cleanKids,
+                    'scene_desc' => Data::text($row, 'scene_desc', 100, true),
+                    'fields' => $cleanFields
+                ];
             }
             $updates[$phase] = $item;
         }
@@ -230,7 +245,9 @@ final class NoticeConfigService
     private static function weappTemplate($row): ?array
     {
         if (!is_array($row) || (!is_string($row['tid'] ?? null) && !is_int($row['tid'] ?? null))
-            || !preg_match('/^[1-9][0-9]{0,19}$/D', (string) $row['tid']) || !is_string($row['scene_desc'] ?? null) || trim($row['scene_desc']) === '') return null;
+            || !preg_match('/^[1-9][0-9]{0,19}$/D', (string) $row['tid'])
+                || !is_string($row['scene_desc'] ?? null)
+                || trim($row['scene_desc']) === '') return null;
         $kids = $row['kid_list'] ?? null;
         $fields = $row['fields'] ?? null;
         if (!is_array($kids) || !is_array($fields) || !$fields || count($fields) > 10 || count($kids) !== count($fields)
@@ -281,7 +298,10 @@ final class NoticeConfigService
 
     private function validateWechat($rows, bool $provided): array
     {
-        if (!is_array($rows) || !\addon\hsx_lead\app\support\PhpRuntime::isList($rows) || count($rows) > 2 || ($provided && !$rows))throw new CommonException('公众号通知配置应包含1—2个场景');
+        if (!is_array($rows)
+            || !\addon\hsx_lead\app\support\PhpRuntime::isList($rows)
+            || count($rows) > 2
+            || ($provided && !$rows))throw new CommonException('公众号通知配置应包含1—2个场景');
         $updates = [];
         foreach ($rows as $row) {
             if (!is_array($row))throw new CommonException('公众号通知场景格式不正确');
@@ -295,7 +315,10 @@ final class NoticeConfigService
                 continue;
             }
             if (!preg_match('/^[A-Za-z0-9_-]{1,64}$/D', $id) || ($row['confirmed'] ?? false) !== true)throw new CommonException('请在本站公众号官方后台核验公共模板与关键词，并勾选确认');
-            if (!is_array($fields) || !\addon\hsx_lead\app\support\PhpRuntime::isList($fields) || !$fields || count($fields) > 10)throw new CommonException('公众号字段应为1—10项');
+            if (!is_array($fields)
+                || !\addon\hsx_lead\app\support\PhpRuntime::isList($fields)
+                || !$fields
+                || count($fields) > 10)throw new CommonException('公众号字段应为1—10项');
             $clean = [];
             $seen = [];
             $vars = [];
@@ -303,7 +326,8 @@ final class NoticeConfigService
                 if (!is_array($field))throw new CommonException('公众号模板字段格式不正确');
                 $variable = Data::text($field, 'variable', 40, true);
                 $keyword = Data::text($field, 'keyword', 40, true);
-                if (!isset(self::VARIABLES[$variable]) || !preg_match('/^(thing|character_string|time|date|phrase|number|keyword)([1-9]\d{0,2})$/D', $keyword, $parts)
+                if (!isset(self::VARIABLES[$variable])
+                    || !preg_match('/^(thing|character_string|time|date|phrase|number|keyword)([1-9]\d{0,2})$/D', $keyword, $parts)
                     || isset($seen[$keyword]) || isset($vars[$variable]))throw new CommonException('公众号字段仅允许安全变量与不重复的官方关键词');
                 if (in_array($parts[1], ['time', 'date'], true) && $variable !== 'occurred_at')throw new CommonException('公众号时间字段请映射通知时间');
                 if ($parts[1] === 'number' && $variable !== 'task_id')throw new CommonException('公众号数字字段请映射工单数字ID');

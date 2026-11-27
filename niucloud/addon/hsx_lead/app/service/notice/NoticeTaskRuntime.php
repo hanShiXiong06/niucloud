@@ -11,7 +11,21 @@ use think\facade\Db;
 final class NoticeTaskRuntime
 {
     public const SAFE_RETRY = ['pending_configuration', 'pending_recipient', 'pending_authorization', 'paused', 'retry_wait', 'rejected', 'exhausted'];
-    public const STATUSES = ['pending', 'dispatching', 'accepted', 'unknown', 'pending_configuration', 'pending_recipient', 'pending_authorization', 'paused', 'retry_wait', 'rejected', 'expired', 'exhausted', 'obsolete'];
+    public const STATUSES = [
+        'pending',
+        'dispatching',
+        'accepted',
+        'unknown',
+        'pending_configuration',
+        'pending_recipient',
+        'pending_authorization',
+        'paused',
+        'retry_wait',
+        'rejected',
+        'expired',
+        'exhausted',
+        'obsolete'
+    ];
     private ?\Closure $dispatcher;
     public function __construct(?callable $dispatcher = null)
     {
@@ -32,7 +46,12 @@ final class NoticeTaskRuntime
     /** Caller holds the source row lock; all source adapters share the exact same delivery task contract. */
     public static function recordIntent(int $site, string $sourceType, int $sourceId, int $member, string $event, string $channel, array $snapshot, int $due, int $expires, string $discriminator = ''): int
     {
-        if (!isset(NoticeEventCatalog::EVENTS[$event]) || !in_array($channel, NoticeEventCatalog::CHANNELS, true) || $site <= 0 || $sourceId <= 0 || $member <= 0 || $expires <= time())return 0;
+        if (!isset(NoticeEventCatalog::EVENTS[$event])
+            || !in_array($channel, NoticeEventCatalog::CHANNELS, true)
+            || $site <= 0
+            || $sourceId <= 0
+            || $member <= 0
+            || $expires <= time())return 0;
         $identity = [$site, $sourceType, $sourceId, $member, $event, $channel];
         if ($discriminator !== '')$identity[] = $discriminator;
         $dedupe = hash('sha256', implode('|', $identity));
@@ -45,9 +64,28 @@ final class NoticeTaskRuntime
     public function recoverSite(int $site, int $limit = 50): int
     {
         if (self::inTransaction())throw new CommonException('事务内不允许执行通知任务');
-        Db::name('hsx_lead_notice_task')->where('site_id', $site)->whereIn('status', ['pending', 'retry_wait', 'pending_configuration', 'pending_recipient', 'pending_authorization', 'paused', 'rejected', 'exhausted'])->where('expires_at', '<=', time())->update(['status' => 'expired', 'last_message' => '通知已超过时效，不再补发', 'update_time' => time()]);
+        Db::name('hsx_lead_notice_task')->where('site_id', $site)->whereIn('status', [
+                'pending',
+                'retry_wait',
+                'pending_configuration',
+                'pending_recipient',
+                'pending_authorization',
+                'paused',
+                'rejected',
+                'exhausted'
+            ])->where('expires_at', '<=', time())->update([
+                'status' => 'expired',
+                'last_message' => '通知已超过时效，不再补发',
+                'update_time' => time()
+            ]);
         foreach (Db::name('hsx_lead_notice_task')->where('site_id', $site)->where('status', 'dispatching')->where('lease_until', '<', time())->limit(max(1, min(200, $limit)))->column('id') as $id)$this->unknownExpiredLease($site, (int) $id);
-        $ids = Db::name('hsx_lead_notice_task')->where('site_id', $site)->whereIn('status', ['pending', 'retry_wait', 'pending_configuration', 'pending_recipient', 'paused'])->where('next_retry_at', '<=', time())->order('next_retry_at,id')->limit(max(1, min(200, $limit)))->column('id');
+        $ids = Db::name('hsx_lead_notice_task')->where('site_id', $site)->whereIn('status', [
+                'pending',
+                'retry_wait',
+                'pending_configuration',
+                'pending_recipient',
+                'paused'
+            ])->where('next_retry_at', '<=', time())->order('next_retry_at,id')->limit(max(1, min(200, $limit)))->column('id');
         foreach ($ids as $id)$this->process($site, (int) $id);
         return count($ids);
     }
@@ -97,8 +135,29 @@ final class NoticeTaskRuntime
                 $attemptNo = (int) $queued['attempt_no'];
                 $attemptId = (int) $queued['id'];
                 Db::name('hsx_lead_notice_attempt')->where('site_id', $site)->where('id', $attemptId)->update(['status' => 'dispatching', 'lease_token' => $token]);
-            } else $attemptId = (int) Db::name('hsx_lead_notice_attempt')->insertGetId(['site_id' => $site, 'task_id' => $id, 'attempt_no' => $attemptNo, 'trigger_type' => 'automatic', 'operator_uid' => 0, 'reason' => '自动执行', 'status' => 'dispatching', 'provider_code' => '', 'message' => '正在提交渠道', 'framework_log_id' => 0, 'lease_token' => $token, 'request_key' => null, 'create_time' => time(), 'finish_time' => 0]);
-            Db::name('hsx_lead_notice_task')->where('site_id', $site)->where('id', $id)->update(['status' => 'dispatching', 'lease_token' => $token, 'lease_until' => time() + 180, 'last_message' => '正在提交本渠道，请勿重复发送', 'update_time' => time()]);
+            } else $attemptId = (int) Db::name('hsx_lead_notice_attempt')->insertGetId([
+                    'site_id' => $site,
+                    'task_id' => $id,
+                    'attempt_no' => $attemptNo,
+                    'trigger_type' => 'automatic',
+                    'operator_uid' => 0,
+                    'reason' => '自动执行',
+                    'status' => 'dispatching',
+                    'provider_code' => '',
+                    'message' => '正在提交渠道',
+                    'framework_log_id' => 0,
+                    'lease_token' => $token,
+                    'request_key' => null,
+                    'create_time' => time(),
+                    'finish_time' => 0
+                ]);
+            Db::name('hsx_lead_notice_task')->where('site_id', $site)->where('id', $id)->update([
+                    'status' => 'dispatching',
+                    'lease_token' => $token,
+                    'lease_until' => time() + 180,
+                    'last_message' => '正在提交本渠道，请勿重复发送',
+                    'update_time' => time()
+                ]);
             return ['site_id' => $site, 'key' => NoticeEventCatalog::key($row['event_key']), 'channel' => $row['channel'], 'template' => $template,
                 'expected_recipient_member_id' => (int) $row['recipient_member_id'],
                 'data' => ['financial_task_id' => $id, 'financial_attempt_id' => $attemptId, 'notice_attempt' => $attemptNo, 'lease_token' => $token]];
@@ -110,7 +169,10 @@ final class NoticeTaskRuntime
         $deferredUntil = 0;
         try {
             $result = $this->dispatcher ? ($this->dispatcher)($claim) : (new FrameworkNoticeGateway())->dispatch($claim);
-            if (is_array($result) && ($result['accepted'] ?? null) === true && ($result['channel'] ?? '') === $claim['channel'] && ($result['provider_code'] ?? null) === '0') {
+            if (is_array($result)
+                && ($result['accepted'] ?? null) === true
+                && ($result['channel'] ?? '') === $claim['channel']
+                && ($result['provider_code'] ?? null) === '0') {
                 $status = 'accepted';
                 $code = '0';
                 $message = '服务商已受理，不代表用户已收到或查看';
@@ -154,7 +216,10 @@ final class NoticeTaskRuntime
         $site = (int) $row['site_id'];
         $event = $policy['events'][$row['event_key']] ?? [];
         $channel = $row['channel'];
-        if (!AccountNoticePolicyService::installed($site) || empty($policy['enabled']) || empty($event['enabled']) || empty($event['channels'][$channel]))return ['paused', '本站已暂停本场景或渠道', null];
+        if (!AccountNoticePolicyService::installed($site)
+            || empty($policy['enabled'])
+            || empty($event['enabled'])
+            || empty($event['channels'][$channel]))return ['paused', '本站已暂停本场景或渠道', null];
         NoticeSourceRegistry::verify($row);
         if (!NoticePreferenceService::enabled($site, (int) $row['recipient_member_id'], $row['event_key'], $channel))return ['paused', '用户已关闭本场景提醒', null];
         $member = Db::name('member')->where('site_id', $site)->where('member_id', $row['recipient_member_id'])->where('status', 1)->where('is_del', 0)->where('delete_time', 0)->find();
@@ -167,11 +232,30 @@ final class NoticeTaskRuntime
         if (empty($config['is_'.$channel]) || empty($config[$field]) || empty($map[$key]))return ['pending_configuration', '请在牛云对应通知渠道获取本站真实模板并开启', null];
         if ($channel === 'sms' && !NoticeConfigService::smsAccountConfigured($site))return ['pending_configuration', '短信账号尚未开通或不可用', null];
         if ($channel === 'wechat' && !NoticePortalEntry::get($site)['h5_ready'])return ['pending_configuration', '本站公众号HTTPS入口未配置', null];
-        return ['ready', '', array_replace(NoticeEventCatalog::definitions()[$key], ['site_id' => $site, 'is_weapp' => 0, 'is_wechat' => 0, 'is_sms' => 0, 'is_'.$channel => 1, $field => $config[$field], $channel => $map[$key]])];
+        return [
+            'ready',
+            '',
+            array_replace(NoticeEventCatalog::definitions()[$key], [
+                    'site_id' => $site,
+                    'is_weapp' => 0,
+                    'is_wechat' => 0,
+                    'is_sms' => 0,
+                    'is_'.$channel => 1,
+                    $field => $config[$field],
+                    $channel => $map[$key]
+                ])
+        ];
     }
     private function pause(int $site, int $id, string $status, string $message): void
     {
-        Db::name('hsx_lead_notice_task')->where('site_id', $site)->where('id', $id)->update(['status' => $status, 'last_message' => $message, 'next_retry_at' => time() + 300, 'lease_token' => '', 'lease_until' => 0, 'update_time' => time()]);
+        Db::name('hsx_lead_notice_task')->where('site_id', $site)->where('id', $id)->update([
+                'status' => $status,
+                'last_message' => $message,
+                'next_retry_at' => time() + 300,
+                'lease_token' => '',
+                'lease_until' => 0,
+                'update_time' => time()
+            ]);
     }
     private function defer(array $row, int $until): void
     {
@@ -202,7 +286,13 @@ final class NoticeTaskRuntime
             $logId = self::frameworkLogId($row, (int) $claim['data']['notice_attempt']);
             Db::name('hsx_lead_notice_task')->where('site_id', $site)->where('id', $id)->update(['status' => $status, 'attempt_count' => $count, 'next_retry_at' => $deferredUntil > 0 ? $deferredUntil : time() + $delay,
                 'lease_token' => '', 'lease_until' => 0, 'provider_code' => $code, 'framework_log_id' => $logId, 'last_message' => $message, 'update_time' => time()]);
-            Db::name('hsx_lead_notice_attempt')->where('site_id', $site)->where('id', $claim['data']['financial_attempt_id'])->where('lease_token', $claim['data']['lease_token'])->update(['status' => $deferredUntil > 0 ? 'paused' : $status, 'provider_code' => $code, 'message' => $message, 'framework_log_id' => $logId, 'finish_time' => time()]);
+            Db::name('hsx_lead_notice_attempt')->where('site_id', $site)->where('id', $claim['data']['financial_attempt_id'])->where('lease_token', $claim['data']['lease_token'])->update([
+                    'status' => $deferredUntil > 0 ? 'paused' : $status,
+                    'provider_code' => $code,
+                    'message' => $message,
+                    'framework_log_id' => $logId,
+                    'finish_time' => time()
+                ]);
         });
     }
     public function unknownExpiredLease(int $site, int $id): void
@@ -210,7 +300,11 @@ final class NoticeTaskRuntime
         Db::transaction(function () use ($site, $id) {
             $row = self::row($site, $id, true);
             if ($row['status'] !== 'dispatching' || (int) $row['lease_until'] >= time())return;
-            Db::name('hsx_lead_notice_attempt')->where('site_id', $site)->where('task_id', $id)->where('status', 'dispatching')->where('lease_token', $row['lease_token'])->update(['status' => 'unknown', 'message' => '执行中断，无法确定服务商是否受理，不自动重发', 'finish_time' => time()]);
+            Db::name('hsx_lead_notice_attempt')->where('site_id', $site)->where('task_id', $id)->where('status', 'dispatching')->where('lease_token', $row['lease_token'])->update([
+                    'status' => 'unknown',
+                    'message' => '执行中断，无法确定服务商是否受理，不自动重发',
+                    'finish_time' => time()
+                ]);
             $this->pause($site, $id, 'unknown', '执行中断，结果待核实，不自动重发');
         });
     }
@@ -219,7 +313,9 @@ final class NoticeTaskRuntime
         foreach (Db::name('sys_notice_log')->where('site_id', $row['site_id'])->where('key', NoticeEventCatalog::key($row['event_key']))->where('member_id', $row['recipient_member_id'])->order('id desc')->limit(10)->select()->toArray() as $log) {
             $params = Data::decode($log['params'] ?? '');
             $vars = $params['vars'] ?? $params['__hsx_lead_notice'] ?? [];
-            if (($vars['__hsx_lead_notice_id'] ?? '') === (string) $row['id'] && ($vars['__hsx_lead_notice_channel'] ?? '') === $row['channel'] && ($vars['__hsx_lead_notice_attempt'] ?? '') === (string) $attempt)return (int) $log['id'];
+            if (($vars['__hsx_lead_notice_id'] ?? '') === (string) $row['id']
+                && ($vars['__hsx_lead_notice_channel'] ?? '') === $row['channel']
+                && ($vars['__hsx_lead_notice_attempt'] ?? '') === (string) $attempt)return (int) $log['id'];
         }
         return 0;
     }
@@ -227,7 +323,13 @@ final class NoticeTaskRuntime
     {
         $task = self::row($site, $id);
         $attempt = Db::name('hsx_lead_notice_attempt')->where('site_id', $site)->where('id', $attemptId)->where('task_id', $id)->find();
-        if (!$attempt || $task['status'] !== 'dispatching' || $attempt['status'] !== 'dispatching' || $task['lease_token'] !== $token || $attempt['lease_token'] !== $token || $task['channel'] !== $channel || NoticeEventCatalog::key($task['event_key']) !== $key)throw new NoticePreflightException('通知执行身份不一致，未发送');
+        if (!$attempt
+            || $task['status'] !== 'dispatching'
+            || $attempt['status'] !== 'dispatching'
+            || $task['lease_token'] !== $token
+            || $attempt['lease_token'] !== $token
+            || $task['channel'] !== $channel
+            || NoticeEventCatalog::key($task['event_key']) !== $key)throw new NoticePreflightException('通知执行身份不一致，未发送');
         if ((int) $task['expires_at'] <= time())throw new ObsoleteNoticeException('通知已超过时效，未发送');
         NoticeDeliveryWindow::assertOpen($site);
         [$state] = (new self())->prepare($task, AccountNoticePolicyService::raw($site));
@@ -314,12 +416,36 @@ final class NoticeTaskRuntime
             $site = $context->site;
             $row = self::row($site, $id, true);
             if (Db::name('hsx_lead_notice_attempt')->where('site_id', $site)->where('task_id', $id)->where('request_key', $requestKey)->count())return;
-            if (!in_array($row['status'], self::SAFE_RETRY, true) || (int) $row['expires_at'] <= time() || (int) $row['manual_retry_count'] >= 3)throw new CommonException('该通知不可安全重试；已受理、结果不明、过时或次数用尽均不会重复发送');
+            if (!in_array($row['status'], self::SAFE_RETRY, true)
+                || (int) $row['expires_at'] <= time()
+                || (int) $row['manual_retry_count'] >= 3)throw new CommonException('该通知不可安全重试；已受理、结果不明、过时或次数用尽均不会重复发送');
             [$state,$message] = $this->prepare($row, AccountNoticePolicyService::raw($site));
             if ($state !== 'ready')throw new CommonException($message);
             $no = (int) Db::name('hsx_lead_notice_attempt')->where('site_id', $site)->where('task_id', $id)->max('attempt_no') + 1;
-            Db::name('hsx_lead_notice_attempt')->insert(['site_id' => $site, 'task_id' => $id, 'attempt_no' => $no, 'trigger_type' => 'manual', 'operator_uid' => $context->uid, 'reason' => $reason, 'status' => 'queued', 'provider_code' => '', 'message' => '管理员已安排安全重试', 'framework_log_id' => 0, 'lease_token' => '', 'request_key' => $requestKey, 'create_time' => time(), 'finish_time' => 0]);
-            Db::name('hsx_lead_notice_task')->where('site_id', $site)->where('id', $id)->update(['status' => 'pending', 'manual_retry_count' => (int) $row['manual_retry_count'] + 1, 'attempt_count' => 0, 'next_retry_at' => time(), 'last_message' => '管理员已安排重试，等待异步处理', 'update_time' => time()]);
+            Db::name('hsx_lead_notice_attempt')->insert([
+                    'site_id' => $site,
+                    'task_id' => $id,
+                    'attempt_no' => $no,
+                    'trigger_type' => 'manual',
+                    'operator_uid' => $context->uid,
+                    'reason' => $reason,
+                    'status' => 'queued',
+                    'provider_code' => '',
+                    'message' => '管理员已安排安全重试',
+                    'framework_log_id' => 0,
+                    'lease_token' => '',
+                    'request_key' => $requestKey,
+                    'create_time' => time(),
+                    'finish_time' => 0
+                ]);
+            Db::name('hsx_lead_notice_task')->where('site_id', $site)->where('id', $id)->update([
+                    'status' => 'pending',
+                    'manual_retry_count' => (int) $row['manual_retry_count'] + 1,
+                    'attempt_count' => 0,
+                    'next_retry_at' => time(),
+                    'last_message' => '管理员已安排重试，等待异步处理',
+                    'update_time' => time()
+                ]);
         });
         return $this->detail($context, $id);
     }

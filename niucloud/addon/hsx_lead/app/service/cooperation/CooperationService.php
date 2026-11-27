@@ -37,7 +37,12 @@ final class CooperationService
         $normalize = static fn (string $value): string => preg_replace('/\s+/u', '', mb_strtolower($value)) ?? '';
         $items = (new BusinessService($this->context))->options($business);
         $keyword = $normalize(Data::text($params, 'keyword', 100));
-        if ($keyword !== '') $items = array_values(array_filter($items, static fn (array $item): bool => str_contains($normalize(implode(' ', [$item['title'], $item['brand'], implode(' ', $item['path'] ?? []), implode(' ', $item['aliases'] ?? [])])), $keyword)));
+        if ($keyword !== '') $items = array_values(array_filter($items, static fn (array $item): bool => str_contains($normalize(implode(' ', [
+                                $item['title'],
+                                $item['brand'],
+                                implode(' ', $item['path'] ?? []),
+                                implode(' ', $item['aliases'] ?? [])
+                            ])), $keyword)));
         $browse = $params['browse'] ?? false;
         if (!in_array($browse, [false, true, 0, 1, '0', '1'], true)) throw new CommonException('型号目录浏览参数无效');
         $limit = in_array($browse, [true, 1, '1'], true) ? 5000 : 100;
@@ -67,7 +72,9 @@ final class CooperationService
                 sort($oldIds);
                 $rule = Data::decode($old['rule_json']);
                 $form = BusinessService::formValues($rule['business_snapshot'] ?? ['fields' => []], $input['form_values'] ?? []);
-                if ($ids !== $oldIds || Data::text($input, 'business_type', 16, true) !== $old['business_type'] || ($rule['form_values'] ?? []) !== $form) throw new CommonException('该请求已用于另一份业务需求，请核对原单');
+                if ($ids !== $oldIds
+                    || Data::text($input, 'business_type', 16, true) !== $old['business_type']
+                    || ($rule['form_values'] ?? []) !== $form) throw new CommonException('该请求已用于另一份业务需求，请核对原单');
                 return (int) $old['id'];
             }
             $config = $this->enabled();
@@ -110,7 +117,9 @@ final class CooperationService
         $keyword = Data::text($params, 'keyword', 100);
         if ($this->context->uid > 0)\addon\hsx_lead\app\support\AdminKeywordSearch::leads($q, $this->context->site, $keyword);
         elseif ($keyword !== '')$q->whereLike('customer_name|models_json|lead_no', '%'.addcslashes($keyword, '\\%_').'%');
-        foreach (['start_time' => '>=', 'end_time' => '<='] as $key => $op) if (isset($params[$key]) && $params[$key] !== '' && (int) $params[$key] > 0) $q->where('create_time', $op, (int) $params[$key]);
+        foreach (['start_time' => '>=', 'end_time' => '<='] as $key => $op) if (isset($params[$key])
+            && $params[$key] !== ''
+            && (int) $params[$key] > 0) $q->where('create_time', $op, (int) $params[$key]);
         $page = Data::page($q, $params);
         $page['data'] = array_map(fn (array $row): array => $this->present($row, false), $page['data']);
         return $page;
@@ -149,7 +158,11 @@ final class CooperationService
             $row['status_label'] = '已退款关闭';
             $row['commission_refund_amount'] = (string) ($rule['commission_refund']['amount'] ?? '');
         }
-        $row['business_name'] = $rule['business_name'] ?? (['purchase' => '二手机', 'rent' => '租机', 'exchange' => '置换'][$row['business_type']] ?? $row['business_type']);
+        $row['business_name'] = $rule['business_name'] ?? ([
+                'purchase' => '二手机',
+                'rent' => '租机',
+                'exchange' => '置换'
+            ][$row['business_type']] ?? $row['business_type']);
         $row['demands'] = $row['models'];
         $row['form_values'] = $rule['form_values'] ?? [];
         $row['business_snapshot'] = $rule['business_snapshot'] ?? null;
@@ -168,7 +181,9 @@ final class CooperationService
         $receiver = $actor === (int) $row['receiver_id'];
         $assignment = TeamService::internalAssignment($row);
         if ($assignment !== null) {
-            $valid = $assignment['publisher_member_id'] > 0 && $assignment['assignee_member_id'] > 0 && $assignment['publisher_member_id'] !== $assignment['assignee_member_id'];
+            $valid = $assignment['publisher_member_id'] > 0
+                && $assignment['assignee_member_id'] > 0
+                && $assignment['publisher_member_id'] !== $assignment['assignee_member_id'];
             $members = $valid ? TeamService::assignmentMembers($this->context->site, Data::row('merchant', $this->context->site, (int) $row['receiver_id']), $assignment['publisher_member_id'], false, $assignment['assignee_member_id']) : [];
             $row['internal_assignee'] = null;
             foreach ($members as $member) if ($member['member_id'] === $assignment['assignee_member_id']) $row['internal_assignee'] = $member;
@@ -187,7 +202,11 @@ final class CooperationService
         $actorRights = $admin ? [] : Rules::capabilities(Store::partner($this->context->site, $actor), $config);
         // Existing publication remains manageable after the publishing membership expires; create() still requires can_publish.
         $row['can_assign'] = !$blocked && !empty($config['enabled']) && ($publisher || $admin) && $row['status'] === 'selecting';
-        $row['can_accept'] = !$blocked && !empty($config['enabled']) && (!empty($actorRights['can_accept']) || $row['is_internal']) && $receiver && $row['status'] === 'assigned';
+        $row['can_accept'] = !$blocked
+            && !empty($config['enabled'])
+            && (!empty($actorRights['can_accept']) || $row['is_internal'])
+            && $receiver
+            && $row['status'] === 'assigned';
         // Expiry must not trap a recipient in an assignment or prevent settlement of accepted work.
         $row['can_reject'] = !$blocked && $receiver && $row['status'] === 'assigned';
         $row['can_report'] = !$blocked && $receiver && $row['status'] === 'following';
@@ -203,10 +222,20 @@ final class CooperationService
         $now = time();
         $row['response_overdue'] = $row['status'] === 'assigned' && (int) $row['response_deadline'] > 0 && (int) $row['response_deadline'] < $now;
         $row['server_time'] = $now;
-        $row['response_remaining_seconds'] = $row['status'] === 'assigned' && ((int) $row['response_deadline'] > 0) ? max(0, (int) $row['response_deadline'] - $now) : 0;
-        $row['contact_overdue'] = $row['status'] === 'following' && (int) $config['contact_hours'] > 0 && (int) $row['accepted_at'] + (int) $config['contact_hours'] * 3600 < $now;
-        $row['review_overdue'] = $row['status'] === 'unpaid' && (int) $config['review_hours'] > 0 && (int) $row['outcome_at'] + (int) $config['review_hours'] * 3600 < $now;
-        $row['attention_reasons'] = array_values(array_filter([$row['review_message'], $row['response_overdue'] ? '接单提醒时间已到，原门店仍可接单；发布方可继续等待或重新选店' : null, $row['contact_overdue'] ? '跟进时间较长，建议联系门店核对进展' : null, $row['review_overdue'] ? '成交后尚未付佣，建议平台抽检核对' : null]));
+        $row['response_remaining_seconds'] = $row['status'] === 'assigned'
+            && ((int) $row['response_deadline'] > 0) ? max(0, (int) $row['response_deadline'] - $now) : 0;
+        $row['contact_overdue'] = $row['status'] === 'following'
+            && (int) $config['contact_hours'] > 0
+            && (int) $row['accepted_at'] + (int) $config['contact_hours'] * 3600 < $now;
+        $row['review_overdue'] = $row['status'] === 'unpaid'
+            && (int) $config['review_hours'] > 0
+            && (int) $row['outcome_at'] + (int) $config['review_hours'] * 3600 < $now;
+        $row['attention_reasons'] = array_values(array_filter([
+                    $row['review_message'],
+                    $row['response_overdue'] ? '接单提醒时间已到，原门店仍可接单；发布方可继续等待或重新选店' : null,
+                    $row['contact_overdue'] ? '跟进时间较长，建议联系门店核对进展' : null,
+                    $row['review_overdue'] ? '成交后尚未付佣，建议平台抽检核对' : null
+                ]));
         $row['needs_attention'] = (bool) $row['attention_reasons'];
         if ($detail) {
             $history = Data::query('audit', $this->context->site)->where('entity_type', 'collaboration')->where('entity_id', $row['id'])->order('id asc')->field('id,action,detail_json,create_time')->select()->toArray();
@@ -232,7 +261,17 @@ final class CooperationService
     private function summary(int $id): array
     {
         $m = Data::row('merchant', $this->context->site, $id);
-        return array_intersect_key($this->partners()->present($m), array_flip(['id', 'name', 'storefront_image', 'contact_name', 'mobile', 'region_text', 'membership', 'membership_rank', 'display_rank']));
+        return array_intersect_key($this->partners()->present($m), array_flip([
+                    'id',
+                    'name',
+                    'storefront_image',
+                    'contact_name',
+                    'mobile',
+                    'region_text',
+                    'membership',
+                    'membership_rank',
+                    'display_rank'
+                ]));
     }
 
     public function stores(array $params = [], int $leadId = 0): array
@@ -259,7 +298,9 @@ final class CooperationService
         $leadRule = $leadId ? Data::decode($lead['rule_json']) : [];
         $business = $leadRule['business_snapshot'] ?? (new BusinessService($this->context))->definition($businessKey, !$leadId);
         $dimension = $business['dimension'];
-        if (!$leadId && array_key_exists('demand_ids', $params) && $params['demand_ids'] !== []) $models = (new BusinessService($this->context))->resolve($business, $params['demand_ids']);
+        if (!$leadId
+            && array_key_exists('demand_ids', $params)
+            && $params['demand_ids'] !== []) $models = (new BusinessService($this->context))->resolve($business, $params['demand_ids']);
         // Validate the whole hierarchy first. Only explicit ranges narrow SQL;
         // auto still needs the full province for county -> city -> province fallback.
         MerchantRegion::apply(Data::query('merchant', $this->context->site), $region);
@@ -301,7 +342,8 @@ final class CooperationService
                     $matched[$model['id']] = $model;
                     break;
                 }
-                foreach ($declared as $ability) if ($ability['id'] === $model['id'] || ($dimension === 'model' && self::matches($model['title'], $ability['title']))) {
+                foreach ($declared as $ability) if ($ability['id'] === $model['id']
+                    || ($dimension === 'model' && self::matches($model['title'], $ability['title']))) {
                     $matched[$model['id']] = $model;
                     break;
                 }
@@ -318,8 +360,10 @@ final class CooperationService
             $candidates[] = $p;
         }
         $choose = static function (array $rows, string $range) use ($region): array {
-            if ($range === 'district') return array_values(array_filter($rows, static fn (array $m): bool => (int) $m['district_id'] === $region['district_id'] && $region['district_id'] > 0));
-            if ($range === 'city') return array_values(array_filter($rows, static fn (array $m): bool => (int) $m['city_id'] === $region['city_id'] && $region['city_id'] > 0));
+            if ($range === 'district') return array_values(array_filter($rows, static fn (array $m): bool => (int) $m['district_id'] === $region['district_id']
+                    && $region['district_id'] > 0));
+            if ($range === 'city') return array_values(array_filter($rows, static fn (array $m): bool => (int) $m['city_id'] === $region['city_id']
+                    && $region['city_id'] > 0));
             return $rows;
         };
         $actual = $scope;
@@ -331,17 +375,40 @@ final class CooperationService
                 if ($items) break;
             }
         } else $items = $choose($candidates, $scope);
-        usort($items, static fn (array $a, array $b): int => [(int) $b['membership_rank'], count($b['match_models']), (int) $b['inventory_count'], -(int) $b['id']] <=> [(int) $a['membership_rank'], count($a['match_models']), (int) $a['inventory_count'], -(int) $a['id']]);
+        usort($items, static fn (array $a, array $b): int => [
+                (int) $b['membership_rank'],
+                count($b['match_models']),
+                (int) $b['inventory_count'],
+                -(int) $b['id']
+            ] <=> [
+                (int) $a['membership_rank'],
+                count($a['match_models']),
+                (int) $a['inventory_count'],
+                -(int) $a['id']
+            ]);
         $reason = $scope === 'auto' && $actual !== 'district' ? ($actual === 'city' ? '本区县暂无匹配门店，已查找全市' : '本市暂无匹配门店，已查找全省') : '按客户所在地区查找';
         if (!$items) $reason = '所选地区暂时没有可承接该需求的门店';
         // Only real colleagues can receive an internal handoff; paid seat limits do not prove membership.
-        if ($publisherId > 0 && $this->context->memberId > 0 && ((int) ($params['_target_merchant_id'] ?? 0) === 0 || (int) $params['_target_merchant_id'] === $publisherId)) {
+        if ($publisherId > 0
+            && $this->context->memberId > 0
+            && ((int) ($params['_target_merchant_id'] ?? 0) === 0 || (int) $params['_target_merchant_id'] === $publisherId)) {
             $own = Data::row('merchant', $this->context->site, $publisherId);
             $ownPartner = Store::partner($this->context->site, $publisherId);
             $members = TeamService::assignmentMembers($this->context->site, $own, $this->context->memberId);
-            if ($members && (int) $own['status'] === 1 && (int) $ownPartner['blocked_at'] === 0 && ($keyword === '' || str_contains(mb_strtolower($own['name'].' '.$own['contact_name']), $keyword))) {
+            if ($members
+                && (int) $own['status'] === 1
+                && (int) $ownPartner['blocked_at'] === 0
+                && ($keyword === '' || str_contains(mb_strtolower($own['name'].' '.$own['contact_name']), $keyword))) {
                 $internal = $this->partners()->present($own, false, []);
-                $internal = array_replace($internal, ['is_internal' => true, 'internal_assignees' => $members, 'match_models' => $models, 'match_demands' => $models, 'business_type' => $businessKey, 'business_name' => $business['name'], 'capability_dimension' => $dimension]);
+                $internal = array_replace($internal, [
+                        'is_internal' => true,
+                        'internal_assignees' => $members,
+                        'match_models' => $models,
+                        'match_demands' => $models,
+                        'business_type' => $businessKey,
+                        'business_name' => $business['name'],
+                        'capability_dimension' => $dimension
+                    ]);
                 array_unshift($items, $internal);
                 if (count($items) === 1) $reason = '本店成员可直接承接；暂无匹配的外部门店';
             }
@@ -423,7 +490,9 @@ final class CooperationService
             $row = $this->authorized($id, true);
             Rules::version($row, $input);
             if ($replace) {
-                if ($this->context->memberId <= 0 || (int) $row['publisher_id'] !== (int) $this->partners()->own(true)['id'] || $row['status'] !== 'assigned')throw new CommonException('交付已处理，只有发布方可以在接单前重新选择门店');
+                if ($this->context->memberId <= 0
+                    || (int) $row['publisher_id'] !== (int) $this->partners()->own(true)['id']
+                    || $row['status'] !== 'assigned')throw new CommonException('交付已处理，只有发布方可以在接单前重新选择门店');
             } elseif ($row['status'] !== 'selecting')throw new CommonException('该线索已交付，请刷新状态后操作');
             $publisher = Store::partner($this->context->site, (int) $row['publisher_id'], true);
             if ((int) $publisher['blocked_at'] > 0) throw new CommonException('发布门店已停止合作，不能新增交付');
@@ -441,7 +510,8 @@ final class CooperationService
             }
             if ($replace && (int) $row['receiver_id'] === $merchantId) {
                 $oldInternal = TeamService::internalAssignment($row);
-                if (!$internal || ($oldInternal !== null && (int) $oldInternal['assignee_member_id'] === $assigneeId))throw new CommonException('请选择其他交付门店或其他本店成员');
+                if (!$internal
+                    || ($oldInternal !== null && (int) $oldInternal['assignee_member_id'] === $assigneeId))throw new CommonException('请选择其他交付门店或其他本店成员');
             }
             $result = $this->stores(['scope' => 'province', '_target_merchant_id' => $merchantId], $id);
             if (!in_array($merchantId, array_map('intval', array_column($result['data'], 'id')), true)) throw new CommonException('门店已不可承接该需求，请重新选择');
@@ -487,8 +557,15 @@ final class CooperationService
             if ($action === 'cancel' && (int) $row['publisher_id'] === $mid && $row['status'] === 'cancelled') return false;
             Rules::version($row, $input);
             if ($action === 'cancel') {
-                if ((int) $row['publisher_id'] !== $mid || $row['status'] !== 'selecting' || (int) $row['receiver_id'] !== 0) throw new CommonException('只能取消尚未选择交付门店的线索；已接单或已成交线索不能取消');
-                $values = ['status' => 'cancelled', 'outcome_at' => time(), 'response_deadline' => 0, 'assignment_version' => (int) $row['assignment_version'] + 1];
+                if ((int) $row['publisher_id'] !== $mid
+                    || $row['status'] !== 'selecting'
+                    || (int) $row['receiver_id'] !== 0) throw new CommonException('只能取消尚未选择交付门店的线索；已接单或已成交线索不能取消');
+                $values = [
+                    'status' => 'cancelled',
+                    'outcome_at' => time(),
+                    'response_deadline' => 0,
+                    'assignment_version' => (int) $row['assignment_version'] + 1
+                ];
             } elseif ($action === 'withdraw') {
                 if ((int) $row['publisher_id'] !== $mid || $row['status'] !== 'assigned') throw new CommonException('只能撤回尚未接单的交付');
                 $values = ['status' => 'selecting', 'receiver_id' => 0, 'response_deadline' => 0, 'assignment_version' => (int) $row['assignment_version'] + 1];
@@ -497,7 +574,9 @@ final class CooperationService
                 $assignment = TeamService::internalAssignment($row);
                 if ($assignment !== null) {
                     $members = TeamService::assignmentMembers($this->context->site, Data::row('merchant', $this->context->site, $mid, true), $assignment['publisher_member_id'], true, $assignment['assignee_member_id']);
-                    if ($assignment['publisher_member_id'] <= 0 || $assignment['assignee_member_id'] !== $this->context->memberId || !in_array($this->context->memberId, array_column($members, 'member_id'), true)) throw new CommonException('这条线索已交给指定成员，仅接收人可以接单或反馈结果');
+                    if ($assignment['publisher_member_id'] <= 0
+                        || $assignment['assignee_member_id'] !== $this->context->memberId
+                        || !in_array($this->context->memberId, array_column($members, 'member_id'), true)) throw new CommonException('这条线索已交给指定成员，仅接收人可以接单或反馈结果');
                 }
                 if (in_array($action, ['accept', 'reject'], true)) {
                     if ($row['status'] !== 'assigned') throw new CommonException('该交付已处理，请刷新');
@@ -505,12 +584,24 @@ final class CooperationService
                         $activeConfig = $this->enabled();
                         if ((int) $row['publisher_id'] !== $mid) Rules::assertCapability($partner, $activeConfig, 'can_accept');
                     }
-                    $values = $action === 'accept' ? ['status' => 'following', 'accepted_at' => time()] : ['status' => 'selecting', 'receiver_id' => 0, 'response_deadline' => 0, 'assignment_version' => (int) $row['assignment_version'] + 1];
+                    $values = $action === 'accept' ? ['status' => 'following', 'accepted_at' => time()] : [
+                        'status' => 'selecting',
+                        'receiver_id' => 0,
+                        'response_deadline' => 0,
+                        'assignment_version' => (int) $row['assignment_version'] + 1
+                    ];
                 } else {
                     if ($row['status'] !== 'following') throw new CommonException('只有接单后且尚未反馈的线索可以回填');
                     $internal = (int) $row['publisher_id'] === (int) $row['receiver_id'];
                     $values = ['status' => $action === 'deal' ? ($internal ? 'paid' : 'unpaid') : 'no_deal', 'outcome_at' => time()];
-                    if ($internal && $action === 'deal') $values += ['commission_amount' => '0.00', 'fee_amount' => '0.00', 'net_amount' => '0.00', 'payment_order_id' => 0, 'paid_at' => 0];
+                    if ($internal
+                        && $action === 'deal') $values += [
+                            'commission_amount' => '0.00',
+                            'fee_amount' => '0.00',
+                            'net_amount' => '0.00',
+                            'payment_order_id' => 0,
+                            'paid_at' => 0
+                        ];
                 }
             }
             $typedAccept = false;
@@ -540,7 +631,11 @@ final class CooperationService
         foreach (['selecting', 'assigned', 'following', 'unpaid', 'paid', 'no_deal'] as $s) $out[$s] = (int) (clone $q)->where('status', $s)->count();
         $ids = (clone $q)->column('id');
         $out['pending_reviews'] = (int) Store::query('review', $this->context->site)->whereIn('lead_id', $ids ?: [0])->whereIn('status', ['pending', 'followup'])->count();
-        foreach (['paid_amount' => 'commission_amount', 'fee_amount' => 'fee_amount', 'net_amount' => 'net_amount'] as $key => $field) $out[$key] = (string) (clone $q)->where('status', 'paid')->sum($field);
+        foreach ([
+                'paid_amount' => 'commission_amount',
+                'fee_amount' => 'fee_amount',
+                'net_amount' => 'net_amount'
+            ] as $key => $field) $out[$key] = (string) (clone $q)->where('status', 'paid')->sum($field);
         return $out + ['viewer_scope' => Store::scope($this->context)];
     }
 

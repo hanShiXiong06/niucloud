@@ -25,31 +25,49 @@ final class CooperationNoticeService
         $id = (int) ($event['lead_id'] ?? 0);
         $action = (string) ($event['action'] ?? '');
         $lead = Store::row('collaboration', $site, $id);
-        if (isset($event['assignment_version']) && ((int) $event['assignment_version'] !== (int) $lead['assignment_version'] || ($event['lead_status'] ?? '') !== $lead['status']))return;
+        if (isset($event['assignment_version'])
+            && ((int) $event['assignment_version'] !== (int) $lead['assignment_version'] || ($event['lead_status'] ?? '') !== $lead['status']))return;
         NoticeDeliveryWindow::assertOpen($site);
         $assignment = TeamService::internalAssignment($lead, true);
         if ($assignment !== null) {
             $merchantId = (int) $lead['publisher_id'];
             $merchant = Data::row('merchant', $site, $merchantId);
             foreach (self::internalRecipients($site, $lead, $merchant) as $memberId => $role) {
-                $phase = $action === 'assigned' && $lead['status'] === 'assigned' && (int) $memberId === $assignment['assignee_member_id'] ? 'assigned' : 'changed';
+                $phase = $action === 'assigned'
+                    && $lead['status'] === 'assigned'
+                    && (int) $memberId === $assignment['assignee_member_id'] ? 'assigned' : 'changed';
                 foreach (['weapp', 'wechat', 'sms'] as $channel) $this->channel($site, $lead, $merchantId, (int) $memberId, $role, $phase, $action, $channel);
             }
             return;
         }
         $targets = [(int) $lead['publisher_id'] => 'changed'];
-        if ((int) $lead['receiver_id'] > 0) $targets[(int) $lead['receiver_id']] = $action === 'assigned' && $lead['status'] === 'assigned' ? 'assigned' : 'changed';
+        if ((int) $lead['receiver_id'] > 0) $targets[(int) $lead['receiver_id']] = $action === 'assigned'
+            && $lead['status'] === 'assigned' ? 'assigned' : 'changed';
         $previous = self::previousReceiver($site, $lead, $action);
         if ($previous > 0) $targets[$previous] = 'changed';
         foreach ($targets as $merchantId => $phase) {
             $merchant = Data::row('merchant', $site, $merchantId);
-            foreach (self::recipientIds($site, $merchant) as $memberId => $role) foreach (['weapp', 'wechat', 'sms'] as $channel) $this->channel($site, $lead, $merchantId, (int) $memberId, $role, $phase, $action, $channel);
+            foreach (self::recipientIds($site, $merchant) as $memberId => $role) foreach ([
+                    'weapp',
+                    'wechat',
+                    'sms'
+                ] as $channel) $this->channel($site, $lead, $merchantId, (int) $memberId, $role, $phase, $action, $channel);
         }
     }
     private function channel(int $site, array $lead, int $merchantId, int $memberId, string $role, string $phase, string $action, string $channel): void
     {
         $key = NoticeConfigService::PHASES[$phase];
-        $dedupe = hash('sha256', implode('|', ['cooperation', $site, $lead['id'], $lead['assignment_version'], $lead['status'], $action, $merchantId, $memberId, $channel]));
+        $dedupe = hash('sha256', implode('|', [
+                    'cooperation',
+                    $site,
+                    $lead['id'],
+                    $lead['assignment_version'],
+                    $lead['status'],
+                    $action,
+                    $merchantId,
+                    $memberId,
+                    $channel
+                ]));
         $claim = Db::transaction(function () use ($site, $lead, $merchantId, $memberId, $role, $phase, $action, $channel, $key, $dedupe): ?array {
             $current = Store::row('collaboration', $site, (int) $lead['id'], true);
             if ((int) $current['assignment_version'] !== (int) $lead['assignment_version'] || $current['status'] !== $lead['status']
@@ -95,14 +113,26 @@ final class CooperationNoticeService
             $block = self::retryBlockReason($site, $lead, $row, $state);
             if ($block !== '')throw new CommonException($block);
             $history = is_array($state['retry_history'] ?? null) ? $state['retry_history'] : [];
-            $history[] = ['uid' => $context->uid, 'reason' => $reason, 'at' => time(), 'previous_status' => (string) $state['status'], 'previous_provider_code' => (string) ($state['provider_code'] ?? '')];
+            $history[] = [
+                'uid' => $context->uid,
+                'reason' => $reason,
+                'at' => time(),
+                'previous_status' => (string) $state['status'],
+                'previous_provider_code' => (string) ($state['provider_code'] ?? '')
+            ];
             $state['retry_count'] = (int) ($state['retry_count'] ?? 0) + 1;
             $state['attempts'] = max(1, (int) ($state['attempts'] ?? 1)) + 1;
             $state['retry_history'] = $history;
             $state['provider_code'] = '';
             [$state,$template] = $this->prepare($site, $lead, $state);
             Data::query('audit', $site)->where('id', $auditId)->update(['detail_json' => Data::json($state), 'update_time' => time()]);
-            $context->audit('collaboration_notice_retry', $leadId, 'retry_confirmed', ['notice_audit_id' => $auditId, 'channel' => $state['channel'], 'recipient_member_id' => (int) $state['member_id'], 'attempts' => $state['attempts'], 'reason' => $reason]);
+            $context->audit('collaboration_notice_retry', $leadId, 'retry_confirmed', [
+                    'notice_audit_id' => $auditId,
+                    'channel' => $state['channel'],
+                    'recipient_member_id' => (int) $state['member_id'],
+                    'attempts' => $state['attempts'],
+                    'reason' => $reason
+                ]);
             return $template === null ? null : $this->payload($site, $lead, $auditId, $state, $template);
         });
         if ($claim !== null)$this->dispatchClaim($claim);
@@ -112,15 +142,27 @@ final class CooperationNoticeService
         if ($row['entity_type'] !== 'collaboration_notice' || (int) $row['entity_id'] !== (int) $lead['id'])return '这不是当前工单的渠道通知记录';
         if (!isset($cache['ttl_seconds']))$cache['ttl_seconds'] = (int) AccountNoticePolicyService::raw($site)['ttl_seconds'];
         if ((int) $row['create_time'] + $cache['ttl_seconds'] <= time())return '通知已超过时效，不再重发；请查看工单当前状态';
-        if (!in_array($state['channel'] ?? '', ['weapp', 'wechat', 'sms'], true) || !isset(NoticeConfigService::PHASES[$state['phase'] ?? '']) || ($state['notice_key'] ?? '') !== NoticeConfigService::PHASES[$state['phase']])return '通知场景记录不完整，暂不能重试';
-        if (!in_array($state['status'] ?? '', ['disabled', 'pending_configuration', 'pending_recipient', 'not_submitted', 'rejected', 'deferred'], true))return '仅明确未提交或被服务商拒绝的通知可重试；已受理或结果未知时不能重复发送';
+        if (!in_array($state['channel'] ?? '', ['weapp', 'wechat', 'sms'], true)
+            || !isset(NoticeConfigService::PHASES[$state['phase'] ?? ''])
+            || ($state['notice_key'] ?? '') !== NoticeConfigService::PHASES[$state['phase']])return '通知场景记录不完整，暂不能重试';
+        if (!in_array($state['status'] ?? '', [
+                    'disabled',
+                    'pending_configuration',
+                    'pending_recipient',
+                    'not_submitted',
+                    'rejected',
+                    'deferred'
+                ], true))return '仅明确未提交或被服务商拒绝的通知可重试；已受理或结果未知时不能重复发送';
         if ((int) ($state['retry_count'] ?? 0) >= 3)return '本条通知已重试3次，请先核对渠道日志';
-        if ((int) ($state['assignment_version'] ?? 0) !== (int) $lead['assignment_version'] || ($state['lead_status'] ?? '') !== $lead['status'])return '工单已变化，不再发送过时提醒';
+        if ((int) ($state['assignment_version'] ?? 0) !== (int) $lead['assignment_version']
+            || ($state['lead_status'] ?? '') !== $lead['status'])return '工单已变化，不再发送过时提醒';
         $merchantId = (int) ($state['merchant_id'] ?? 0);
         $action = (string) ($state['event_action'] ?? '');
         if (!isset($cache['previous'][$action]))$cache['previous'][$action] = self::previousReceiver($site, $lead, $action);
         $previous = $cache['previous'][$action];
-        if (!in_array($merchantId, [(int) $lead['publisher_id'], (int) $lead['receiver_id'], $previous], true) || $merchantId <= 0 || ($merchantId === $previous && $previous > 0 && ($state['phase'] ?? '') !== 'changed'))return '接收门店已变化，不再发送原提醒';
+        if (!in_array($merchantId, [(int) $lead['publisher_id'], (int) $lead['receiver_id'], $previous], true)
+            || $merchantId <= 0
+            || ($merchantId === $previous && $previous > 0 && ($state['phase'] ?? '') !== 'changed'))return '接收门店已变化，不再发送原提醒';
         if (!array_key_exists($merchantId, $cache['merchants'] ?? []))$cache['merchants'][$merchantId] = Data::query('merchant', $site)->where('id', $merchantId)->find();
         $merchant = $cache['merchants'][$merchantId];
         if (!$merchant)return '原接收门店已不可用';
@@ -128,7 +170,8 @@ final class CooperationNoticeService
         if ($assignment !== null) {
             if (!isset($cache['internal'][$merchantId]))$cache['internal'][$merchantId] = self::internalRecipients($site, $lead, $merchant);
             $recipients = $cache['internal'][$merchantId];
-            if (!isset($recipients[(int) ($state['member_id'] ?? 0)]) || ($state['phase'] === 'assigned' && (int) $state['member_id'] !== $assignment['assignee_member_id']))return '原指定成员已变化，不再发送原提醒';
+            if (!isset($recipients[(int) ($state['member_id'] ?? 0)])
+                || ($state['phase'] === 'assigned' && (int) $state['member_id'] !== $assignment['assignee_member_id']))return '原指定成员已变化，不再发送原提醒';
         }
         $identity = $merchantId.'|'.(int) ($state['member_id'] ?? 0).'|'.($state['recipient_role'] ?? '');
         if (!array_key_exists($identity, $cache['recipients'] ?? []))$cache['recipients'][$identity] = self::recipient($site, $merchant, (int) ($state['member_id'] ?? 0), (string) ($state['recipient_role'] ?? '')) !== null;
@@ -173,13 +216,25 @@ final class CooperationNoticeService
         }
         if ($state['status'] !== 'dispatching')return [$state, null];
         $definitions = require dirname(__DIR__, 2).'/dict/notice/notice.php';
-        return [$state, array_replace($definitions[$key], ['site_id' => $site, 'is_weapp' => 0, 'is_wechat' => 0, 'is_sms' => 0, 'is_'.$channel => 1, $field => $config[$field], $channel => $mapping[$key]])];
+        return [$state, array_replace($definitions[$key], [
+                    'site_id' => $site,
+                    'is_weapp' => 0,
+                    'is_wechat' => 0,
+                    'is_sms' => 0,
+                    'is_'.$channel => 1,
+                    $field => $config[$field],
+                    $channel => $mapping[$key]
+                ])];
     }
     private function payload(int $site, array $lead, int $id, array $state, array $template): array
     {
         return ['site_id' => $site, 'key' => $state['notice_key'], 'channel' => $state['channel'],
             'expected_recipient_member_id' => (int) $state['member_id'], 'expected_recipient_merchant_id' => (int) $state['merchant_id'],
-            'data' => ['collaboration_id' => (int) $lead['id'], 'notice_audit_id' => $id, 'notice_attempt' => (int) $state['attempts']], 'template' => $template];
+            'data' => [
+                'collaboration_id' => (int) $lead['id'],
+                'notice_audit_id' => $id,
+                'notice_attempt' => (int) $state['attempts']
+            ], 'template' => $template];
     }
     private function dispatchClaim(array $claim): void
     {
@@ -190,7 +245,10 @@ final class CooperationNoticeService
         $deferred = null;
         try {
             $result = $this->dispatcher ? ($this->dispatcher)($claim) : (new FrameworkNoticeGateway())->dispatch($claim);
-            $accepted = is_array($result) && ($result['accepted'] ?? null) === true && ($result['channel'] ?? '') === $claim['channel'] && ($result['provider_code'] ?? null) === '0';
+            $accepted = is_array($result)
+                && ($result['accepted'] ?? null) === true
+                && ($result['channel'] ?? '') === $claim['channel']
+                && ($result['provider_code'] ?? null) === '0';
             $status = $result === false ? 'uncertain' : ($accepted ? 'accepted' : 'submitted');
             $providerCode = $accepted ? '0' : '';
             $message = $result === false ? '结果待核实，请先核对框架日志，不盲目重发' : ($accepted ? '服务商已受理，不代表用户已查看或终端已送达' : '已交牛云通知通道，未返回可核实的服务商回执；不代表终端已收到');
@@ -263,7 +321,13 @@ final class CooperationNoticeService
         return array_map(static function (array $row) use ($states, $includeRecipients, $members, $merchants): array {
             $s = $states[(int) $row['id']];
             $queue = $row['entity_type'] === CooperationNoticeOutbox::TYPE;
-            $out = ['id' => (int) $row['id'], 'channel' => $queue ? 'queue' : ($s['channel'] ?? ''), 'status' => $s['status'] ?? 'uncertain', 'message' => $s['message'] ?? '待核实', 'create_time' => (int) $row['create_time']];
+            $out = [
+                'id' => (int) $row['id'],
+                'channel' => $queue ? 'queue' : ($s['channel'] ?? ''),
+                'status' => $s['status'] ?? 'uncertain',
+                'message' => $s['message'] ?? '待核实',
+                'create_time' => (int) $row['create_time']
+            ];
             if ($includeRecipients && !$queue) {
                 $memberId = (int) ($s['member_id'] ?? 0);
                 $merchantId = (int) ($s['merchant_id'] ?? 0);
@@ -282,15 +346,21 @@ final class CooperationNoticeService
         $audit = Data::row('audit', $site, $auditId);
         $state = Data::decode($audit['detail_json']);
         if ((int) $audit['create_time'] + (int) AccountNoticePolicyService::raw($site)['ttl_seconds'] <= time())throw new NoticePreflightException('通知已超过时效，未发送');
-        if ($audit['entity_type'] !== 'collaboration_notice' || (int) $audit['entity_id'] !== $leadId || ($state['channel'] ?? '') !== $channel || ($state['status'] ?? '') !== 'dispatching'
+        if ($audit['entity_type'] !== 'collaboration_notice'
+            || (int) $audit['entity_id'] !== $leadId
+            || ($state['channel'] ?? '') !== $channel
+            || ($state['status'] ?? '') !== 'dispatching'
             || ($expectedAttempt > 0 && $expectedAttempt !== (int) ($state['attempts'] ?? 1))) throw new NoticePreflightException('通知与原协作记录不对应，未发送');
         $key = NoticeConfigService::PHASES[$state['phase'] ?? ''] ?? '';
         if ($key === '' || ($state['notice_key'] ?? '') !== $key || $expectedKey !== $key)throw new NoticePreflightException('通知模板场景与原发送记录不对应，未发送');
         $config = Db::name('sys_notice')->where('site_id', $site)->where('key', $key)->find() ?: [];
         $field = $channel === 'sms' ? 'sms_id' : $channel.'_template_id';
-        if (empty($config['is_'.$channel]) || empty($config[$field]) || (string) $config[$field] !== ($state['template_id'] ?? ''))throw new NoticePreflightException('通知渠道或模板配置已变化，未发送');
+        if (empty($config['is_'.$channel])
+            || empty($config[$field])
+            || (string) $config[$field] !== ($state['template_id'] ?? ''))throw new NoticePreflightException('通知渠道或模板配置已变化，未发送');
         $lead = Store::row('collaboration', $site, $leadId);
-        if ((int) $state['assignment_version'] !== (int) $lead['assignment_version'] || $state['lead_status'] !== $lead['status']) throw new NoticePreflightException('原交付已变化，不再发送过时提醒');
+        if ((int) $state['assignment_version'] !== (int) $lead['assignment_version']
+            || $state['lead_status'] !== $lead['status']) throw new NoticePreflightException('原交付已变化，不再发送过时提醒');
         $merchant = Data::row('merchant', $site, (int) $state['merchant_id']);
         $previous = self::previousReceiver($site, $lead, (string) ($state['event_action'] ?? ''));
         $returned = (int) $merchant['id'] === $previous && $previous > 0;
@@ -299,7 +369,8 @@ final class CooperationNoticeService
         $assignment = TeamService::internalAssignment($lead, true);
         if ($assignment !== null) {
             $recipients = self::internalRecipients($site, $lead, $merchant);
-            if (!isset($recipients[(int) $state['member_id']]) || ($state['phase'] === 'assigned' && (int) $state['member_id'] !== $assignment['assignee_member_id'])) throw new NoticePreflightException('本店交付接收成员已变化，未发送');
+            if (!isset($recipients[(int) $state['member_id']])
+                || ($state['phase'] === 'assigned' && (int) $state['member_id'] !== $assignment['assignee_member_id'])) throw new NoticePreflightException('本店交付接收成员已变化，未发送');
         }
         // Recheck after claiming: disabling a merchant/member or changing its binding
         // must stop an in-flight reminder before it reaches a framework sender.
@@ -351,7 +422,9 @@ final class CooperationNoticeService
     {
         $assignment = TeamService::internalAssignment($lead, true);
         if ($assignment === null) return [];
-        if ($assignment['publisher_member_id'] <= 0 || $assignment['assignee_member_id'] <= 0 || $assignment['publisher_member_id'] === $assignment['assignee_member_id']) return [];
+        if ($assignment['publisher_member_id'] <= 0
+            || $assignment['assignee_member_id'] <= 0
+            || $assignment['publisher_member_id'] === $assignment['assignee_member_id']) return [];
         $allowed = [$assignment['publisher_member_id'], $assignment['assignee_member_id']];
         $result = [];
         foreach (TeamService::assignmentMembers($site, $merchant) as $member) if (in_array($member['member_id'], $allowed, true)) $result[$member['member_id']] = $member['role'];
@@ -376,7 +449,8 @@ final class CooperationNoticeService
         if ($partner && (int) $partner['blocked_at'] > 0) return null;
         if ($memberId <= 0 || !in_array($role, ['owner', 'employee'], true))return null;
         if ($role === 'owner' && (int) $merchant['member_id'] !== $memberId)return null;
-        if ($role === 'employee' && ((int) $merchant['member_id'] === $memberId || !Db::name('hsx_lead_merchant_member')->where('site_id', $site)->where('merchant_id', (int) $merchant['id'])->where('member_id', $memberId)->where('status', 'active')->find()))return null;
+        if ($role === 'employee'
+            && ((int) $merchant['member_id'] === $memberId || !Db::name('hsx_lead_merchant_member')->where('site_id', $site)->where('merchant_id', (int) $merchant['id'])->where('member_id', $memberId)->where('status', 'active')->find()))return null;
         // A valid link alone is insufficient: ambiguous active links/ownership
         // cannot authenticate into this merchant through the workbench either.
         try {

@@ -47,14 +47,37 @@ final class OrderPricingService
         $this->context->permission('hsx_lead_cooperation_order_price_log');
         if (!$this->context->ownership()->scope()['all_data'])throw new CommonException('查看支付处理日志需要全站业务查看权限');
         Store::row('coop_order', $this->context->site, $id);
-        $page = Data::page(Data::query('audit', $this->context->site)->where('entity_type', 'coop_order')->where('entity_id', $id)->whereIn('action', ['repricing_requested', 'repriced', 'replaces_repriced_order', 'repricing_pending', 'closed', 'payment_checked']), $params);
+        $page = Data::page(Data::query('audit', $this->context->site)->where('entity_type', 'coop_order')->where('entity_id', $id)->whereIn('action', [
+                    'repricing_requested',
+                    'repriced',
+                    'replaces_repriced_order',
+                    'repricing_pending',
+                    'closed',
+                    'payment_checked'
+                ]), $params);
         $uids = array_values(array_unique(array_filter(array_column($page['data'], 'operator_uid'))));
         $names = [];
         if ($uids)foreach (Db::name('sys_user')->whereIn('uid', $uids)->field('uid,username,real_name')->select()->toArray() as $user)$names[(int) $user['uid']] = (string) ($user['real_name'] ?: $user['username']);
-        $labels = ['repricing_requested' => '申请改价', 'repriced' => '已改价建新单', 'replaces_repriced_order' => '由原单改价生成', 'repricing_pending' => '改价待继续核对', 'closed' => '原付款已关闭', 'payment_checked' => '核对到账与恢复开通'];
+        $labels = [
+            'repricing_requested' => '申请改价',
+            'repriced' => '已改价建新单',
+            'replaces_repriced_order' => '由原单改价生成',
+            'repricing_pending' => '改价待继续核对',
+            'closed' => '原付款已关闭',
+            'payment_checked' => '核对到账与恢复开通'
+        ];
         $page['data'] = array_map(static function (array $row) use ($names, $labels): array {
             return ['id' => (int) $row['id'], 'operator_uid' => (int) $row['operator_uid'], 'operator_name' => $names[(int) $row['operator_uid']] ?? '系统', 'create_time' => (int) $row['create_time'], 'action' => $row['action'], 'action_label' => $labels[$row['action']] ?? '支付处理',
-                'detail' => array_intersect_key(Data::decode($row['detail_json'] ?? ''), array_flip(['original_amount', 'amount', 'service_amount', 'reason', 'replacement_order_id', 'source_order_id', 'state', 'message']))];
+                'detail' => array_intersect_key(Data::decode($row['detail_json'] ?? ''), array_flip([
+                            'original_amount',
+                            'amount',
+                            'service_amount',
+                            'reason',
+                            'replacement_order_id',
+                            'source_order_id',
+                            'state',
+                            'message'
+                        ]))];
         }, $page['data']);
         return $page;
     }
@@ -114,23 +137,52 @@ final class OrderPricingService
             if (Rules::cents($amount) < 1 || Rules::cents($amount) > 9999999999)throw new CommonException('新应付金额须为0.01—99,999,999.99元');
             $hash = hash('sha256', Data::json([$request, $old['purpose'], $amount, $service, $reason]));
             if ($existing) {
-                if (($existing['schema'] ?? '') !== self::SCHEMA || !is_string($existing['fingerprint'] ?? null) || !hash_equals($existing['fingerprint'], $hash))throw new CommonException('原单已有另一改价请求，请刷新后继续原处理，或进入已生成的新订单');
-                if (!empty($rule['replacement_order_id']))return ['old' => $old, 'intent' => $existing, 'replacement' => Store::row('coop_order', $this->context->site, (int) $rule['replacement_order_id'], true)];
-                if (!in_array($old['status'], ['unpaid', 'closed'], true) || !empty($rule['requires_manual_review']))return ['old' => $old, 'intent' => $existing, 'blocked' => true];
+                if (($existing['schema'] ?? '') !== self::SCHEMA
+                    || !is_string($existing['fingerprint'] ?? null)
+                    || !hash_equals($existing['fingerprint'], $hash))throw new CommonException('原单已有另一改价请求，请刷新后继续原处理，或进入已生成的新订单');
+                if (!empty($rule['replacement_order_id']))return [
+                    'old' => $old,
+                    'intent' => $existing,
+                    'replacement' => Store::row('coop_order', $this->context->site, (int) $rule['replacement_order_id'], true)
+                ];
+                if (!in_array($old['status'], ['unpaid', 'closed'], true)
+                    || !empty($rule['requires_manual_review']))return ['old' => $old, 'intent' => $existing, 'blocked' => true];
             } else {
                 if ($old['status'] !== 'unpaid' || !empty($rule['requires_manual_review']))throw new CommonException('仅未收款且状态可核实的待支付订单允许改价');
                 if (Rules::cents($amount) === Rules::cents((string) $old['amount']))throw new CommonException('新金额与原金额相同，无需改价');
             }
             // Validate business rules before closing; validate once again after
             // closure because entitlement/deposit/experience facts may change.
-            if ($old['purpose'] === 'membership')EntityMembershipService::prepareRepricedSnapshot($this->context->site, $old, $service, ['operator_uid' => $this->context->uid, 'reason' => $reason, 'at' => time()]);
+            if ($old['purpose'] === 'membership')EntityMembershipService::prepareRepricedSnapshot($this->context->site, $old, $service, [
+                    'operator_uid' => $this->context->uid,
+                    'reason' => $reason,
+                    'at' => time()
+                ]);
             else PaymentService::prepareRepricedCommission($this->context->site, $old, $amount);
             PaymentService::assertReplacementChain($this->context->site, $old, true);
             if (!$existing) {
-                $intent = ['schema' => self::SCHEMA, 'request_id' => $request, 'fingerprint' => $hash, 'amount' => $amount, 'service_amount' => $service, 'original_amount' => (string) $old['amount'], 'reason' => $reason, 'operator_uid' => $this->context->uid, 'at' => time(), 'state' => 'prepared', 'message' => '改价已记录，正在核对原付款'];
+                $intent = [
+                    'schema' => self::SCHEMA,
+                    'request_id' => $request,
+                    'fingerprint' => $hash,
+                    'amount' => $amount,
+                    'service_amount' => $service,
+                    'original_amount' => (string) $old['amount'],
+                    'reason' => $reason,
+                    'operator_uid' => $this->context->uid,
+                    'at' => time(),
+                    'state' => 'prepared',
+                    'message' => '改价已记录，正在核对原付款'
+                ];
                 $rule['pricing_intent'] = $intent;
                 Store::query('coop_order', $this->context->site)->where('id', $id)->update(['rule_json' => Data::json($rule), 'update_time' => time()]);
-                $this->context->audit('coop_order', $id, 'repricing_requested', ['request_id' => $request, 'original_amount' => $old['amount'], 'amount' => $amount, 'service_amount' => $service, 'reason' => $reason]);
+                $this->context->audit('coop_order', $id, 'repricing_requested', [
+                        'request_id' => $request,
+                        'original_amount' => $old['amount'],
+                        'amount' => $amount,
+                        'service_amount' => $service,
+                        'reason' => $reason
+                    ]);
             } else $intent = $existing;
             return ['old' => $old, 'intent' => $intent];
         });
@@ -167,10 +219,27 @@ final class OrderPricingService
                 PaymentService::assertReplacementChain($this->context->site, $new, true);
                 $newId = (int) $new['id'];
                 $rule['replacement_order_id'] = $newId;
-                $rule['pricing_intent'] = array_replace($stored, ['state' => 'replaced', 'message' => '原单已关闭，新金额支付单已创建', 'completed_at' => time(), 'completed_by' => $this->context->uid]);
+                $rule['pricing_intent'] = array_replace($stored, [
+                        'state' => 'replaced',
+                        'message' => '原单已关闭，新金额支付单已创建',
+                        'completed_at' => time(),
+                        'completed_by' => $this->context->uid
+                    ]);
                 Store::query('coop_order', $this->context->site)->where('id', $id)->update(['rule_json' => Data::json($rule), 'update_time' => time()]);
-                $this->context->audit('coop_order', $id, 'repriced', ['replacement_order_id' => $newId, 'original_amount' => $old['amount'], 'amount' => $new['amount'], 'service_amount' => $intent['service_amount'], 'reason' => $intent['reason'], 'request_id' => $intent['request_id']]);
-                $this->context->audit('coop_order', $newId, 'replaces_repriced_order', ['source_order_id' => $id, 'original_amount' => $old['amount'], 'amount' => $new['amount'], 'reason' => $intent['reason']]);
+                $this->context->audit('coop_order', $id, 'repriced', [
+                        'replacement_order_id' => $newId,
+                        'original_amount' => $old['amount'],
+                        'amount' => $new['amount'],
+                        'service_amount' => $intent['service_amount'],
+                        'reason' => $intent['reason'],
+                        'request_id' => $intent['request_id']
+                    ]);
+                $this->context->audit('coop_order', $newId, 'replaces_repriced_order', [
+                        'source_order_id' => $id,
+                        'original_amount' => $old['amount'],
+                        'amount' => $new['amount'],
+                        'reason' => $intent['reason']
+                    ]);
                 return $newId;
             });
             return $this->result($id, $newId, true, '原订单已核实关闭，新支付单已创建；尚未扣款');
@@ -188,14 +257,31 @@ final class OrderPricingService
         $existing = Store::query('coop_order', $this->context->site)->where('merchant_id', $old['merchant_id'])->where('request_id', $request)->lock(true)->find();
         if ($existing) {
             $snapshot = Data::decode($existing['rule_json']);
-            if ((int) ($snapshot['reprices_order_id'] ?? 0) !== (int) $old['id'] || Rules::cents((string) $existing['amount']) !== Rules::cents($intent['amount']))throw new CommonException('改价请求已关联其他会员付款，请核对');
+            if ((int) ($snapshot['reprices_order_id'] ?? 0) !== (int) $old['id']
+                || Rules::cents((string) $existing['amount']) !== Rules::cents($intent['amount']))throw new CommonException('改价请求已关联其他会员付款，请核对');
             return $existing;
         }
         $rule = $quote['rule'];
         $rule['reprices_order_id'] = (int) $old['id'];
         $now = time();
         $rule['promotion_policy'] = PromotionService::policyForNewOrder($this->context->site);
-        $id = (int) Store::query('coop_order', $this->context->site)->insertGetId(['site_id' => $this->context->site, 'order_no' => Data::number('CO'), 'purpose' => 'membership', 'lead_id' => 0, 'merchant_id' => $old['merchant_id'], 'member_id' => $old['member_id'], 'business_key' => 'membership:'.$old['merchant_id'].':'.substr(hash('sha256', $request), 0, 48), 'request_id' => $request, 'amount' => $quote['amount'], 'fee_amount' => '0.00', 'net_amount' => '0.00', 'rule_json' => Data::json($rule), 'status' => 'unpaid', 'create_time' => $now, 'update_time' => $now]);
+        $id = (int) Store::query('coop_order', $this->context->site)->insertGetId([
+                'site_id' => $this->context->site,
+                'order_no' => Data::number('CO'),
+                'purpose' => 'membership',
+                'lead_id' => 0,
+                'merchant_id' => $old['merchant_id'],
+                'member_id' => $old['member_id'],
+                'business_key' => 'membership:'.$old['merchant_id'].':'.substr(hash('sha256', $request), 0, 48),
+                'request_id' => $request,
+                'amount' => $quote['amount'],
+                'fee_amount' => '0.00',
+                'net_amount' => '0.00',
+                'rule_json' => Data::json($rule),
+                'status' => 'unpaid',
+                'create_time' => $now,
+                'update_time' => $now
+            ]);
         return Store::row('coop_order', $this->context->site, $id, true);
     }
 
@@ -206,7 +292,12 @@ final class OrderPricingService
             $old = Store::row('coop_order', $this->context->site, $id, true);
             $rule = Data::decode($old['rule_json']);
             if (!empty($rule['replacement_order_id']) || ($rule['pricing_intent']['fingerprint'] ?? '') !== $intent['fingerprint'])return;
-            $rule['pricing_intent'] = array_replace($rule['pricing_intent'], ['state' => $state, 'message' => $message, 'last_attempt_at' => time(), 'last_operator_uid' => $this->context->uid]);
+            $rule['pricing_intent'] = array_replace($rule['pricing_intent'], [
+                    'state' => $state,
+                    'message' => $message,
+                    'last_attempt_at' => time(),
+                    'last_operator_uid' => $this->context->uid
+                ]);
             Store::query('coop_order', $this->context->site)->where('id', $id)->update(['rule_json' => Data::json($rule), 'update_time' => time()]);
             $this->context->audit('coop_order', $id, 'repricing_pending', ['state' => $state, 'message' => $message, 'request_id' => $intent['request_id']]);
         });
@@ -222,9 +313,16 @@ final class OrderPricingService
         $oldRule = Data::decode($old['rule_json']);
         $replacement = (int) ($oldRule['replacement_order_id'] ?? $replacement);
         $new = $replacement > 0 ? Store::row('coop_order', $this->context->site, $replacement) : null;
-        if ($new && ((int) $new['merchant_id'] !== (int) $old['merchant_id'] || (int) $new['member_id'] !== (int) $old['member_id'] || $new['purpose'] !== $old['purpose'] || (int) (Data::decode($new['rule_json'])['reprices_order_id'] ?? 0) !== $id))throw new CommonException('改价订单关联异常，请平台核对');
+        if ($new
+            && ((int) $new['merchant_id'] !== (int) $old['merchant_id'] || (int) $new['member_id'] !== (int) $old['member_id'] || $new['purpose'] !== $old['purpose'] || (int) (Data::decode($new['rule_json'])['reprices_order_id'] ?? 0) !== $id))throw new CommonException('改价订单关联异常，请平台核对');
         $oldPayment = PaymentService::presentOrder($old);
         $newPayment = $new ? PaymentService::presentOrder($new) : null;
-        return ['repriced' => $repriced && $new !== null, 'old_order' => $oldPayment + self::adminMetadata($old, $oldPayment), 'replacement_order' => $new ? $newPayment + self::adminMetadata($new, $newPayment) : null, 'replacement_id' => $replacement, 'message' => $message];
+        return [
+            'repriced' => $repriced && $new !== null,
+            'old_order' => $oldPayment + self::adminMetadata($old, $oldPayment),
+            'replacement_order' => $new ? $newPayment + self::adminMetadata($new, $newPayment) : null,
+            'replacement_id' => $replacement,
+            'message' => $message
+        ];
     }
 }

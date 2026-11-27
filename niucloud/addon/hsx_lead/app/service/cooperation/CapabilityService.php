@@ -78,7 +78,10 @@ final class CapabilityService
     {
         if (array_key_exists('business_capabilities', $value)) return is_array($value['business_capabilities']) ? $value['business_capabilities'] : [];
         // Existing declarations are readable as second-hand capability, never mass-migrated.
-        $items = array_values(array_filter($value['models'] ?? [], static fn ($row): bool => is_array($row) && is_string($row['id'] ?? null) && is_string($row['title'] ?? null) && is_string($row['brand'] ?? null)));
+        $items = array_values(array_filter($value['models'] ?? [], static fn ($row): bool => is_array($row)
+                && is_string($row['id'] ?? null)
+                && is_string($row['title'] ?? null)
+                && is_string($row['brand'] ?? null)));
         $items = array_map(static fn (array $item): array => array_replace($item, ['dimension' => 'model']), $items);
         return $items ? [['business_type' => 'purchase', 'option_ids' => array_column($items, 'id'), 'items' => $items]] : [];
     }
@@ -108,9 +111,12 @@ final class CapabilityService
             $merchant = $this->context->merchant();
             if ((int) $merchant['id'] !== $merchantId) throw new CommonException('只能设置当前门店的业务能力');
         }
-        if ((int) $merchant['status'] !== 1 || (int) Store::partner($this->context->site, $merchantId)['blocked_at'] > 0) throw new CommonException('已停止合作的门店不能设置业务能力');
+        if ((int) $merchant['status'] !== 1
+            || (int) Store::partner($this->context->site, $merchantId)['blocked_at'] > 0) throw new CommonException('已停止合作的门店不能设置业务能力');
         $selected = $input['business_capabilities'];
-        if (!is_array($selected) || !\addon\hsx_lead\app\support\PhpRuntime::isList($selected) || count($selected) > 30) throw new CommonException('业务能力格式错误，最多30项业务');
+        if (!is_array($selected)
+            || !\addon\hsx_lead\app\support\PhpRuntime::isList($selected)
+            || count($selected) > 30) throw new CommonException('业务能力格式错误，最多30项业务');
         $service = new BusinessService($this->context);
         $config = (new ConfigService($this->context))->get();
         $capabilities = [];

@@ -12,7 +12,18 @@ final class Rules
         $current = false;
         $site = (int) ($partner['site_id'] ?? 0);
         $merchant = (int) ($partner['merchant_id'] ?? 0);
-        if ($site <= 0 || $merchant <= 0) return ['active' => false, 'level_code' => '', 'level_name' => '', 'level_id' => 0, 'rank' => 0, 'display_rank' => 0, 'expires_at' => 0, 'capabilities' => self::emptyCapabilities(), 'benefits' => []];
+        if ($site <= 0
+            || $merchant <= 0) return [
+                'active' => false,
+                'level_code' => '',
+                'level_name' => '',
+                'level_id' => 0,
+                'rank' => 0,
+                'display_rank' => 0,
+                'expires_at' => 0,
+                'capabilities' => self::emptyCapabilities(),
+                'benefits' => []
+            ];
         $pdo = \think\facade\Db::connect()->getPdo();
         $current = $pdo instanceof \PDO && $pdo->inTransaction();
         // RR may retain a read view made before waiting for the tenant lock.
@@ -45,7 +56,12 @@ final class Rules
     public static function assertCapability(array $partner, array $config, string $capability): void
     {
         if (self::allows($partner, $config, $capability)) return;
-        $action = ['can_publish' => '发布需求或选择交付门店', 'can_accept' => '接收新的客户线索', 'can_view_inventory' => '查看其他门店的库存参考', 'all_models' => '使用全型号交付能力'][$capability] ?? '进行此操作';
+        $action = [
+            'can_publish' => '发布需求或选择交付门店',
+            'can_accept' => '接收新的客户线索',
+            'can_view_inventory' => '查看其他门店的库存参考',
+            'all_models' => '使用全型号交付能力'
+        ][$capability] ?? '进行此操作';
         throw new CommonException('当前门店会员不包含此项权益或已到期，暂不能'.$action.'；请查看会员权益。已有工单与账款仍可处理');
     }
     public static function assertMembership(array $partner, array $config): void
@@ -54,13 +70,18 @@ final class Rules
     }
     public static function demandLimit($value): int
     {
-        if ((!is_int($value) && !is_string($value)) || !preg_match('/^(?:0|[1-9][0-9]{0,3})$/D', (string) $value) || (int) $value > 5000) throw new CommonException('需求型号数量上限请填写0—5000的整数');
+        if ((!is_int($value) && !is_string($value))
+            || !preg_match('/^(?:0|[1-9][0-9]{0,3})$/D', (string) $value)
+            || (int) $value > 5000) throw new CommonException('需求型号数量上限请填写0—5000的整数');
         return (int) $value;
     }
     /** Zero removes the business limit; the bounded directory still protects request size. */
     public static function demandIds($ids, int $limit): array
     {
-        if (!is_array($ids) || !$ids || !\addon\hsx_lead\app\support\PhpRuntime::isList($ids) || count($ids) > 5000) throw new CommonException('请从型号清单选择客户需求，单次不得超过完整清单范围');
+        if (!is_array($ids)
+            || !$ids
+            || !\addon\hsx_lead\app\support\PhpRuntime::isList($ids)
+            || count($ids) > 5000) throw new CommonException('请从型号清单选择客户需求，单次不得超过完整清单范围');
         $unique = [];
         foreach ($ids as $id) {
             if (!is_string($id) || $id === '' || strlen($id) > 100) throw new CommonException('所选型号格式不正确，请重新选择');
@@ -71,7 +92,8 @@ final class Rules
     }
     public static function cents($value): int
     {
-        if ((!is_string($value) && !is_int($value)) || !preg_match('/^(0|[1-9][0-9]{0,11})(?:\.([0-9]{1,2}))?$/D', (string) $value, $m)) throw new CommonException('金额请填写非负数字，最多两位小数');
+        if ((!is_string($value) && !is_int($value))
+            || !preg_match('/^(0|[1-9][0-9]{0,11})(?:\.([0-9]{1,2}))?$/D', (string) $value, $m)) throw new CommonException('金额请填写非负数字，最多两位小数');
         return (int) $m[1] * 100 + (int) str_pad($m[2] ?? '', 2, '0');
     }
     public static function amount(int $cents): string
@@ -109,10 +131,20 @@ final class Rules
     public static function version(array $row, array $input): void
     {
         $value = $input['assignment_version'] ?? null;
-        if ((!is_int($value) && !is_string($value)) || !preg_match('/^[0-9]{1,10}$/D', (string) $value) || (int) $value !== (int) $row['assignment_version']) throw new CommonException('交付对象或状态已变化，请刷新详情后操作');
+        if ((!is_int($value) && !is_string($value))
+            || !preg_match('/^[0-9]{1,10}$/D', (string) $value)
+            || (int) $value !== (int) $row['assignment_version']) throw new CommonException('交付对象或状态已变化，请刷新详情后操作');
     }
     public static function status(string $status): string
     {
-        return ['selecting' => '待选门店', 'assigned' => '待接单', 'following' => '跟进中', 'unpaid' => '成交待付佣', 'paid' => '已付佣', 'no_deal' => '未成交', 'cancelled' => '已取消'][$status] ?? '待核对';
+        return [
+            'selecting' => '待选门店',
+            'assigned' => '待接单',
+            'following' => '跟进中',
+            'unpaid' => '成交待付佣',
+            'paid' => '已付佣',
+            'no_deal' => '未成交',
+            'cancelled' => '已取消'
+        ][$status] ?? '待核对';
     }
 }

@@ -100,7 +100,9 @@ final class PaymentHelpService
         $labels = ['title' => '标题', 'content' => '提示内容', 'remark' => '备注提示'];
         foreach (['title' => 40, 'content' => 600, 'remark' => 120] as $key => $limit) {
             $value = $input[$key] ?? $defaults[$key];
-            if (!is_string($value) || !mb_check_encoding($value, 'UTF-8') || mb_strlen($value) > $limit)throw new CommonException('支付帮助'.$labels[$key].'请填写'.$limit.'字以内的普通文字');
+            if (!is_string($value)
+                || !mb_check_encoding($value, 'UTF-8')
+                || mb_strlen($value) > $limit)throw new CommonException('支付帮助'.$labels[$key].'请填写'.$limit.'字以内的普通文字');
             $value = trim(str_replace(["\r\n", "\r"], "\n", $value));
             $decoded = html_entity_decode($value, ENT_QUOTES | ENT_HTML5, 'UTF-8');
             if (preg_match('/[<>\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/u', $value.$decoded)
@@ -118,7 +120,13 @@ final class PaymentHelpService
         }
         if ($out['enabled'] && ($out['content'] === '' || $out['qr_image'] === '') && !$editable)throw new CommonException('开启支付帮助前，请填写提示内容并上传本站客服二维码');
         // Keep a stable five-field contract for existing configuration consumers.
-        return ['enabled' => $out['enabled'], 'title' => $out['title'], 'content' => $out['content'], 'qr_image' => $out['qr_image'], 'remark' => $out['remark']];
+        return [
+            'enabled' => $out['enabled'],
+            'title' => $out['title'],
+            'content' => $out['content'],
+            'qr_image' => $out['qr_image'],
+            'remark' => $out['remark']
+        ];
     }
 
     private static function flag($value): bool
@@ -134,7 +142,11 @@ final class PaymentHelpService
         if ($value === '')return '';
         if (preg_match('/[\s\x00-\x1F\x7F<>"\x27`{}();\\\\%]/u', $value))throw new CommonException('请从本站图片素材中重新选择客服二维码');
         $parts = parse_url($value);
-        if (!is_array($parts) || isset($parts['query']) || isset($parts['fragment']) || isset($parts['user']) || isset($parts['pass']))throw new CommonException('客服二维码不支持私有、临时或带参数的图片地址');
+        if (!is_array($parts)
+            || isset($parts['query'])
+            || isset($parts['fragment'])
+            || isset($parts['user'])
+            || isset($parts['pass']))throw new CommonException('客服二维码不支持私有、临时或带参数的图片地址');
         $reference = $value;
         if (isset($parts['scheme']) || isset($parts['host'])) {
             self::publicUrl($value);
@@ -166,10 +178,18 @@ final class PaymentHelpService
 
     private static function publicUrl(string $url): string
     {
-        if (!mb_check_encoding($url, 'UTF-8') || mb_strlen($url) > 1000 || preg_match('/[\s\x00-\x1F\x7F<>"\x27`{}();\\\\%]/u', $url))throw new CommonException('客服二维码图片地址无效');
+        if (!mb_check_encoding($url, 'UTF-8')
+            || mb_strlen($url) > 1000
+            || preg_match('/[\s\x00-\x1F\x7F<>"\x27`{}();\\\\%]/u', $url))throw new CommonException('客服二维码图片地址无效');
         $parts = parse_url($url);
-        if (!is_array($parts) || isset($parts['query']) || isset($parts['fragment']) || isset($parts['user']) || isset($parts['pass']))throw new CommonException('客服二维码不支持私有、临时或带参数的图片地址');
-        if (!in_array(strtolower((string) ($parts['scheme'] ?? '')), ['http', 'https'], true) || empty($parts['host']) || !filter_var($url, FILTER_VALIDATE_URL))throw new CommonException('客服二维码图片地址无效');
+        if (!is_array($parts)
+            || isset($parts['query'])
+            || isset($parts['fragment'])
+            || isset($parts['user'])
+            || isset($parts['pass']))throw new CommonException('客服二维码不支持私有、临时或带参数的图片地址');
+        if (!in_array(strtolower((string) ($parts['scheme'] ?? '')), ['http', 'https'], true)
+            || empty($parts['host'])
+            || !filter_var($url, FILTER_VALIDATE_URL))throw new CommonException('客服二维码图片地址无效');
         return $url;
     }
 

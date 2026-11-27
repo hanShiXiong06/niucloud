@@ -397,7 +397,20 @@ final class AiguanjiProvider extends AbstractProvider implements InteractiveAuth
     private function safeSnapshot(array $row): array
     {
         $safe = [];
-        foreach (['id', 'company_id', 'warehouse_id', 'product_id', 'product_no', 'imei', 'imei2', 'name', 'status', 'status_text', 'product_attr_memory', 'product_attr_color'] as $key) {
+        foreach ([
+                'id',
+                'company_id',
+                'warehouse_id',
+                'product_id',
+                'product_no',
+                'imei',
+                'imei2',
+                'name',
+                'status',
+                'status_text',
+                'product_attr_memory',
+                'product_attr_color'
+            ] as $key) {
             if (array_key_exists($key, $row)) $safe[$key] = $this->scalar($row[$key]);
         }
         $safe['pre_sale_amount'] = $this->money($row['pre_sale_amount'] ?? null);

@@ -53,7 +53,11 @@ final class VirtualPaySettings
         } catch (\Throwable $error) {
             throw new CommonException('微信身份暂未核实，请重新点击付款');
         }
-        if (!is_array($result) || !is_string($result['openid'] ?? null) || $result['openid'] === '' || !is_string($result['session_key'] ?? null) || $result['session_key'] === '')throw new CommonException('微信身份暂未核实，请重新点击付款');
+        if (!is_array($result)
+            || !is_string($result['openid'] ?? null)
+            || $result['openid'] === ''
+            || !is_string($result['session_key'] ?? null)
+            || $result['session_key'] === '')throw new CommonException('微信身份暂未核实，请重新点击付款');
         return ['openid' => $result['openid'], 'session_key' => $result['session_key']];
     }
     public static function accessToken(int $site): string

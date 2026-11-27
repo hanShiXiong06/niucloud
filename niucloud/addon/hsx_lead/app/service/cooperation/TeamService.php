@@ -66,7 +66,12 @@ final class TeamService
         $link = $q->order('id desc')->find();
         if (!$link) return null;
         $merchant = Data::query('merchant', $this->context->site)->where('id', $link['merchant_id'])->field('id,name')->find();
-        return $merchant ? ['merchant_id' => (int) $merchant['id'], 'name' => $merchant['name'], 'status' => 'pending', 'create_time' => (int) $link['create_time']] : null;
+        return $merchant ? [
+            'merchant_id' => (int) $merchant['id'],
+            'name' => $merchant['name'],
+            'status' => 'pending',
+            'create_time' => (int) $link['create_time']
+        ] : null;
     }
 
     public function lookup(string $code): array
@@ -95,10 +100,23 @@ final class TeamService
             $old = $this->link((int) $merchant['id'], (int) $member['member_id'], true);
             if ($old && $old['status'] === 'pending') return;
             $state = $this->membership((int) $merchant['id'], true);
-            if (!$state['unlimited'] && self::usedAccounts($this->context->site, $merchant, true) >= (int) $state['account_limit']) throw new CommonException('这家门店的账号名额已用完，请负责人升级会员后再加入');
-            $values = ['role' => 'member', 'status' => 'pending', 'create_time' => time(), 'update_time' => time(), 'reviewed_at' => 0, 'reviewer_member_id' => 0, 'last_actor_member_id' => $this->context->memberId];
+            if (!$state['unlimited']
+                && self::usedAccounts($this->context->site, $merchant, true) >= (int) $state['account_limit']) throw new CommonException('这家门店的账号名额已用完，请负责人升级会员后再加入');
+            $values = [
+                'role' => 'member',
+                'status' => 'pending',
+                'create_time' => time(),
+                'update_time' => time(),
+                'reviewed_at' => 0,
+                'reviewer_member_id' => 0,
+                'last_actor_member_id' => $this->context->memberId
+            ];
             if ($old) Db::name(self::TABLE)->where('id', $old['id'])->update($values);
-            else Db::name(self::TABLE)->insert($values + ['site_id' => $this->context->site, 'merchant_id' => $merchant['id'], 'member_id' => $member['member_id']]);
+            else Db::name(self::TABLE)->insert($values + [
+                    'site_id' => $this->context->site,
+                    'merchant_id' => $merchant['id'],
+                    'member_id' => $member['member_id']
+                ]);
             $this->context->audit('merchant_team', (int) $merchant['id'], 'join_requested', ['member_id' => $member['member_id']]);
         });
         return $this->summary();
@@ -128,7 +146,11 @@ final class TeamService
             $link = Db::name(self::TABLE)->where('site_id', $this->context->site)->where('member_id', $this->context->memberId)->whereIn('status', ['active', 'pending'])->lock(true)->find();
             if (!$link) return;
             if ($link['status'] === 'active') $this->assertNoOpenInternalAssignments((int) $link['merchant_id'], $this->context->memberId);
-            Db::name(self::TABLE)->where('id', $link['id'])->update(['status' => 'removed', 'update_time' => time(), 'last_actor_member_id' => $this->context->memberId]);
+            Db::name(self::TABLE)->where('id', $link['id'])->update([
+                    'status' => 'removed',
+                    'update_time' => time(),
+                    'last_actor_member_id' => $this->context->memberId
+                ]);
             $this->context->audit('merchant_team', (int) $link['merchant_id'], $link['status'] === 'pending' ? 'join_cancelled' : 'member_left', ['member_id' => $this->context->memberId]);
         });
         return $this->summary();
@@ -211,7 +233,9 @@ final class TeamService
         $links = Db::name(self::TABLE)->where('site_id', $site)->where('merchant_id', (int) $merchant['id'])->where('status', 'active');
         if ($lock) $links->lock(true);
         $ids = array_values(array_unique(array_merge([(int) $merchant['member_id']], array_map('intval', $links->column('member_id')))));
-        $ids = array_values(array_filter($ids, static fn (int $id): bool => $id > 0 && $id !== $excludeMemberId && ($onlyMemberId <= 0 || $id === $onlyMemberId)));
+        $ids = array_values(array_filter($ids, static fn (int $id): bool => $id > 0
+                && $id !== $excludeMemberId
+                && ($onlyMemberId <= 0 || $id === $onlyMemberId)));
         if (!$ids) return [];
         $query = Db::name('member')->where('site_id', $site)->whereIn('member_id', $ids)->where('status', 1)->where('is_del', 0)->where('delete_time', 0)->field('member_id,nickname,member_no');
         if ($lock) $query->lock(true);
@@ -236,7 +260,10 @@ final class TeamService
     {
         $rule = Data::decode($lead['rule_json'] ?? '');
         $current = (int) ($lead['receiver_id'] ?? 0) > 0 && (int) $lead['receiver_id'] === (int) ($lead['publisher_id'] ?? 0);
-        $returned = $includeReturned && (int) ($lead['receiver_id'] ?? 0) === 0 && in_array($lead['status'] ?? '', ['selecting', 'cancelled'], true) && ($rule['internal_delivery'] ?? false) === true;
+        $returned = $includeReturned
+            && (int) ($lead['receiver_id'] ?? 0) === 0
+            && in_array($lead['status'] ?? '', ['selecting', 'cancelled'], true)
+            && ($rule['internal_delivery'] ?? false) === true;
         if (!$current && !$returned) return null;
         if (!array_key_exists('internal_assignee_member_id', $rule)) return null;
         $assignee = $rule['internal_assignee_member_id'];
@@ -267,9 +294,16 @@ final class TeamService
                 $this->assertAvailable($merchant, true);
                 if (self::resolve(new Context($this->context->site, 0, $memberId), false, true)) throw new CommonException('该账号已加入其他门店，不能重复关联');
                 $state = $this->membership($merchantId, true);
-                if (!$state['unlimited'] && self::usedAccounts($this->context->site, $merchant, true) >= (int) $state['account_limit']) throw new CommonException('账号名额已用完，未批准；请先升级或移除不再使用的成员');
+                if (!$state['unlimited']
+                    && self::usedAccounts($this->context->site, $merchant, true) >= (int) $state['account_limit']) throw new CommonException('账号名额已用完，未批准；请先升级或移除不再使用的成员');
             }
-            Db::name(self::TABLE)->where('id', $link['id'])->update(['status' => $approve ? 'active' : 'rejected', 'reviewed_at' => time(), 'reviewer_member_id' => $this->context->memberId, 'last_actor_member_id' => $this->context->memberId, 'update_time' => time()]);
+            Db::name(self::TABLE)->where('id', $link['id'])->update([
+                    'status' => $approve ? 'active' : 'rejected',
+                    'reviewed_at' => time(),
+                    'reviewer_member_id' => $this->context->memberId,
+                    'last_actor_member_id' => $this->context->memberId,
+                    'update_time' => time()
+                ]);
             $this->context->audit('merchant_team', $merchantId, $approve ? 'member_approved' : 'member_rejected', ['member_id' => $memberId]);
         });
     }
@@ -284,7 +318,11 @@ final class TeamService
             $link = $this->link($merchantId, $memberId, true);
             if (!$link || !in_array($link['status'], ['active', 'pending'], true)) throw new CommonException('成员已移除或申请已处理，请刷新');
             if ($link['status'] === 'active') $this->assertNoOpenInternalAssignments($merchantId, $memberId);
-            Db::name(self::TABLE)->where('id', $link['id'])->update(['status' => 'removed', 'last_actor_member_id' => $this->context->memberId, 'update_time' => time()]);
+            Db::name(self::TABLE)->where('id', $link['id'])->update([
+                    'status' => 'removed',
+                    'last_actor_member_id' => $this->context->memberId,
+                    'update_time' => time()
+                ]);
             $this->context->audit('merchant_team', $merchantId, 'member_removed', ['member_id' => $memberId]);
         });
     }
@@ -296,7 +334,10 @@ final class TeamService
         self::scopeIncoming($query, $memberId);
         foreach ($query->field('id,publisher_id,receiver_id,status,rule_json')->lock(true)->select()->toArray() as $lead) {
             $assignment = self::internalAssignment($lead);
-            if ($assignment === null || $assignment['assignee_member_id'] !== $memberId || $assignment['publisher_member_id'] <= 0 || $assignment['publisher_member_id'] === $memberId) continue;
+            if ($assignment === null
+                || $assignment['assignee_member_id'] !== $memberId
+                || $assignment['publisher_member_id'] <= 0
+                || $assignment['publisher_member_id'] === $memberId) continue;
             throw new CommonException($lead['status'] === 'assigned' ? '该成员还有待接单的本店交付，请先退回或由发布方撤回，再退出或移除成员' : '该成员还有正在跟进的本店交付，请先反馈成交或未成交结果，再退出或移除成员');
         }
     }
@@ -322,13 +363,31 @@ final class TeamService
             $memberQuery = Db::name(self::TABLE)->where('site_id', $this->context->site)->where('merchant_id', $id)->where('member_id', '<>', $owner);
             if (!$isOwner && !$admin) $memberQuery->where('status', 'active');
             $rows = $memberQuery->order('id desc')->select()->toArray();
-            if ($owner > 0) $row['members'][] = ['member_id' => $owner, 'nickname' => $row['owner_name'], 'name' => $row['owner_name'], 'mobile' => $row['owner_mobile'], 'role' => 'owner', 'status' => 'active', 'create_time' => (int) $merchant['create_time'], 'reviewed_at' => 0];
+            if ($owner > 0) $row['members'][] = [
+                'member_id' => $owner,
+                'nickname' => $row['owner_name'],
+                'name' => $row['owner_name'],
+                'mobile' => $row['owner_mobile'],
+                'role' => 'owner',
+                'status' => 'active',
+                'create_time' => (int) $merchant['create_time'],
+                'reviewed_at' => 0
+            ];
             $ids = array_column($rows, 'member_id');
             $members = $ids ? Db::name('member')->where('site_id', $this->context->site)->whereIn('member_id', $ids)->field('member_id,nickname,mobile')->select()->toArray() : [];
             $members = array_column($members, null, 'member_id');
             foreach ($rows as $link) {
                 $m = $members[$link['member_id']] ?? [];
-                $row['members'][] = ['member_id' => (int) $link['member_id'], 'nickname' => (string) ($m['nickname'] ?? '已注销账号'), 'name' => (string) ($m['nickname'] ?? '已注销账号'), 'mobile' => ($isOwner || $admin || (int) $link['member_id'] === $this->context->memberId) ? (string) ($m['mobile'] ?? '') : '', 'role' => 'member', 'status' => $link['status'], 'create_time' => (int) $link['create_time'], 'reviewed_at' => (int) $link['reviewed_at']];
+                $row['members'][] = [
+                    'member_id' => (int) $link['member_id'],
+                    'nickname' => (string) ($m['nickname'] ?? '已注销账号'),
+                    'name' => (string) ($m['nickname'] ?? '已注销账号'),
+                    'mobile' => ($isOwner || $admin || (int) $link['member_id'] === $this->context->memberId) ? (string) ($m['mobile'] ?? '') : '',
+                    'role' => 'member',
+                    'status' => $link['status'],
+                    'create_time' => (int) $link['create_time'],
+                    'reviewed_at' => (int) $link['reviewed_at']
+                ];
             }
         }
         return $row;

@@ -18,28 +18,96 @@ final class BusinessService
     public static function defaults(): array
     {
         $brands = [];
-        foreach (['apple' => '苹果', 'huawei' => '华为', 'xiaomi' => '小米', 'honor' => '荣耀', 'oppo' => 'OPPO', 'vivo' => 'vivo', 'samsung' => '三星', 'realme' => '真我', 'oneplus' => '一加'] as $key => $title) $brands[] = ['id' => 'brand_'.$key, 'title' => $title, 'brand' => $title, 'category_name' => '手机品牌', 'path' => ['新机', '手机品牌', $title]];
+        foreach ([
+                'apple' => '苹果',
+                'huawei' => '华为',
+                'xiaomi' => '小米',
+                'honor' => '荣耀',
+                'oppo' => 'OPPO',
+                'vivo' => 'vivo',
+                'samsung' => '三星',
+                'realme' => '真我',
+                'oneplus' => '一加'
+            ] as $key => $title) $brands[] = [
+            'id' => 'brand_'.$key,
+            'title' => $title,
+            'brand' => $title,
+            'category_name' => '手机品牌',
+            'path' => ['新机', '手机品牌', $title]
+        ];
         $operators = [];
-        foreach (['mobile' => '移动', 'unicom' => '联通', 'telecom' => '电信'] as $key => $title) $operators[] = ['id' => 'operator_'.$key, 'title' => $title, 'brand' => '', 'category_name' => '运营商', 'path' => ['宽带', '运营商', $title]];
+        foreach ([
+                'mobile' => '移动',
+                'unicom' => '联通',
+                'telecom' => '电信'
+            ] as $key => $title) $operators[] = [
+            'id' => 'operator_'.$key,
+            'title' => $title,
+            'brand' => '',
+            'category_name' => '运营商',
+            'path' => ['宽带', '运营商', $title]
+        ];
         $rows = [];
-        foreach ([['purchase', '二手机', 'model', '100.00'], ['new_phone', '新机', 'brand', '100.00'], ['rent', '租机', 'model', '200.00'], ['exchange', '二手机置换', 'model', '100.00'], ['broadband', '宽带', 'operator', '200.00'], ['repair', '手机维修', 'model', '100.00'], ['home_recycle', '二手机上门回收', 'model', '100.00']] as [$key,$name,$dimension,$minimum]) {
+        foreach ([
+                ['purchase', '二手机', 'model', '100.00'],
+                ['new_phone', '新机', 'brand', '100.00'],
+                ['rent', '租机', 'model', '200.00'],
+                ['exchange', '二手机置换', 'model', '100.00'],
+                ['broadband', '宽带', 'operator', '200.00'],
+                ['repair', '手机维修', 'model', '100.00'],
+                ['home_recycle', '二手机上门回收', 'model', '100.00']
+            ] as [
+                $key,
+                $name,
+                $dimension,
+                $minimum
+            ]) {
             $fields = [];
-            if ($key === 'repair') $fields[] = ['key' => 'fault_detail', 'label' => '故障描述', 'type' => 'text', 'required' => true, 'placeholder' => '例如无法充电、屏幕损坏，简单描述即可'];
-            if ($key === 'home_recycle') $fields[] = ['key' => 'pickup_address', 'label' => '上门地址', 'type' => 'address', 'required' => true, 'placeholder' => '小区、街道或附近地标，无需重复填写省市区'];
-            $rows[] = ['key' => $key, 'name' => $name, 'enabled' => !in_array($key, ['repair', 'home_recycle'], true), 'dimension' => $dimension, 'selection_mode' => 'multiple', 'selection_limit' => $dimension === 'model' ? 5 : 0, 'commission_minimum' => $minimum, 'fee_override' => false, 'fields' => $fields, 'options' => $dimension === 'brand' ? $brands : ($dimension === 'operator' ? $operators : [])];
+            if ($key === 'repair') $fields[] = [
+                'key' => 'fault_detail',
+                'label' => '故障描述',
+                'type' => 'text',
+                'required' => true,
+                'placeholder' => '例如无法充电、屏幕损坏，简单描述即可'
+            ];
+            if ($key === 'home_recycle') $fields[] = [
+                'key' => 'pickup_address',
+                'label' => '上门地址',
+                'type' => 'address',
+                'required' => true,
+                'placeholder' => '小区、街道或附近地标，无需重复填写省市区'
+            ];
+            $rows[] = [
+                'key' => $key,
+                'name' => $name,
+                'enabled' => !in_array($key, ['repair', 'home_recycle'], true),
+                'dimension' => $dimension,
+                'selection_mode' => 'multiple',
+                'selection_limit' => $dimension === 'model' ? 5 : 0,
+                'commission_minimum' => $minimum,
+                'fee_override' => false,
+                'fields' => $fields,
+                'options' => $dimension === 'brand' ? $brands : ($dimension === 'operator' ? $operators : [])
+            ];
         }
         return $rows;
     }
 
     public static function key($value, string $label = '标识'): string
     {
-        if (!is_string($value) || !preg_match('/^[a-z][a-z0-9_]{0,15}$/D', $value) || in_array($value, ['__proto__', 'prototype', 'constructor'], true)) throw new CommonException($label.'须为1—16位小写字母、数字或下划线，并以字母开头');
+        if (!is_string($value)
+            || !preg_match('/^[a-z][a-z0-9_]{0,15}$/D', $value)
+            || in_array($value, ['__proto__', 'prototype', 'constructor'], true)) throw new CommonException($label.'须为1—16位小写字母、数字或下划线，并以字母开头');
         return $value;
     }
 
     public static function label($value, int $limit = 100): string
     {
-        if (!is_string($value) || !mb_check_encoding($value, 'UTF-8') || ($text = trim($value)) === '' || mb_strlen($text) > $limit || preg_match('/[<>\x00-\x1F\x7F]/u', $value)) throw new CommonException('业务配置只支持指定长度的纯文本，不允许HTML或控制字符');
+        if (!is_string($value)
+            || !mb_check_encoding($value, 'UTF-8')
+            || ($text = trim($value)) === ''
+            || mb_strlen($text) > $limit
+            || preg_match('/[<>\x00-\x1F\x7F]/u', $value)) throw new CommonException('业务配置只支持指定长度的纯文本，不允许HTML或控制字符');
         return $text;
     }
 
@@ -58,7 +126,10 @@ final class BusinessService
 
     private static function placeholder($value): string
     {
-        if (!is_string($value) || !mb_check_encoding($value, 'UTF-8') || mb_strlen(trim($value)) > 120 || preg_match('/[<>\x00-\x1F\x7F]/u', $value)) throw new CommonException('字段提示最多120字，只支持纯文本，不允许HTML或控制字符');
+        if (!is_string($value)
+            || !mb_check_encoding($value, 'UTF-8')
+            || mb_strlen(trim($value)) > 120
+            || preg_match('/[<>\x00-\x1F\x7F]/u', $value)) throw new CommonException('字段提示最多120字，只支持纯文本，不允许HTML或控制字符');
         return trim($value);
     }
 
@@ -74,7 +145,8 @@ final class BusinessService
             $seen[$key] = true;
             $dimension = $row['dimension'] ?? null;
             $mode = $row['selection_mode'] ?? null;
-            if (!in_array($dimension, ['model', 'brand', 'operator'], true) || !in_array($mode, ['multiple', 'single'], true)) throw new CommonException('请选择有效的能力维度及单选/多选模式');
+            if (!in_array($dimension, ['model', 'brand', 'operator'], true)
+                || !in_array($mode, ['multiple', 'single'], true)) throw new CommonException('请选择有效的能力维度及单选/多选模式');
             $fields = $row['fields'] ?? [];
             if (!is_array($fields) || !PhpRuntime::isList($fields) || count($fields) > 20) throw new CommonException('每项业务最多配置20个简单字段');
             $cleanFields = [];
@@ -86,11 +158,19 @@ final class BusinessService
                 $fieldKeys[$fieldKey] = true;
                 $type = $field['type'] ?? null;
                 if (!in_array($type, ['text', 'number', 'select', 'address'], true)) throw new CommonException('业务字段仅支持文本、数字、下拉选择和地址');
-                $clean = ['key' => $fieldKey, 'label' => self::label($field['label'] ?? null), 'type' => $type, 'required' => self::flag($field['required'] ?? false)];
+                $clean = [
+                    'key' => $fieldKey,
+                    'label' => self::label($field['label'] ?? null),
+                    'type' => $type,
+                    'required' => self::flag($field['required'] ?? false)
+                ];
                 if (array_key_exists('placeholder', $field)) $clean['placeholder'] = self::placeholder($field['placeholder']);
                 if ($type === 'select') {
                     $choices = $field['options'] ?? null;
-                    if (!is_array($choices) || !PhpRuntime::isList($choices) || !$choices || count($choices) > 100) throw new CommonException('下拉字段请设置1—100个选项');
+                    if (!is_array($choices)
+                        || !PhpRuntime::isList($choices)
+                        || !$choices
+                        || count($choices) > 100) throw new CommonException('下拉字段请设置1—100个选项');
                     $values = [];
                     $clean['options'] = [];
                     foreach ($choices as $choice) {
@@ -119,9 +199,27 @@ final class BusinessService
                 $aliases = $option['aliases'] ?? [];
                 if (!is_array($aliases) || !PhpRuntime::isList($aliases) || count($aliases) > 20) throw new CommonException('每个能力选项最多20个纯文本别名');
                 $aliases = array_values(array_unique(array_map(static fn ($alias) => self::label($alias, 200), $aliases)));
-                $cleanOptions[] = ['id' => $id, 'title' => $title, 'brand' => isset($option['brand']) && $option['brand'] !== '' ? self::label($option['brand']) : '', 'category_name' => isset($option['category_name']) && $option['category_name'] !== '' ? self::label($option['category_name']) : '', 'path' => $path, 'aliases' => $aliases];
+                $cleanOptions[] = [
+                    'id' => $id,
+                    'title' => $title,
+                    'brand' => isset($option['brand']) && $option['brand'] !== '' ? self::label($option['brand']) : '',
+                    'category_name' => isset($option['category_name']) && $option['category_name'] !== '' ? self::label($option['category_name']) : '',
+                    'path' => $path,
+                    'aliases' => $aliases
+                ];
             }
-            $clean = ['key' => $key, 'name' => self::label($row['name'] ?? null), 'enabled' => self::flag($row['enabled'] ?? false), 'dimension' => $dimension, 'selection_mode' => $mode, 'selection_limit' => Rules::demandLimit($row['selection_limit'] ?? 0), 'commission_minimum' => self::money($row['commission_minimum'] ?? '0.00', '成交最低协作费用', true), 'fee_override' => self::flag($row['fee_override'] ?? false), 'fields' => $cleanFields, 'options' => $cleanOptions];
+            $clean = [
+                'key' => $key,
+                'name' => self::label($row['name'] ?? null),
+                'enabled' => self::flag($row['enabled'] ?? false),
+                'dimension' => $dimension,
+                'selection_mode' => $mode,
+                'selection_limit' => Rules::demandLimit($row['selection_limit'] ?? 0),
+                'commission_minimum' => self::money($row['commission_minimum'] ?? '0.00', '成交最低协作费用', true),
+                'fee_override' => self::flag($row['fee_override'] ?? false),
+                'fields' => $cleanFields,
+                'options' => $cleanOptions
+            ];
             // An explicitly maintained empty directory must not borrow another
             // business's models after the administrator removes its last item.
             if (array_key_exists('catalog_configured', $row)) $clean['catalog_configured'] = self::flag($row['catalog_configured']);
@@ -150,16 +248,33 @@ final class BusinessService
     public function options(array $business): array
     {
         $rows = $business['options'];
-        if (!$rows && $business['dimension'] === 'model' && (($business['key'] ?? '') === 'purchase' || empty($business['catalog_configured']))) $rows = (new CatalogService($this->context))->directory()['items'];
+        if (!$rows
+            && $business['dimension'] === 'model'
+            && (($business['key'] ?? '') === 'purchase' || empty($business['catalog_configured']))) $rows = (new CatalogService($this->context))->directory()['items'];
         return array_map(static function (array $item) use ($business): array {
-            $path = $item['path'] ?? array_values(array_filter([$item['category_name'] ?? '', $item['brand'] ?? '', $item['title']], static fn ($v) => $v !== ''));
-            return ['id' => $item['id'], 'title' => $item['title'], 'brand' => $item['brand'] ?? '', 'category_name' => $item['category_name'] ?? '', 'dimension' => $business['dimension'], 'path' => $path, 'aliases' => $item['aliases'] ?? []];
+            $path = $item['path'] ?? array_values(array_filter([
+                        $item['category_name'] ?? '',
+                        $item['brand'] ?? '',
+                        $item['title']
+                    ], static fn ($v) => $v !== ''));
+            return [
+                'id' => $item['id'],
+                'title' => $item['title'],
+                'brand' => $item['brand'] ?? '',
+                'category_name' => $item['category_name'] ?? '',
+                'dimension' => $business['dimension'],
+                'path' => $path,
+                'aliases' => $item['aliases'] ?? []
+            ];
         }, $rows);
     }
 
     public function resolve(array $business, $ids, bool $capability = false): array
     {
-        if (!is_array($ids) || !PhpRuntime::isList($ids) || (!$capability && !$ids) || count($ids) > 5000) throw new CommonException('请从当前业务目录选择需求或能力选项，最多5000项');
+        if (!is_array($ids)
+            || !PhpRuntime::isList($ids)
+            || (!$capability && !$ids)
+            || count($ids) > 5000) throw new CommonException('请从当前业务目录选择需求或能力选项，最多5000项');
         $unique = [];
         foreach ($ids as $id) {
             if (!is_string($id) || strlen($id) > 100) throw new CommonException('能力选项ID格式错误');
@@ -193,8 +308,10 @@ final class BusinessService
             }
             if (!is_string($value) && !is_int($value)) throw new CommonException($field['label'].'格式错误');
             $value = self::label((string) $value, $field['type'] === 'address' ? 300 : 1000);
-            if ($field['type'] === 'number' && !preg_match('/^-?(?:0|[1-9][0-9]{0,11})(?:\.[0-9]{1,4})?$/D', $value)) throw new CommonException($field['label'].'请填写有效数字');
-            if ($field['type'] === 'select' && !in_array($value, array_column($field['options'], 'value'), true)) throw new CommonException($field['label'].'请选择配置中的选项');
+            if ($field['type'] === 'number'
+                && !preg_match('/^-?(?:0|[1-9][0-9]{0,11})(?:\.[0-9]{1,4})?$/D', $value)) throw new CommonException($field['label'].'请填写有效数字');
+            if ($field['type'] === 'select'
+                && !in_array($value, array_column($field['options'], 'value'), true)) throw new CommonException($field['label'].'请选择配置中的选项');
             $out[$key] = $value;
         }
         return $out;
@@ -204,7 +321,13 @@ final class BusinessService
     {
         $definition = $business;
         unset($definition['options']);
-        return ['business_type' => $business['key'], 'business_name' => $business['name'], 'dimension' => $business['dimension'], 'business_snapshot' => $definition, 'form_values' => $form] + self::feeRules($business, $config);
+        return [
+            'business_type' => $business['key'],
+            'business_name' => $business['name'],
+            'dimension' => $business['dimension'],
+            'business_snapshot' => $definition,
+            'form_values' => $form
+        ] + self::feeRules($business, $config);
     }
 
     /** Resolve once for a new lead; existing leads/orders continue using their stored rule_json. */

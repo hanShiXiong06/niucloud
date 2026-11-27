@@ -34,7 +34,8 @@ final class FinancialNoticeService
         if (!$row || (int) $row['member_id'] !== $member || $row['account_type'] !== $type
             || NoticeEventCatalog::decimal($row['account_data']) !== NoticeEventCatalog::decimal($event['account_data'] ?? null)
             || NoticeEventCatalog::decimal($row['account_sum']) !== NoticeEventCatalog::decimal($event['account_sum'] ?? null))throw new \InvalidArgumentException('通知事件与真实资金流水不一致');
-        if ((int) $row['id'] <= max((int) $policy['source_after_id'], (int) $policy['resume_after_id']) || (int) $row['create_time'] < (int) $policy['enabled_at'])return ['recorded' => 0, 'skipped' => 'before_activation'];
+        if ((int) $row['id'] <= max((int) $policy['source_after_id'], (int) $policy['resume_after_id'])
+            || (int) $row['create_time'] < (int) $policy['enabled_at'])return ['recorded' => 0, 'skipped' => 'before_activation'];
         $amount = NoticeEventCatalog::decimal($row['account_data']);
         if ($amount === '0.00')return ['recorded' => 0, 'skipped' => 'zero'];
         $expires = (int) $row['create_time'] + (int) $policy['ttl_seconds'];
@@ -80,7 +81,11 @@ final class FinancialNoticeService
                     $lower = max((int) $policy['source_after_id'], (int) $policy['resume_after_id']);
                     $cache = 'hsx_lead_fund_scan_'.$namespace.'_'.$site;
                     $cursor = max($lower, (int) Cache::get($cache, 0));
-                    $rows = Db::name('member_account_log')->where('site_id', $site)->where('id', '>', $cursor)->where('create_time', '>=', max((int) $policy['enabled_at'], time() - (int) $policy['ttl_seconds']))->whereIn('account_type', ['balance', 'money', 'commission'])->order('id')->limit($limit)->select()->toArray();
+                    $rows = Db::name('member_account_log')->where('site_id', $site)->where('id', '>', $cursor)->where('create_time', '>=', max((int) $policy['enabled_at'], time() - (int) $policy['ttl_seconds']))->whereIn('account_type', [
+                            'balance',
+                            'money',
+                            'commission'
+                        ])->order('id')->limit($limit)->select()->toArray();
                     foreach ($rows as $row) {
                         $result = $this->recordAccountEvent($row + ['account_log_id' => (int) $row['id']]);
                         $summary['reconstructed'] += (int) $result['recorded'];

@@ -26,7 +26,20 @@ final class ProviderDefinition
     }
     public function metadata(): array
     {
-        return array_intersect_key($this->definition, array_flip(['key', 'name', 'auth_mode', 'auth_type', 'auth_modes', 'fields', 'scope_fields', 'renewal', 'notes', 'renderer', 'read_only', 'interactive_auth']));
+        return array_intersect_key($this->definition, array_flip([
+                    'key',
+                    'name',
+                    'auth_mode',
+                    'auth_type',
+                    'auth_modes',
+                    'fields',
+                    'scope_fields',
+                    'renewal',
+                    'notes',
+                    'renderer',
+                    'read_only',
+                    'interactive_auth'
+                ]));
     }
     public function renewable(#[\SensitiveParameter] array $credentials = []): bool
     {
@@ -133,7 +146,8 @@ final class ProviderDefinition
         }
         if ($serverFields) {
             $sameSecrets = $reuse;
-            foreach ($config['fields'] as $field) if (!empty($field['secret']) && ($result[$field['key']] ?? '') !== ($saved[$field['key']] ?? '')) $sameSecrets = false;
+            foreach ($config['fields'] as $field) if (!empty($field['secret'])
+                && ($result[$field['key']] ?? '') !== ($saved[$field['key']] ?? '')) $sameSecrets = false;
             if (!$trustedAuthorization && !$sameSecrets) {
                 foreach ($serverFields as $field) if (!empty($field['required'])) throw new CommonException('请先完成当前ERP的验证码授权；更换账号或授权Token后不能沿用原认证资料');
             }
@@ -164,10 +178,14 @@ final class ProviderDefinition
         $fields = $this->definition['server_credential_fields'] ?? [];
         if (!is_array($fields) || !\addon\hsx_lead\app\support\PhpRuntime::isList($fields) || count($fields) > 20) throw new CommonException('ERP服务端认证字段配置异常');
         $seen = array_fill_keys(['auth_mode', 'access_token', 'token', 'username', 'password', 'code', 'captcha'], true);
-        foreach (array_merge([$this->definition], $this->definition['auth_modes'] ?? []) as $config) foreach ($config['fields'] ?? [] as $field) if (is_array($field) && is_string($field['key'] ?? null))$seen[$field['key']] = true;
+        foreach (array_merge([$this->definition], $this->definition['auth_modes'] ?? []) as $config) foreach ($config['fields'] ?? [] as $field) if (is_array($field)
+            && is_string($field['key'] ?? null))$seen[$field['key']] = true;
         foreach ($fields as $field) {
             if (!is_array($field) || !is_string($field['key'] ?? null) || preg_match('/^[a-z][a-z0-9_]{0,63}$/D', $field['key']) !== 1
-                || isset($seen[$field['key']]) || !is_int($field['max_length'] ?? null) || $field['max_length'] < 1 || $field['max_length'] > 16384) throw new CommonException('ERP服务端认证字段配置异常');
+                || isset($seen[$field['key']])
+                    || !is_int($field['max_length'] ?? null)
+                    || $field['max_length'] < 1
+                    || $field['max_length'] > 16384) throw new CommonException('ERP服务端认证字段配置异常');
             $seen[$field['key']] = true;
         }
         return $fields;

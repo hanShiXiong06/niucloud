@@ -10,12 +10,18 @@ final class AccountNoticeSource
     {
         $snapshot = Data::decode($task['payload_json'] ?? '');
         $row = Db::name('member_account_log')->where('site_id', $task['site_id'])->where('id', $task['source_id'])->find();
-        if (!$row || $task['source_type'] !== 'member_account_log' || (int) $row['member_id'] !== (int) $task['recipient_member_id'] || NoticeEventCatalog::fromAccount($row['account_type']) !== $task['event_key'])throw new NoticePreflightException('原资金流水与接收会员不一致，未发送');
+        if (!$row
+            || $task['source_type'] !== 'member_account_log'
+            || (int) $row['member_id'] !== (int) $task['recipient_member_id']
+            || NoticeEventCatalog::fromAccount($row['account_type']) !== $task['event_key'])throw new NoticePreflightException('原资金流水与接收会员不一致，未发送');
         foreach (['account_type', 'account_data', 'account_sum'] as $field) {
             $actual = $field === 'account_type' ? $row[$field] : NoticeEventCatalog::decimal($row[$field]);
             if (($snapshot[$field] ?? null) !== $actual)throw new NoticePreflightException('原资金流水已变化，未发送');
         }
-        if ((int) ($snapshot['source_id'] ?? 0) !== (int) $row['id'] || (int) ($snapshot['site_id'] ?? 0) !== (int) $row['site_id'] || (int) ($snapshot['member_id'] ?? 0) !== (int) $row['member_id'] || (int) ($snapshot['occurred_at'] ?? 0) !== (int) $row['create_time'])throw new NoticePreflightException('通知流水快照不一致，未发送');
+        if ((int) ($snapshot['source_id'] ?? 0) !== (int) $row['id']
+            || (int) ($snapshot['site_id'] ?? 0) !== (int) $row['site_id']
+            || (int) ($snapshot['member_id'] ?? 0) !== (int) $row['member_id']
+            || (int) ($snapshot['occurred_at'] ?? 0) !== (int) $row['create_time'])throw new NoticePreflightException('通知流水快照不一致，未发送');
         return $row;
     }
     public static function variables(array $task, array $source): array

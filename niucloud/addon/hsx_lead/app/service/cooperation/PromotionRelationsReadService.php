@@ -37,7 +37,11 @@ final class PromotionRelationsReadService
         if (!$memberIds)return [];
         $subjects = $this->subjects(array_map('intval', $memberIds));
         $rows = [];
-        foreach ($subjects as $id => $subject)$rows[$id] = ['merchant' => $subject, 'membership' => self::membershipView(null, $subject), 'payment' => $payments[$id]];
+        foreach ($subjects as $id => $subject)$rows[$id] = [
+            'merchant' => $subject,
+            'membership' => self::membershipView(null, $subject),
+            'payment' => $payments[$id]
+        ];
         $this->attachMembership($rows);
         return $rows;
     }
@@ -141,7 +145,13 @@ final class PromotionRelationsReadService
             $pid = (int) $member['pid'];
             $subject = $shops[$id];
             $binding = $times[$id] ?? [];
-            $out[$id] = ['member' => self::memberView($member), 'inviter' => self::memberView(['member_id' => $pid, 'member_no' => $member['inviter_no'], 'nickname' => $member['inviter_nickname'], 'username' => $member['inviter_username'], 'mobile' => $member['inviter_mobile']]) + ['direct_invite_count' => (int) ($counts[$pid] ?? 0)],
+            $out[$id] = ['member' => self::memberView($member), 'inviter' => self::memberView([
+                        'member_id' => $pid,
+                        'member_no' => $member['inviter_no'],
+                        'nickname' => $member['inviter_nickname'],
+                        'username' => $member['inviter_username'],
+                        'mobile' => $member['inviter_mobile']
+                    ]) + ['direct_invite_count' => (int) ($counts[$pid] ?? 0)],
                 'merchant' => $subject, 'membership' => self::membershipView(null, $subject), 'payment' => $payments[$id],
                 'promotion' => $rewards[$pid.':'.$id] ?? self::emptyRewards(), 'create_time' => (int) $member['create_time'],
                 'bound_at' => (int) ($binding['pid'] ?? 0) === $pid && (int) ($binding['bound_at'] ?? 0) > 0 ? (int) $binding['bound_at'] : null];
@@ -187,7 +197,13 @@ final class PromotionRelationsReadService
             }$review = count($own) > 1 || count($staff) > 1;
             if ($own && $staff && (int) $own[0]['id'] !== (int) $staff[0]['id'])$review = true;
             $merchant = $review ? null : ($own[0] ?? $staff[0] ?? null);
-            $out[$id] = ['merchant_id' => (int) ($merchant['id'] ?? 0), 'name' => (string) ($merchant['name'] ?? ''), 'shared' => $merchant && (int) $merchant['member_id'] !== $id, 'enabled' => !$merchant || (int) $merchant['status'] === 1, 'review_required' => $review];
+            $out[$id] = [
+                'merchant_id' => (int) ($merchant['id'] ?? 0),
+                'name' => (string) ($merchant['name'] ?? ''),
+                'shared' => $merchant && (int) $merchant['member_id'] !== $id,
+                'enabled' => !$merchant || (int) $merchant['status'] === 1,
+                'review_required' => $review
+            ];
         }return $out;
     }
 
@@ -208,7 +224,13 @@ final class PromotionRelationsReadService
         elseif (!empty($state['active']))$status = 'active';
         elseif (!empty($state['cooperation_exited']) || (int) ($state['expires_at'] ?? 0) > time())$status = 'inactive';
         elseif ((int) ($state['expires_at'] ?? 0) > 0 && (int) $state['expires_at'] <= time())$status = 'expired';
-        return ['status' => $status, 'status_label' => self::MEMBERSHIP_LABELS[$status], 'level_name' => (string) ($state['level_name'] ?? ''), 'expires_at' => (int) ($state['expires_at'] ?? 0), 'shared' => (bool) $subject['shared']];
+        return [
+            'status' => $status,
+            'status_label' => self::MEMBERSHIP_LABELS[$status],
+            'level_name' => (string) ($state['level_name'] ?? ''),
+            'expires_at' => (int) ($state['expires_at'] ?? 0),
+            'shared' => (bool) $subject['shared']
+        ];
     }
 
     private function payments(array $ids): array
@@ -218,12 +240,14 @@ final class PromotionRelationsReadService
         $orderIds = array_map('intval', array_column($orders, 'id'));
         $receipts = [];
         $refunds = [];
-        if ($orderIds && (!OrderPaymentReadService::hasTable('pay') || !OrderPaymentReadService::hasTable('pay_refund')))throw new CommonException('会员支付或退款记录表缺失，请管理员先核对升级状态');
+        if ($orderIds
+            && (!OrderPaymentReadService::hasTable('pay') || !OrderPaymentReadService::hasTable('pay_refund')))throw new CommonException('会员支付或退款记录表缺失，请管理员先核对升级状态');
         if ($orderIds) {
             foreach (Db::name('pay')->where('site_id', $site)->where('trade_type', PaymentService::TRADE_TYPE)->whereIn('trade_id', $orderIds)->order('id')->select()->toArray() as $pay)$receipts[(int) $pay['trade_id']][] = $pay;
             $numbers = [];
             foreach ($receipts as $entries)foreach ($entries as $pay)if ((string) $pay['out_trade_no'] !== '')$numbers[] = $pay['out_trade_no'];
-            if ($numbers && OrderPaymentReadService::hasTable('pay_refund'))foreach (Db::name('pay_refund')->where('site_id', $site)->whereIn('out_trade_no', array_values(array_unique($numbers)))->order('id')->select()->toArray() as $refund)$refunds[(string) $refund['out_trade_no']][] = $refund;
+            if ($numbers
+                && OrderPaymentReadService::hasTable('pay_refund'))foreach (Db::name('pay_refund')->where('site_id', $site)->whereIn('out_trade_no', array_values(array_unique($numbers)))->order('id')->select()->toArray() as $refund)$refunds[(string) $refund['out_trade_no']][] = $refund;
         }
         $out = [];
         foreach ($ids as $id)$out[$id] = ['status' => 'unpaid', 'status_label' => self::PAYMENT_LABELS['unpaid'], 'paid_order_count' => 0, 'unpaid_order_count' => 0,
@@ -263,7 +287,17 @@ final class PromotionRelationsReadService
     /** Pure display facts; a paid business flag alone never proves collection. */
     public static function paymentFact(array $order, array $payments, array $refundsByNumber): array
     {
-        $out = ['paid' => false, 'unpaid' => false, 'review' => false, 'pending' => false, 'service_paid' => 0, 'service_refunded' => 0, 'paid_total' => 0, 'refunded_total' => 0, 'pay_time' => 0];
+        $out = [
+            'paid' => false,
+            'unpaid' => false,
+            'review' => false,
+            'pending' => false,
+            'service_paid' => 0,
+            'service_refunded' => 0,
+            'paid_total' => 0,
+            'refunded_total' => 0,
+            'pay_time' => 0
+        ];
         $rule = Data::decode($order['rule_json']);
         $finished = array_values(array_filter($payments, static fn (array $p): bool => (int) $p['status'] === (int) PayDict::STATUS_FINISH));
         if (!$finished) {
@@ -271,19 +305,28 @@ final class PromotionRelationsReadService
             $out['unpaid'] = $order['status'] === 'unpaid' && !$out['review'];
             return $out;
         }
-        if ($order['status'] === 'closed' && ($rule['closed_payment_refund_status'] ?? '') === 'refunded' && empty($rule['requires_manual_review']))return self::closedRefundFact($order, $rule, $finished, $refundsByNumber, $out);
+        if ($order['status'] === 'closed'
+            && ($rule['closed_payment_refund_status'] ?? '') === 'refunded'
+            && empty($rule['requires_manual_review']))return self::closedRefundFact($order, $rule, $finished, $refundsByNumber, $out);
         if (count($finished) !== 1) {
             $out['review'] = true;
             return $out;
         }$pay = $finished[0];
         try {
-            if ((int) $pay['site_id'] !== (int) $order['site_id'] || $pay['trade_type'] !== PaymentService::TRADE_TYPE || (int) $pay['trade_id'] !== (int) $order['id']
-                || $pay['main_type'] !== PayDict::MEMBER || (int) $pay['main_id'] !== (int) $order['member_id'] || Rules::cents((string) $pay['money']) !== Rules::cents((string) $order['amount']) || (string) $pay['out_trade_no'] === '')throw new CommonException('会员收款凭据不一致');
+            if ((int) $pay['site_id'] !== (int) $order['site_id']
+                || $pay['trade_type'] !== PaymentService::TRADE_TYPE
+                || (int) $pay['trade_id'] !== (int) $order['id']
+                || $pay['main_type'] !== PayDict::MEMBER
+                    || (int) $pay['main_id'] !== (int) $order['member_id']
+                    || Rules::cents((string) $pay['money']) !== Rules::cents((string) $order['amount'])
+                    || (string) $pay['out_trade_no'] === '')throw new CommonException('会员收款凭据不一致');
             EntityMembershipService::assertSnapshot($order, $rule);
             $service = MembershipCostService::promotionBase($order);
             $refunds = $refundsByNumber[(string) $pay['out_trade_no']] ?? [];
             foreach ($refunds as $refund)if (in_array($refund['status'], [RefundDict::WAIT, RefundDict::DEALING, RefundDict::SUCCESS], true)) {
-                if ($refund['trade_type'] !== PaymentService::TRADE_TYPE || (string) $refund['trade_id'] !== (string) $order['id'] || (int) $refund['site_id'] !== (int) $order['site_id']
+                if ($refund['trade_type'] !== PaymentService::TRADE_TYPE
+                    || (string) $refund['trade_id'] !== (string) $order['id']
+                    || (int) $refund['site_id'] !== (int) $order['site_id']
                     || $refund['type'] !== $pay['type'] || $refund['channel'] !== $pay['channel'])throw new CommonException('会员退款凭据不一致');
             }
             if (($rule['schema_version'] ?? '') === EntityMembershipService::SNAPSHOT_SCHEMA) {
@@ -315,7 +358,11 @@ final class PromotionRelationsReadService
             $out['paid_total'] = Rules::cents((string) $pay['money']);
             $out['refunded_total'] = $returnedTotal ?? $returned;
             // A callback still in reconciliation is not a normal paid membership order.
-            $out['review'] = $out['review'] || $out['pending'] || !empty($rule['requires_manual_review']) || $order['status'] !== 'paid' || (string) $order['out_trade_no'] !== (string) $pay['out_trade_no'];
+            $out['review'] = $out['review']
+                || $out['pending']
+                || !empty($rule['requires_manual_review'])
+                || $order['status'] !== 'paid'
+                || (string) $order['out_trade_no'] !== (string) $pay['out_trade_no'];
         } catch (CommonException$error) {
             $out['review'] = true;
         }
@@ -331,7 +378,14 @@ final class PromotionRelationsReadService
             $seen = [];
             foreach ($payments as $pay) {
                 $number = (string) $pay['out_trade_no'];
-                if ($number === '' || isset($seen[$number]) || (int) $pay['site_id'] !== (int) $order['site_id'] || $pay['trade_type'] !== PaymentService::TRADE_TYPE || (int) $pay['trade_id'] !== (int) $order['id'] || $pay['main_type'] !== PayDict::MEMBER || (int) $pay['main_id'] !== (int) $order['member_id'] || Rules::cents((string) $pay['money']) !== Rules::cents((string) $order['amount']))throw new CommonException('关闭订单收款凭据冲突');
+                if ($number === ''
+                    || isset($seen[$number])
+                    || (int) $pay['site_id'] !== (int) $order['site_id']
+                    || $pay['trade_type'] !== PaymentService::TRADE_TYPE
+                    || (int) $pay['trade_id'] !== (int) $order['id']
+                    || $pay['main_type'] !== PayDict::MEMBER
+                    || (int) $pay['main_id'] !== (int) $order['member_id']
+                    || Rules::cents((string) $pay['money']) !== Rules::cents((string) $order['amount']))throw new CommonException('关闭订单收款凭据冲突');
                 $seen[$number] = true;
                 $returned = 0;
                 $refundIds = [];
@@ -340,7 +394,13 @@ final class PromotionRelationsReadService
                     if ($refund['status'] !== RefundDict::SUCCESS)continue;
                     $refundNo = (string) $refund['refund_no'];
                     $money = Rules::cents((string) $refund['money']);
-                    if ($refundNo === '' || $money <= 0 || (int) $refund['site_id'] !== (int) $order['site_id'] || $refund['trade_type'] !== PaymentService::TRADE_TYPE || (string) $refund['trade_id'] !== (string) $order['id'] || $refund['type'] !== $pay['type'] || $refund['channel'] !== $pay['channel'])throw new CommonException('关闭订单退款凭据冲突');
+                    if ($refundNo === ''
+                        || $money <= 0
+                        || (int) $refund['site_id'] !== (int) $order['site_id']
+                        || $refund['trade_type'] !== PaymentService::TRADE_TYPE
+                        || (string) $refund['trade_id'] !== (string) $order['id']
+                        || $refund['type'] !== $pay['type']
+                        || $refund['channel'] !== $pay['channel'])throw new CommonException('关闭订单退款凭据冲突');
                     if (isset($refundIds[$refundNo])) {
                         if ($refundIds[$refundNo] !== $money)throw new CommonException('关闭订单退款金额冲突');
                         continue;

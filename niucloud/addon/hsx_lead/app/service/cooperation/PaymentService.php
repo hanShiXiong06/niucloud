@@ -32,8 +32,11 @@ final class PaymentService
             $partner = Store::partner($this->context->site, (int) $merchant['id'], true);
             $old = Store::query('coop_order', $this->context->site)->where('merchant_id', $merchant['id'])->where('request_id', $request)->find();
             if ($old) {
-                if ($old['purpose'] !== $purpose || ($purpose === 'commission' && (int) $old['lead_id'] !== (int) ($input['lead_id'] ?? 0))) throw new CommonException('同一请求标识不能用于不同付款，请刷新后核对');
-                if ($purpose === 'commission' && array_key_exists('amount', $input) && Rules::cents($input['amount']) !== Rules::cents((string) $old['amount'])) throw new CommonException('该请求已创建另一金额的付佣订单，请先核对原单，不会重复改价');
+                if ($old['purpose'] !== $purpose
+                    || ($purpose === 'commission' && (int) $old['lead_id'] !== (int) ($input['lead_id'] ?? 0))) throw new CommonException('同一请求标识不能用于不同付款，请刷新后核对');
+                if ($purpose === 'commission'
+                    && array_key_exists('amount', $input)
+                    && Rules::cents($input['amount']) !== Rules::cents((string) $old['amount'])) throw new CommonException('该请求已创建另一金额的付佣订单，请先核对原单，不会重复改价');
                 if (!in_array($old['status'], ['unpaid', 'paid', 'closed'], true)) throw new CommonException('原付款订单状态待核实，请联系平台核对，不会另建付款');
                 if ($old['status'] === 'unpaid') {
                     self::assertCommissionRules($old);
@@ -46,13 +49,16 @@ final class PaymentService
             // collaboration is switched off; this is not a new membership grant.
             $lead = Store::row('collaboration', $this->context->site, (int) ($input['lead_id'] ?? 0), true);
             self::assertExternalLead($lead);
-            if ((int) $lead['receiver_id'] !== (int) $merchant['id'] || !in_array($lead['status'], ['unpaid', 'paid'], true)) throw new CommonException('仅承接本单且已反馈成交的门店可以付佣');
+            if ((int) $lead['receiver_id'] !== (int) $merchant['id']
+                || !in_array($lead['status'], ['unpaid', 'paid'], true)) throw new CommonException('仅承接本单且已反馈成交的门店可以付佣');
             $key = 'commission:'.$lead['id'];
             if (strlen($key) > 100) throw new CommonException('付款业务标识超出长度限制，当前未创建付款');
             $existing = Store::query('coop_order', $this->context->site)->where('business_key', $key)->lock(true)->find();
             $replaced = null;
             if ($existing) {
-                if ($purpose === 'commission' && array_key_exists('amount', $input) && Rules::cents($input['amount']) !== Rules::cents((string) $existing['amount'])) throw new CommonException('本单已有固定金额的待支付订单，请先按原金额核对付款，不会重复创建或改价');
+                if ($purpose === 'commission'
+                    && array_key_exists('amount', $input)
+                    && Rules::cents($input['amount']) !== Rules::cents((string) $existing['amount'])) throw new CommonException('本单已有固定金额的待支付订单，请先按原金额核对付款，不会重复创建或改价');
                 if ($existing['status'] === 'unpaid') {
                     self::assertCommissionRules($existing);
                     self::assertFrameworkAmount(Rules::cents((string) $existing['amount']));
@@ -62,7 +68,8 @@ final class PaymentService
                 if ($existing['status'] === 'paid') return (int) $existing['id'];
                 if ($existing['status'] !== 'closed') throw new CommonException('原付款订单状态待核实，请联系平台核对，不会另建付款');
                 self::assertClosedReplacement($this->context->site, $existing);
-                if ($lead && ($lead['status'] !== 'unpaid' || (int) $lead['payment_order_id'] !== (int) $existing['id'])) throw new CommonException('原付佣单与交付状态不一致，未重新创建，请刷新核对');
+                if ($lead
+                    && ($lead['status'] !== 'unpaid' || (int) $lead['payment_order_id'] !== (int) $existing['id'])) throw new CommonException('原付佣单与交付状态不一致，未重新创建，请刷新核对');
                 $archiveKey = 'closed:'.$existing['id'].':'.hash('sha256', $key);
                 if (strlen($archiveKey) > 100) throw new CommonException('原付款归档标识超出长度限制，当前未创建付款');
                 Store::query('coop_order', $this->context->site)->where('id', $existing['id'])->where('status', 'closed')->update(['business_key' => $archiveKey]);
@@ -74,7 +81,8 @@ final class PaymentService
                 $ruleConfig = Data::decode($replaced['rule_json']);
             } else {
                 $ruleConfig = Data::decode($lead['rule_json']);
-                if (!array_key_exists('commission_minimum', $ruleConfig) || !array_key_exists('fee_confirmed', $ruleConfig)) throw new CommonException('原线索缺少可核对的收费规则，请联系平台；当前未创建付款');
+                if (!array_key_exists('commission_minimum', $ruleConfig)
+                    || !array_key_exists('fee_confirmed', $ruleConfig)) throw new CommonException('原线索缺少可核对的收费规则，请联系平台；当前未创建付款');
                 $split = Rules::split(Rules::cents($input['amount'] ?? $ruleConfig['commission_minimum']), $ruleConfig);
             }
             self::assertFrameworkAmount(Rules::cents($split['amount']));
@@ -89,7 +97,11 @@ final class PaymentService
                 'business_key' => $key, 'request_id' => $request, 'rule_json' => Data::json($snapshot), 'status' => 'unpaid', 'create_time' => time(), 'update_time' => time()]);
             if ($lead) Store::query('collaboration', $this->context->site)->where('id', $lead['id'])->update([
                 'payment_order_id' => $id, 'commission_amount' => $split['amount'], 'fee_amount' => $split['fee_amount'], 'net_amount' => $split['net_amount'], 'rule_json' => Data::json($snapshot), 'update_time' => time()]);
-            $this->context->audit('coop_order', $id, 'created', ['purpose' => $purpose, 'amount' => $split['amount'], 'lead_id' => $lead ? (int) $lead['id'] : 0]);
+            $this->context->audit('coop_order', $id, 'created', [
+                    'purpose' => $purpose,
+                    'amount' => $split['amount'],
+                    'lead_id' => $lead ? (int) $lead['id'] : 0
+                ]);
             if ($replaced) {
                 $this->context->audit('coop_order', (int) $replaced['id'], 'closed_order_recreated', ['replacement_order_id' => $id, 'original_business_key' => $key]);
                 $this->context->audit('coop_order', $id, 'replaces_closed_order', ['closed_order_id' => (int) $replaced['id']]);
@@ -103,7 +115,8 @@ final class PaymentService
     {
         $merchant = $this->context->merchant();
         $row = Store::row('coop_order', $this->context->site, $id);
-        if ((int) $row['merchant_id'] !== (int) $merchant['id'] || (int) $row['member_id'] !== $this->context->memberId) throw new CommonException('付款订单不存在，或不属于当前会员');
+        if ((int) $row['merchant_id'] !== (int) $merchant['id']
+            || (int) $row['member_id'] !== $this->context->memberId) throw new CommonException('付款订单不存在，或不属于当前会员');
         return self::presentOrder($row);
     }
 
@@ -117,12 +130,15 @@ final class PaymentService
         if ($row['status'] !== 'unpaid') throw new CommonException('该业务已支付或已关闭，请返回刷新结果，请勿重复付款');
         if (!empty($row['requires_manual_review']))throw new CommonException($row['review_message'] ?: '原付款结果待平台核对，请勿重复付款');
         self::assertStillPayable($this->context->site, $raw);
-        if ($row['purpose'] !== 'commission' && (int) Store::partner($this->context->site, (int) $row['merchant_id'], true)['blocked_at'] > 0) throw new CommonException('门店已停止合作，不能继续购买权益；当前未发起支付');
+        if ($row['purpose'] !== 'commission'
+            && (int) Store::partner($this->context->site, (int) $row['merchant_id'], true)['blocked_at'] > 0) throw new CommonException('门店已停止合作，不能继续购买权益；当前未发起支付');
         foreach (Db::name('pay')->where('site_id', $this->context->site)->where('trade_type', self::TRADE_TYPE)->where('trade_id', $id)->where('status', '<>', PayDict::STATUS_CANCEL)->lock(true)->select()->toArray() as $pay) {
-            if (Rules::cents((string) $pay['money']) !== Rules::cents((string) $row['amount']) || (int) $pay['main_id'] !== $this->context->memberId) throw new CommonException('收银台金额或付款身份与业务不符，请联系平台核对，当前未发起支付');
+            if (Rules::cents((string) $pay['money']) !== Rules::cents((string) $row['amount'])
+                || (int) $pay['main_id'] !== $this->context->memberId) throw new CommonException('收银台金额或付款身份与业务不符，请联系平台核对，当前未发起支付');
             if ((int) $pay['status'] === (int) PayDict::STATUS_FINISH) throw new CommonException('原支付流水已收款，正在核对业务入账，请勿再次付款');
             if (self::hasUnconfirmedBalanceDebit($this->context->site, $pay)) throw new CommonException('发现本次付款的账户扣款记录，请联系平台核对，暂勿重复支付');
-            if ((int) $pay['status'] === (int) PayDict::STATUS_ING && (!$reuseVirtualPending || ($pay['type'] ?? '') !== \addon\hsx_lead\app\service\virtualpay\VirtualPaySettings::TYPE)) throw new CommonException('正在确认上次付款结果，请稍后再次点击付款，暂勿重复支付');
+            if ((int) $pay['status'] === (int) PayDict::STATUS_ING
+                && (!$reuseVirtualPending || ($pay['type'] ?? '') !== \addon\hsx_lead\app\service\virtualpay\VirtualPaySettings::TYPE)) throw new CommonException('正在确认上次付款结果，请稍后再次点击付款，暂勿重复支付');
         }
         return $row;
     }
@@ -141,7 +157,8 @@ final class PaymentService
         }
         $ctx = new Context($site, 0, (int) $row['member_id']);
         if ((int) $ctx->merchant()['id'] !== (int) $row['merchant_id']) throw new CommonException('付款会员与商户归属已变化，请联系管理员核对');
-        if ($row['purpose'] !== 'commission' && (int) Store::partner($site, (int) $row['merchant_id'], true)['blocked_at'] > 0) throw new CommonException('门店已停止合作，不能继续购买权益');
+        if ($row['purpose'] !== 'commission'
+            && (int) Store::partner($site, (int) $row['merchant_id'], true)['blocked_at'] > 0) throw new CommonException('门店已停止合作，不能继续购买权益');
         return ['main_type' => PayDict::MEMBER, 'main_id' => (int) $row['member_id'], 'money' => $row['amount'],
             'trade_type' => self::TRADE_TYPE, 'trade_id' => $id, 'body' => ['commission' => '协作佣金', 'membership' => '门店主体会员'][$row['purpose']] ?? '商户协作'];
     }
@@ -158,7 +175,9 @@ final class PaymentService
         if ($raw['purpose'] === 'commission') {
             $lead = Store::row('collaboration', $site, (int) $raw['lead_id']);
             self::assertExternalLead($lead);
-            if ($lead['status'] !== 'unpaid' || (int) $lead['payment_order_id'] !== (int) $raw['id'] || (int) $lead['receiver_id'] !== (int) $raw['merchant_id']) throw new CommonException('交付状态与付款订单不一致，请返回详情核对');
+            if ($lead['status'] !== 'unpaid'
+                || (int) $lead['payment_order_id'] !== (int) $raw['id']
+                || (int) $lead['receiver_id'] !== (int) $raw['merchant_id']) throw new CommonException('交付状态与付款订单不一致，请返回详情核对');
             self::assertCommissionCapacity($site, $lead, Rules::cents((string) $raw['net_amount']));
         }
     }
@@ -213,7 +232,8 @@ final class PaymentService
                         // Ordinary native drivers stamp notification time on
                         // replay. Keep the first recorded time, but require
                         // the same immutable receipt identity and amount.
-                        foreach ($fact as $key => $value)if ($key !== 'pay_time' && ($receipts[$no][$key] ?? null) !== $value)throw new CommonException('额外收款凭据与已记录事实不一致，请核对原流水');
+                        foreach ($fact as $key => $value)if ($key !== 'pay_time'
+                            && ($receipts[$no][$key] ?? null) !== $value)throw new CommonException('额外收款凭据与已记录事实不一致，请核对原流水');
                         return 0;
                     }
                     $receipts[$no] = $fact + ['recorded_at' => time()];
@@ -231,11 +251,24 @@ final class PaymentService
                 $closedRule = Data::decode($order['rule_json']);
                 $seen = isset($closedRule['closed_payment_receipts'][$no]);
                 $closedRule['requires_manual_review'] = $order['purpose'] === 'membership' ? 'membership_closed_receipt_conflict' : 'commission_closed_receipt_conflict';
-                $closedRule['closed_payment_receipts'][$no] = ['out_trade_no' => $no, 'money' => (string) $pay['money'], 'pay_time' => (int) ($pay['pay_time'] ?? 0)];
+                $closedRule['closed_payment_receipts'][$no] = [
+                    'out_trade_no' => $no,
+                    'money' => (string) $pay['money'],
+                    'pay_time' => (int) ($pay['pay_time'] ?? 0)
+                ];
                 $firstNo = (string) ($order['out_trade_no'] ?? '');
                 if ($firstNo === '')$firstNo = $no;
-                Store::query('coop_order', $site)->where('id', $id)->update(['out_trade_no' => $firstNo, 'pay_time' => max((int) $order['pay_time'], (int) ($pay['pay_time'] ?? 0)), 'rule_json' => Data::json($closedRule), 'update_time' => time()]);
-                if (!$seen)Data::audit($site, 0, (int) $order['member_id'], 'coop_order', $id, 'closed_'.$order['purpose'].'_receipt_review', ['purpose' => $order['purpose'], 'amount' => $order['amount'], 'out_trade_no' => $no]);
+                Store::query('coop_order', $site)->where('id', $id)->update([
+                        'out_trade_no' => $firstNo,
+                        'pay_time' => max((int) $order['pay_time'], (int) ($pay['pay_time'] ?? 0)),
+                        'rule_json' => Data::json($closedRule),
+                        'update_time' => time()
+                    ]);
+                if (!$seen)Data::audit($site, 0, (int) $order['member_id'], 'coop_order', $id, 'closed_'.$order['purpose'].'_receipt_review', [
+                        'purpose' => $order['purpose'],
+                        'amount' => $order['amount'],
+                        'out_trade_no' => $no
+                    ]);
                 if ($order['purpose'] === 'membership')EntityMembershipService::resolveClosedReceipt($site, Store::row('coop_order', $site, $id, true));
                 return 0;
             }
@@ -247,7 +280,13 @@ final class PaymentService
                 // A genuine new receipt cannot be rolled back just because an
                 // earlier, cancelled trade later reported another real payment.
                 $rule['requires_manual_review'] = 'replacement_receipt_conflict';
-                Store::query('coop_order', $site)->where('id', $id)->update(['status' => 'paid', 'out_trade_no' => $no, 'pay_time' => (int) ($pay['pay_time'] ?: time()), 'rule_json' => Data::json($rule), 'update_time' => time()]);
+                Store::query('coop_order', $site)->where('id', $id)->update([
+                        'status' => 'paid',
+                        'out_trade_no' => $no,
+                        'pay_time' => (int) ($pay['pay_time'] ?: time()),
+                        'rule_json' => Data::json($rule),
+                        'update_time' => time()
+                    ]);
                 Data::audit($site, 0, (int) $order['member_id'], 'coop_order', $id, 'replacement_receipt_review', ['amount' => $order['amount'], 'out_trade_no' => $no]);
                 return 0;
             }
@@ -255,13 +294,22 @@ final class PaymentService
                 // Preserve a real unexpected receipt, but never manufacture
                 // internal-store income, experience or invitation rewards.
                 $rule['requires_manual_review'] = 'internal_commission_receipt_conflict';
-                Store::query('coop_order', $site)->where('id', $id)->update(['status' => 'paid', 'out_trade_no' => $no, 'pay_time' => time(), 'rule_json' => Data::json($rule), 'update_time' => time()]);
+                Store::query('coop_order', $site)->where('id', $id)->update([
+                        'status' => 'paid',
+                        'out_trade_no' => $no,
+                        'pay_time' => time(),
+                        'rule_json' => Data::json($rule),
+                        'update_time' => time()
+                    ]);
                 Data::audit($site, 0, (int) $order['member_id'], 'coop_order', $id, 'internal_commission_receipt_review', ['amount' => $order['amount'], 'out_trade_no' => $no]);
                 return 0;
             }
             $confirmedAt = time();
             if ($order['purpose'] === 'commission') {
-                if (!$lead || $lead['status'] !== 'unpaid' || (int) $lead['payment_order_id'] !== $id || (int) $lead['receiver_id'] !== (int) $order['merchant_id']) throw new CommonException('支付与原交付状态不一致，暂未入账，请联系平台核对');
+                if (!$lead
+                    || $lead['status'] !== 'unpaid'
+                    || (int) $lead['payment_order_id'] !== $id
+                    || (int) $lead['receiver_id'] !== (int) $order['merchant_id']) throw new CommonException('支付与原交付状态不一致，暂未入账，请联系平台核对');
                 if (Rules::cents((string) $order['fee_amount']) + Rules::cents((string) $order['net_amount']) !== Rules::cents((string) $order['amount'])) throw new CommonException('分账快照不平衡，未增加余额');
                 $net = Rules::cents((string) $order['net_amount']);
                 try {
@@ -276,9 +324,18 @@ final class PaymentService
                     // The locked order and member account update share one transaction.
                     $incomeLog = (new CoreMemberAccountService())->addLog($site, (int) $member['member_id'], MemberAccountTypeDict::COMMISSION,
                         Rules::amount($net), self::INCOME_TYPE, '线索协作收益 '.$lead['lead_no'], $id);
-                    $rule['publisher_income'] = ['merchant_id' => (int) $lead['publisher_id'], 'member_id' => (int) $member['member_id'], 'account_log_id' => (int) $incomeLog];
+                    $rule['publisher_income'] = [
+                        'merchant_id' => (int) $lead['publisher_id'],
+                        'member_id' => (int) $member['member_id'],
+                        'account_log_id' => (int) $incomeLog
+                    ];
                 }
-                Store::query('collaboration', $site)->where('id', $lead['id'])->update(['status' => 'paid', 'paid_at' => time(), 'rule_json' => Data::json($rule), 'update_time' => time()]);
+                Store::query('collaboration', $site)->where('id', $lead['id'])->update([
+                        'status' => 'paid',
+                        'paid_at' => time(),
+                        'rule_json' => Data::json($rule),
+                        'update_time' => time()
+                    ]);
             } elseif ($order['purpose'] === 'membership') {
                 $partner = Store::partner($site, (int) $order['merchant_id'], true);
                 $changes = [];
@@ -290,12 +347,22 @@ final class PaymentService
                 }
                 Store::query('partner', $site)->where('id', $partner['id'])->update($changes + ['update_time' => $confirmedAt]);
             } else throw new CommonException('未知的收费业务，未确认到账');
-            Store::query('coop_order', $site)->where('id', $id)->update(['status' => 'paid', 'out_trade_no' => $no, 'rule_json' => Data::json($rule), 'pay_time' => $confirmedAt, 'update_time' => $confirmedAt]);
+            Store::query('coop_order', $site)->where('id', $id)->update([
+                    'status' => 'paid',
+                    'out_trade_no' => $no,
+                    'rule_json' => Data::json($rule),
+                    'pay_time' => $confirmedAt,
+                    'update_time' => $confirmedAt
+                ]);
             // Freeze first-level inviter/rules only after a matching real receipt. Same transaction, no client grants.
             if (empty($rule['requires_manual_review'])) {
                 try {
                     // Savepoint: a failed reward write rolls back only its own partial rows, not the confirmed receipt.
-                    Db::transaction(static fn () => PromotionService::recordPaid($site, array_replace($order, ['status' => 'paid', 'out_trade_no' => $no, 'pay_time' => $confirmedAt])));
+                    Db::transaction(static fn () => PromotionService::recordPaid($site, array_replace($order, [
+                                    'status' => 'paid',
+                                    'out_trade_no' => $no,
+                                    'pay_time' => $confirmedAt
+                                ])));
                 } catch (\Throwable $error) {
                     // If MySQL already aborted the whole receipt transaction (e.g. deadlock), writing on would autocommit
                     // a half state. Fail the callback instead so it is retried from a clean slate.
@@ -311,7 +378,11 @@ final class PaymentService
                     Log::warning('商户协作付款已确认，推广奖励待核对：site='.$site.', order='.$id.', type='.get_class($error));
                 }
             }
-            Data::audit($site, 0, (int) $order['member_id'], 'coop_order', $id, 'payment_confirmed', ['purpose' => $order['purpose'], 'amount' => $order['amount'], 'out_trade_no' => $no]);
+            Data::audit($site, 0, (int) $order['member_id'], 'coop_order', $id, 'payment_confirmed', [
+                    'purpose' => $order['purpose'],
+                    'amount' => $order['amount'],
+                    'out_trade_no' => $no
+                ]);
             if ($lead && empty($rule['requires_manual_review'])) CooperationNoticeOutbox::record($site, (int) $lead['id'], 'paid');
             return $lead && empty($rule['requires_manual_review']) ? (int) $lead['id'] : 0;
         });
@@ -382,7 +453,8 @@ final class PaymentService
             if (str_contains($error->getMessage(), '42S02') || str_contains($error->getMessage(), '1146'))$records = [];
             else throw $error;
         }
-        foreach ($records as $record)foreach ([(int) $record['order_id'], (int) $record['target_order_id']] as $id)if ($id > 0 && !isset($receipts[$id]))$receipts[$id] = $record;
+        foreach ($records as $record)foreach ([(int) $record['order_id'], (int) $record['target_order_id']] as $id)if ($id > 0
+            && !isset($receipts[$id]))$receipts[$id] = $record;
         foreach ($rows as &$row) {
             $r = $receipts[(int) $row['id']] ?? [];
             $row['manual_receipt_id'] = (int) ($r['id'] ?? 0);
@@ -399,7 +471,9 @@ final class PaymentService
     /** Reuse the original lead's frozen rules, never today's edited fee rules. */
     public static function prepareRepricedCommission(int $site, array $old, string $amount): array
     {
-        if ((int) $old['site_id'] !== $site || $old['purpose'] !== 'commission' || !in_array($old['status'], ['unpaid', 'closed'], true))throw new CommonException('仅待支付协作佣金可申请改价');
+        if ((int) $old['site_id'] !== $site
+            || $old['purpose'] !== 'commission'
+            || !in_array($old['status'], ['unpaid', 'closed'], true))throw new CommonException('仅待支付协作佣金可申请改价');
         $rule = Data::decode($old['rule_json']);
         if (!empty($rule['requires_manual_review']) || !empty($rule['closed_payment_receipts']))throw new CommonException('原订单收款需人工核对，不能改价另建付款');
         self::assertCommissionRules($old);
@@ -407,9 +481,19 @@ final class PaymentService
         self::assertFrameworkAmount(Rules::cents($split['amount']));
         $lead = Store::row('collaboration', $site, (int) $old['lead_id'], true);
         self::assertExternalLead($lead);
-        if ($lead['status'] !== 'unpaid' || (int) $lead['payment_order_id'] !== (int) $old['id'] || (int) $lead['receiver_id'] !== (int) $old['merchant_id'])throw new CommonException('原付佣单已被替换或交付状态已变化，请刷新核对');
+        if ($lead['status'] !== 'unpaid'
+            || (int) $lead['payment_order_id'] !== (int) $old['id']
+            || (int) $lead['receiver_id'] !== (int) $old['merchant_id'])throw new CommonException('原付佣单已被替换或交付状态已变化，请刷新核对');
         self::assertCommissionCapacity($site, $lead, Rules::cents($split['net_amount']), true);
-        foreach (['closure', 'close_check', 'pricing_intent', 'replacement_order_id', 'reprices_order_id', 'promotion_snapshot', 'promotion_review_required'] as $key)unset($rule[$key]);
+        foreach ([
+                'closure',
+                'close_check',
+                'pricing_intent',
+                'replacement_order_id',
+                'reprices_order_id',
+                'promotion_snapshot',
+                'promotion_review_required'
+            ] as $key)unset($rule[$key]);
         return ['split' => $split, 'rule' => $rule, 'lead' => $lead];
     }
 
@@ -424,7 +508,8 @@ final class PaymentService
         $existing = Store::query('coop_order', $site)->where('merchant_id', $old['merchant_id'])->where('request_id', $request)->lock(true)->find();
         if ($existing) {
             $existingRule = Data::decode($existing['rule_json']);
-            if ((int) ($existingRule['reprices_order_id'] ?? 0) !== (int) $old['id'] || Rules::cents((string) $existing['amount']) !== Rules::cents($amount))throw new CommonException('改价请求已被用于其他订单，请刷新核对');
+            if ((int) ($existingRule['reprices_order_id'] ?? 0) !== (int) $old['id']
+                || Rules::cents((string) $existing['amount']) !== Rules::cents($amount))throw new CommonException('改价请求已被用于其他订单，请刷新核对');
             return $existing;
         }
         $key = 'commission:'.$old['lead_id'];
@@ -432,11 +517,35 @@ final class PaymentService
         if (!$active || (int) $active['id'] !== (int) $old['id'])throw new CommonException('该协作已有其他支付单，请先核对原单，不会重复改价');
         Store::query('coop_order', $site)->where('id', $old['id'])->where('status', 'closed')->update(['business_key' => 'closed:'.$old['id'].':'.hash('sha256', $key), 'update_time' => time()]);
         $rule['reprices_order_id'] = (int) $old['id'];
-        $rule['price_override'] = $provenance + ['source_order_id' => (int) $old['id'], 'original_amount' => (string) $old['amount'], 'amount' => $prepared['split']['amount']];
+        $rule['price_override'] = $provenance + [
+            'source_order_id' => (int) $old['id'],
+            'original_amount' => (string) $old['amount'],
+            'amount' => $prepared['split']['amount']
+        ];
         $rule['promotion_policy'] = PromotionService::policyForNewOrder($site);
         $now = time();
-        $id = (int) Store::query('coop_order', $site)->insertGetId($prepared['split'] + ['site_id' => $site, 'order_no' => Data::number('CO'), 'purpose' => 'commission', 'lead_id' => $old['lead_id'], 'merchant_id' => $old['merchant_id'], 'member_id' => $old['member_id'], 'business_key' => $key, 'request_id' => $request, 'rule_json' => Data::json($rule), 'status' => 'unpaid', 'create_time' => $now, 'update_time' => $now]);
-        Store::query('collaboration', $site)->where('id', $lead['id'])->update(['payment_order_id' => $id, 'commission_amount' => $prepared['split']['amount'], 'fee_amount' => $prepared['split']['fee_amount'], 'net_amount' => $prepared['split']['net_amount'], 'rule_json' => Data::json($rule), 'update_time' => $now]);
+        $id = (int) Store::query('coop_order', $site)->insertGetId($prepared['split'] + [
+                'site_id' => $site,
+                'order_no' => Data::number('CO'),
+                'purpose' => 'commission',
+                'lead_id' => $old['lead_id'],
+                'merchant_id' => $old['merchant_id'],
+                'member_id' => $old['member_id'],
+                'business_key' => $key,
+                'request_id' => $request,
+                'rule_json' => Data::json($rule),
+                'status' => 'unpaid',
+                'create_time' => $now,
+                'update_time' => $now
+            ]);
+        Store::query('collaboration', $site)->where('id', $lead['id'])->update([
+                'payment_order_id' => $id,
+                'commission_amount' => $prepared['split']['amount'],
+                'fee_amount' => $prepared['split']['fee_amount'],
+                'net_amount' => $prepared['split']['net_amount'],
+                'rule_json' => Data::json($rule),
+                'update_time' => $now
+            ]);
         return Store::row('coop_order', $site, $id, true);
     }
 
@@ -448,16 +557,28 @@ final class PaymentService
         $current = $order;
         $depth = 0;
         while ($prior = Data::decode($current['rule_json'] ?? null)['reprices_order_id'] ?? 0) {
-            if ((!is_int($prior) && !ctype_digit((string) $prior)) || (int) $prior <= 0 || isset($seen[(int) $prior]) || ++$depth > 20)throw new CommonException('原支付关联异常，请平台核对，当前不能再次付款');
+            if ((!is_int($prior) && !ctype_digit((string) $prior))
+                || (int) $prior <= 0
+                || isset($seen[(int) $prior])
+                || ++$depth > 20)throw new CommonException('原支付关联异常，请平台核对，当前不能再次付款');
             $seen[(int) $prior] = true;
             $old = Store::row('coop_order', $site, (int) $prior, $lock);
             $rule = Data::decode($old['rule_json']);
-            if ((int) $old['member_id'] !== (int) $order['member_id'] || (int) $old['merchant_id'] !== (int) $order['merchant_id'] || $old['purpose'] !== $order['purpose'] || ($old['purpose'] === 'commission' && (int) $old['lead_id'] !== (int) $order['lead_id']) || $old['status'] !== 'closed' || !empty($rule['requires_manual_review']) || !empty($rule['closed_payment_receipts']))throw new CommonException('原改价订单存在收款或状态待核对，请勿再次付款');
+            if ((int) $old['member_id'] !== (int) $order['member_id']
+                || (int) $old['merchant_id'] !== (int) $order['merchant_id']
+                || $old['purpose'] !== $order['purpose']
+                || ($old['purpose'] === 'commission' && (int) $old['lead_id'] !== (int) $order['lead_id'])
+                || $old['status'] !== 'closed'
+                || !empty($rule['requires_manual_review'])
+                || !empty($rule['closed_payment_receipts']))throw new CommonException('原改价订单存在收款或状态待核对，请勿再次付款');
             $pays = Db::name('pay')->where('site_id', $site)->where('trade_type', self::TRADE_TYPE)->where('trade_id', $old['id']);
             if ($lock)$pays->lock(true);
             $known = (string) $old['out_trade_no'] === '';
             foreach ($pays->select()->toArray() as $pay) {
-                if ((int) $pay['status'] !== (int) PayDict::STATUS_CANCEL || $pay['main_type'] !== PayDict::MEMBER || (int) $pay['main_id'] !== (int) $old['member_id'] || Rules::cents((string) $pay['money']) !== Rules::cents((string) $old['amount']))throw new CommonException('原改价支付流水尚未全部核实关闭，请勿再次付款');
+                if ((int) $pay['status'] !== (int) PayDict::STATUS_CANCEL
+                    || $pay['main_type'] !== PayDict::MEMBER
+                    || (int) $pay['main_id'] !== (int) $old['member_id']
+                    || Rules::cents((string) $pay['money']) !== Rules::cents((string) $old['amount']))throw new CommonException('原改价支付流水尚未全部核实关闭，请勿再次付款');
                 if ((string) $pay['out_trade_no'] === (string) $old['out_trade_no'])$known = true;
             }
             if (!$known)throw new CommonException('原改价流水去向待核实，请勿再次付款');
@@ -474,7 +595,10 @@ final class PaymentService
         $pays = Db::name('pay')->where('site_id', $site)->where('trade_type', self::TRADE_TYPE)->where('trade_id', $order['id'])->lock(true)->select()->toArray();
         $knownNo = (string) $order['out_trade_no'] === '';
         foreach ($pays as $pay) {
-            if ((int) $pay['status'] !== (int) PayDict::STATUS_CANCEL || $pay['main_type'] !== PayDict::MEMBER || (int) $pay['main_id'] !== (int) $order['member_id'] || Rules::cents((string) $pay['money']) !== Rules::cents((string) $order['amount'])) throw new CommonException('原支付流水尚未全部确认关闭或已收款，请先核对原单，不会另建付款');
+            if ((int) $pay['status'] !== (int) PayDict::STATUS_CANCEL
+                || $pay['main_type'] !== PayDict::MEMBER
+                || (int) $pay['main_id'] !== (int) $order['member_id']
+                || Rules::cents((string) $pay['money']) !== Rules::cents((string) $order['amount'])) throw new CommonException('原支付流水尚未全部确认关闭或已收款，请先核对原单，不会另建付款');
             if ((string) $pay['out_trade_no'] === (string) $order['out_trade_no']) $knownNo = true;
         }
         if (!$knownNo) throw new CommonException('原付款流水去向待核实，未重新创建，请平台核对');
@@ -489,7 +613,11 @@ final class PaymentService
         $rule = Data::decode($order['rule_json'] ?? null);
         if (!isset($rule['commission_minimum'],$rule['fee_minimum'],$rule['fee_percent'],$rule['fee_confirmed'])) throw new CommonException('付佣订单缺少收费规则快照，当前未执行资金变动，请平台核对');
         $split = Rules::split(Rules::cents((string) $order['amount']), $rule);
-        foreach (['amount', 'fee_amount', 'net_amount'] as $field) if (Rules::cents((string) $order[$field]) !== Rules::cents($split[$field])) throw new CommonException('付佣金额与原收费快照不一致，当前未执行资金变动，请平台核对');
+        foreach ([
+                'amount',
+                'fee_amount',
+                'net_amount'
+            ] as $field) if (Rules::cents((string) $order[$field]) !== Rules::cents($split[$field])) throw new CommonException('付佣金额与原收费快照不一致，当前未执行资金变动，请平台核对');
     }
     /** Rechecked under the member row lock on callback; early checks prevent avoidable charges. */
     private static function assertCommissionCapacity(int $site, array $lead, int $net, bool $lock = false): array
@@ -508,7 +636,8 @@ final class PaymentService
     }
     private static function assertExternalLead(array $lead): void
     {
-        if ((int) ($lead['publisher_id'] ?? 0) > 0 && (int) $lead['publisher_id'] === (int) ($lead['receiver_id'] ?? 0))throw new CommonException('本店内部交付不收协作佣金，无需创建或支付付款订单');
+        if ((int) ($lead['publisher_id'] ?? 0) > 0
+            && (int) $lead['publisher_id'] === (int) ($lead['receiver_id'] ?? 0))throw new CommonException('本店内部交付不收协作佣金，无需创建或支付付款订单');
     }
     private function finance(): void
     {
@@ -583,7 +712,11 @@ final class PaymentService
             $row['benefits'] = is_array($rule['benefits'] ?? null) ? $rule['benefits'] : [];
             $row['capabilities'] = MembershipCatalogService::emptyCapabilities();
             foreach ($row['capabilities'] as $key => $unused) $row['capabilities'][$key] = ($rule['capabilities'][$key] ?? false) === true;
-            foreach (['full_amount', 'credit_amount', 'payable_amount'] as $key) $row[$key] = (string) ($rule[$key] ?? ($key === 'credit_amount' ? '0.00' : $row['amount']));
+            foreach ([
+                    'full_amount',
+                    'credit_amount',
+                    'payable_amount'
+                ] as $key) $row[$key] = (string) ($rule[$key] ?? ($key === 'credit_amount' ? '0.00' : $row['amount']));
             if (($rule['cost_schema'] ?? '') === MembershipCostService::SCHEMA) {
                 foreach (MembershipCostService::FIELDS as $key) $row[$key] = $rule[$key] ?? null;
                 foreach (['experience_value', 'experience_remaining'] as $key) $row[$key] = (string) ($rule[$key] ?? '0.00');
@@ -612,7 +745,8 @@ final class PaymentService
     }
     public static function reviewMessage(array $rule): string
     {
-        if (empty($rule['requires_manual_review']) && !empty($rule['financial_requires_manual_review']))return '本订单另有已确认到账的付款，额外款项待平台核对；原订单金额、已开通权益和已入账收益保留，未自动退款，请勿重复付款';
+        if (empty($rule['requires_manual_review'])
+            && !empty($rule['financial_requires_manual_review']))return '本订单另有已确认到账的付款，额外款项待平台核对；原订单金额、已开通权益和已入账收益保留，未自动退款，请勿重复付款';
         return [
             'merchant_blocked_during_payment' => '实际收款时门店已停止合作，未开通权益；请平台核对原支付流水并处理退款事宜',
             'commission_credit_capacity_exceeded' => '本单已实际收款；发布方会员佣金账户达到金额精度上限，收益尚未入账，请平台核对处理，勿重复付款',

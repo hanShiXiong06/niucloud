@@ -39,7 +39,9 @@ final class PaymentOrderCheckService
             if (count($pays) > 1)throw new CommonException('存在多笔原付款记录，请联系平台核对；未再次扣款');
             $result = ['state' => 'ready', 'message' => '尚未发起付款'];
             foreach ($pays as $pay) {
-                if (($pay['main_type'] ?? '') !== PayDict::MEMBER || (int) $pay['main_id'] !== (int) $row['member_id'] || Rules::cents((string) $pay['money']) !== Rules::cents((string) $row['amount']))
+                if (($pay['main_type'] ?? '') !== PayDict::MEMBER
+                    || (int) $pay['main_id'] !== (int) $row['member_id']
+                    || Rules::cents((string) $pay['money']) !== Rules::cents((string) $row['amount']))
                     throw new CommonException('原付款归属或金额不一致，请联系平台核对');
                 if ((int) $pay['status'] === (int) PayDict::STATUS_FINISH) {
                     $result = (new PaymentGatewayReconciler($this->providerFactory))->recoverLocalReceipt($site, $pay);

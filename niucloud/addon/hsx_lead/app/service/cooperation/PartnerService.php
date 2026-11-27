@@ -31,13 +31,28 @@ final class PartnerService
         if (!$member) throw new CommonException('请先登录本站有效会员');
         $m = TeamService::resolve($this->context, false);
         $onboardingInviter = (new OnboardingInviterService($this->context))->state();
-        if (!$m) return ['current_member_id' => $memberId, 'profile' => null, 'config' => $config, 'stats' => [], 'wallet' => null, 'providers' => !empty($config['erp_visible']) ? (new ProviderChannelService($this->context->site))->available() : [], 'needs_onboarding' => true, 'pending_entity' => (new TeamService($this->context))->pending(), 'onboarding_inviter' => $onboardingInviter];
+        if (!$m) return [
+            'current_member_id' => $memberId,
+            'profile' => null,
+            'config' => $config,
+            'stats' => [],
+            'wallet' => null,
+            'providers' => !empty($config['erp_visible']) ? (new ProviderChannelService($this->context->site))->available() : [],
+            'needs_onboarding' => true,
+            'pending_entity' => (new TeamService($this->context))->pending(),
+            'onboarding_inviter' => $onboardingInviter
+        ];
         $profile = $this->present($m, (bool) $m['is_owner']);
         $id = (int) $m['id'];
         $profile['team_role'] = $m['team_role'];
         $profile['is_owner'] = (bool) $m['is_owner'];
         $profile['membership'] = (new EntityMembershipService($this->context))->summary();
-        $profile['permissions'] = ['can_manage_members' => (bool) $m['is_owner'], 'can_manage_billing' => (bool) $m['is_owner'], 'can_manage_erp' => (bool) $m['is_owner'] && !empty($config['erp_visible']), 'can_withdraw' => (bool) $m['is_owner']];
+        $profile['permissions'] = [
+            'can_manage_members' => (bool) $m['is_owner'],
+            'can_manage_billing' => (bool) $m['is_owner'],
+            'can_manage_erp' => (bool) $m['is_owner'] && !empty($config['erp_visible']),
+            'can_withdraw' => (bool) $m['is_owner']
+        ];
         $out = Store::query('collaboration', $this->context->site)->where('publisher_id', $id);
         $in = Store::query('collaboration', $this->context->site)->where('receiver_id', $id);
         TeamService::scopeIncoming($in, $memberId);
@@ -56,14 +71,22 @@ final class PartnerService
         $erpVisible = ConfigService::erpVisible($this->context->site);
         $provider = $erpVisible ? Data::text($input, 'provider', 60) : '';
         if ($provider !== '') $provider = (new ProviderRegistry())->definition($provider)->key();
-        $values = $region + ['name' => Data::text($input, 'name', 120, true), 'contact_name' => Data::text($input, 'contact_name', 60, true), 'mobile' => $phone, 'address' => Data::text($input, 'address', 500, true)];
+        $values = $region + [
+            'name' => Data::text($input, 'name', 120, true),
+            'contact_name' => Data::text($input, 'contact_name', 60, true),
+            'mobile' => $phone,
+            'address' => Data::text($input, 'address', 500, true)
+        ];
         $onboardingInviter = null;
         $profileFormEvent = [];
         $id = Db::transaction(function () use ($memberId, $values, $provider, $phone, $input, &$onboardingInviter, &$profileFormEvent): int {
             $policy = new ProviderChannelService($this->context->site);
             $policy->lockSite();
             $member = Db::name('member')->where('site_id', $this->context->site)->where('member_id', $memberId)->lock(true)->find();
-            if (!$member || (int) $member['status'] !== 1 || (int) $member['is_del'] !== 0 || (int) $member['delete_time'] > 0) throw new CommonException('会员已停用，请重新登录');
+            if (!$member
+                || (int) $member['status'] !== 1
+                || (int) $member['is_del'] !== 0
+                || (int) $member['delete_time'] > 0) throw new CommonException('会员已停用，请重新登录');
             $old = Data::query('merchant', $this->context->site)->where('member_id', $memberId)->lock(true)->find();
             $current = TeamService::resolve($this->context, false, true);
             if ($current && !$current['is_owner']) throw new CommonException('门店资料由负责人维护，成员不能创建新主体覆盖已有归属');
@@ -72,7 +95,8 @@ final class PartnerService
             $input = $prepared['input'];
             if (!$old && (new TeamService($this->context))->pending(true)) throw new CommonException('已有待确认的加入申请，请先撤销申请再创建门店');
             $requested = $old ? Store::query('partner', $this->context->site)->where('merchant_id', $old['id'])->value('provider_requested') : null;
-            if ($old && ($requested === null || $requested === '')) $requested = Data::query('connection', $this->context->site)->where('merchant_id', $old['id'])->value('provider');
+            if ($old
+                && ($requested === null || $requested === '')) $requested = Data::query('connection', $this->context->site)->where('merchant_id', $old['id'])->value('provider');
             // An old mobile form may still submit its previous ERP choice.
             // Hiding the feature must not switch, erase or create a connection.
             if (!ConfigService::erpVisible($this->context->site))$provider = (string) ($requested ?? '');
@@ -86,8 +110,15 @@ final class PartnerService
                 if (!$site) throw new CommonException('站点不存在');
                 $blocked = Db::name('hsx_lead_merchant')->alias('m')->join('hsx_lead_partner p', 'p.site_id=m.site_id AND p.merchant_id=m.id')
                     ->where('m.site_id', $this->context->site)->where('p.blocked_at', '>', 0)->field('m.mobile,m.member_id')->select()->toArray();
-                foreach ($blocked as $row) if ((int) $row['member_id'] === $memberId || self::phone($row['mobile']) === $phone) throw new CommonException('该会员或登记手机号已停止合作，无法重新入驻');
-                $id = (int) Data::query('merchant', $this->context->site)->insertGetId($values + ['site_id' => $this->context->site, 'member_id' => $memberId, 'status' => 1, 'create_time' => time(), 'update_time' => time()]);
+                foreach ($blocked as $row) if ((int) $row['member_id'] === $memberId
+                    || self::phone($row['mobile']) === $phone) throw new CommonException('该会员或登记手机号已停止合作，无法重新入驻');
+                $id = (int) Data::query('merchant', $this->context->site)->insertGetId($values + [
+                        'site_id' => $this->context->site,
+                        'member_id' => $memberId,
+                        'status' => 1,
+                        'create_time' => time(),
+                        'update_time' => time()
+                    ]);
                 $p = Store::partner($this->context->site, $id, true);
             }
             Data::query('merchant', $this->context->site)->where('id', $id)->update($values + ['update_time' => time()]);
@@ -97,7 +128,14 @@ final class PartnerService
             (new BusinessLicenseService($this->context))->save($id, $input);
             $onboardingInviter = (new OnboardingInviterService($this->context))->finishFirstProfile($id, !$old, $input);
             $profileForm->persist($id, $prepared);
-            $profileFormEvent = ['site_id' => $this->context->site, 'member_id' => $memberId, 'merchant_id' => $id, 'form_id' => $prepared['form_id'], 'version' => $prepared['version'], 'occurred_at' => time()];
+            $profileFormEvent = [
+                'site_id' => $this->context->site,
+                'member_id' => $memberId,
+                'merchant_id' => $id,
+                'form_id' => $prepared['form_id'],
+                'version' => $prepared['version'],
+                'occurred_at' => time()
+            ];
             $this->context->audit('partner', $id, 'profile_saved', ['provider' => $provider]);
             return $id;
         });
@@ -135,7 +173,19 @@ final class PartnerService
         $businessNames = array_column($config['businesses'], 'name', 'key');
         foreach ($capabilities as &$capability) $capability['business_name'] = $businessNames[$capability['business_type']] ?? $capability['business_type'];
         unset($capability);
-        $row = Data::regionNames(array_intersect_key($merchant, array_flip(['id', 'name', 'contact_name', 'mobile', 'province_id', 'city_id', 'district_id', 'address', 'status', 'create_time', 'update_time'])));
+        $row = Data::regionNames(array_intersect_key($merchant, array_flip([
+                        'id',
+                        'name',
+                        'contact_name',
+                        'mobile',
+                        'province_id',
+                        'city_id',
+                        'district_id',
+                        'address',
+                        'status',
+                        'create_time',
+                        'update_time'
+                    ])));
         $conn = Data::query('connection', $this->context->site)->where('merchant_id', $id)->field('id,merchant_id,provider,enabled,config_version,last_sync_status,last_sync_at,last_sync_message,active_run_id,published_run_id,sync_interval_minutes')->find();
         if ($conn) $conn = array_replace($conn, \addon\hsx_lead\app\support\SyncStatus::connection($this->context->site, $conn));
         $row += ['storefront_image' => (new StorefrontService($this->context))->image($id),
@@ -148,7 +198,24 @@ final class PartnerService
             'inventory_count' => $count, 'manual_models' => $manualModels, 'manual_model_count' => count($manualModels), 'business_capabilities' => $capabilities, 'business_capability_count' => $capabilityCount,
             'capability_source' => $rights['all_models'] ? 'all_models' : ($count > 0 ? ($capabilityCount ? 'mixed' : 'erp') : ($capabilityCount ? 'manual' : 'none')),
             'provider_requested' => $p['provider_requested'], 'match_models' => [],
-            'connection' => $conn ? ['connected' => true, 'connection_id' => (int) $conn['id'], 'provider' => $conn['provider'], 'enabled' => (bool) $conn['enabled'], 'last_sync_status' => $conn['last_sync_status'], 'last_sync_at' => (int) $conn['last_sync_at'], 'last_sync_message' => $conn['last_sync_message'], 'active_run_id' => (int) $conn['active_run_id'], 'published_run_id' => (int) $conn['published_run_id'], 'interval_minutes' => (int) $conn['sync_interval_minutes'], 'sync_progress' => $conn['sync_progress'], 'requires_sync_restart' => $conn['requires_sync_restart']] : ['connected' => false, 'last_sync_status' => 'idle', 'last_sync_message' => '可选择接入ERP，或手动设置可交付型号']];
+            'connection' => $conn ? [
+                'connected' => true,
+                'connection_id' => (int) $conn['id'],
+                'provider' => $conn['provider'],
+                'enabled' => (bool) $conn['enabled'],
+                'last_sync_status' => $conn['last_sync_status'],
+                'last_sync_at' => (int) $conn['last_sync_at'],
+                'last_sync_message' => $conn['last_sync_message'],
+                'active_run_id' => (int) $conn['active_run_id'],
+                'published_run_id' => (int) $conn['published_run_id'],
+                'interval_minutes' => (int) $conn['sync_interval_minutes'],
+                'sync_progress' => $conn['sync_progress'],
+                'requires_sync_restart' => $conn['requires_sync_restart']
+            ] : [
+                'connected' => false,
+                'last_sync_status' => 'idle',
+                'last_sync_message' => '可选择接入ERP，或手动设置可交付型号'
+            ]];
         if ($private) {
             $row += array_intersect_key($p, array_flip(['block_reason', 'remark']));
             $row += (new BusinessLicenseService($this->context))->ownSummary($merchant);
@@ -186,11 +253,13 @@ final class PartnerService
         if ($keyword !== '') $q->whereLike('name|contact_name|mobile', '%'.addcslashes($keyword, '\\%_').'%');
         MerchantRegion::apply($q, $params);
         $rows = array_map(fn (array $m): array => $this->present($m, true), $q->order('id desc')->select()->toArray());
-        if (isset($params['level_code']) && $params['level_code'] !== '') $rows = array_values(array_filter($rows, static fn (array $m): bool => !empty($m['membership']['active']) && $m['membership']['level_code'] === $params['level_code']));
+        if (isset($params['level_code'])
+            && $params['level_code'] !== '') $rows = array_values(array_filter($rows, static fn (array $m): bool => !empty($m['membership']['active']) && $m['membership']['level_code'] === $params['level_code']));
         if (isset($params['status']) && $params['status'] !== '') {
             if (!in_array($params['status'], ['active', 'paused', 'blocked', '1', '0', 1, 0], true)) throw new CommonException('请选择有效商户状态');
             $status = $params['status'] === 'active' ? 1 : ($params['status'] === 'paused' ? 0 : $params['status']);
-            $rows = array_values(array_filter($rows, static fn (array $m): bool => $status === 'blocked' ? $m['blocked_at'] > 0 : ((int) $m['status'] === (int) $status && $m['blocked_at'] === 0)));
+            $rows = array_values(array_filter($rows, static fn (array $m): bool => $status === 'blocked' ? $m['blocked_at'] > 0 : ((int) $m['status'] === (int) $status
+                        && $m['blocked_at'] === 0)));
         }
         return Store::pageArray($rows, $params) + ['levels' => (new ConfigService($this->context))->get()['membership_levels']];
     }
@@ -218,7 +287,11 @@ final class PartnerService
         Db::transaction(function () use ($id, $reason): void {
             $p = Store::partner($this->context->site, $id, true);
             if ((int) $p['blocked_at'] > 0) return;
-            Store::query('partner', $this->context->site)->where('id', $p['id'])->update(['blocked_at' => time(), 'block_reason' => $reason, 'update_time' => time()]);
+            Store::query('partner', $this->context->site)->where('id', $p['id'])->update([
+                    'blocked_at' => time(),
+                    'block_reason' => $reason,
+                    'update_time' => time()
+                ]);
             $this->context->audit('partner', $id, 'permanently_blocked', ['reason' => $reason]);
         });
         return $this->present(Data::row('merchant', $this->context->site, $id), true);

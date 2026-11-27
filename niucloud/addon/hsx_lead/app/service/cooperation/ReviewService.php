@@ -28,7 +28,9 @@ final class ReviewService
             $leadIds = Store::adminQuery($this->context)->whereLike('customer_name|lead_no|mobile', $needle)->column('id');
             $q->where(function ($sub) use ($needle, $leadIds): void {$sub->whereLike('note|reason', $needle)->whereOr('lead_id', 'in', $leadIds ?: [0]);});
         }
-        foreach (['start_time' => '>=', 'end_time' => '<='] as $key => $op) if (isset($params[$key]) && $params[$key] !== '' && (int) $params[$key] > 0) $q->where('create_time', $op, (int) $params[$key]);
+        foreach (['start_time' => '>=', 'end_time' => '<='] as $key => $op) if (isset($params[$key])
+            && $params[$key] !== ''
+            && (int) $params[$key] > 0) $q->where('create_time', $op, (int) $params[$key]);
         $page = Data::page($q, $params);
         $page['data'] = array_map(fn (array $r): array => $this->present($r), $page['data']);
         return $page;

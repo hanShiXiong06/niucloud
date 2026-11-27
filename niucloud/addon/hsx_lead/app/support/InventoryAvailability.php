@@ -72,7 +72,12 @@ final class InventoryAvailability
         return [
             'availability' => $availability, 'quantity' => $quantity, 'saleable_quantity' => $saleable,
             'listing_status' => $listing, 'stock_status' => $stock, 'sale_state' => $saleState, 'sale_status' => $sale,
-            'sale_status_label' => $sold ? '已售出' : ($sale === 'unknown' && $stock === 'in_stock' ? '在库 · 未标记上架' : ['on_sale' => '在售', 'off_shelf' => '已下架', 'sold_out' => '无可售库存', 'unknown' => '状态待核实'][$sale]),
+            'sale_status_label' => $sold ? '已售出' : ($sale === 'unknown' && $stock === 'in_stock' ? '在库 · 未标记上架' : [
+                    'on_sale' => '在售',
+                    'off_shelf' => '已下架',
+                    'sold_out' => '无可售库存',
+                    'unknown' => '状态待核实'
+                ][$sale]),
             'stock_status_label' => $stockLabel, 'quantity_basis' => $basis,
             'is_sellable' => $known && !$stale && $merchantActive, 'is_stale' => $stale,
             'sync_failed' => $failed, 'stale_after_minutes' => intdiv($threshold, 60),

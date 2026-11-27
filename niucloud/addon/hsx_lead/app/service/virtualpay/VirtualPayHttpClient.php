@@ -22,7 +22,14 @@ final class VirtualPayHttpClient
         if ($accessToken === '' || strlen($accessToken) > 4096 || preg_match('/[\x00-\x20\x7f]/', $accessToken))throw new CommonException('虚拟支付访问凭据未就绪');
         $signed = VirtualPayProtocol::signedBody($path, $payload, $appKey);
         $url = 'https://api.weixin.qq.com'.$path.'?'.http_build_query(['access_token' => $accessToken, 'pay_sig' => $signed['pay_sig']], '', '&', PHP_QUERY_RFC3986);
-        $options = ['headers' => ['Content-Type' => 'application/json'], 'timeout' => 8.0, 'connect_timeout' => 3.0, 'http_errors' => false, 'allow_redirects' => false, 'retry' => false];
+        $options = [
+            'headers' => ['Content-Type' => 'application/json'],
+            'timeout' => 8.0,
+            'connect_timeout' => 3.0,
+            'http_errors' => false,
+            'allow_redirects' => false,
+            'retry' => false
+        ];
         try {
             if ($this->transport)$response = ($this->transport)($url, $signed['body'], $options);
             else {

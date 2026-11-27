@@ -29,7 +29,16 @@ final class AccountNoticePolicyService
         foreach (NoticeEventCatalog::EVENTS as $key => $definition)$events[$key] = array_replace([
             'event_key' => $key, 'enabled' => false, 'channels' => array_fill_keys(NoticeEventCatalog::CHANNELS, false),
             'weapp' => [], 'wechat' => []], is_array($saved['events'][$key] ?? null) ? $saved['events'][$key] : []);
-        return array_replace(['enabled' => false, 'enabled_at' => 0, 'source_after_id' => 0, 'resume_after_id' => 0, 'ttl_seconds' => 86400, 'max_attempts' => 3, 'response_reminder_minutes' => [30, 10, 5, 1], 'quiet_hours' => NoticeDeliveryWindow::defaults()], $saved, ['events' => $events]);
+        return array_replace([
+                'enabled' => false,
+                'enabled_at' => 0,
+                'source_after_id' => 0,
+                'resume_after_id' => 0,
+                'ttl_seconds' => 86400,
+                'max_attempts' => 3,
+                'response_reminder_minutes' => [30, 10, 5, 1],
+                'quiet_hours' => NoticeDeliveryWindow::defaults()
+            ], $saved, ['events' => $events]);
     }
     public function get(int $site): array
     {
@@ -44,10 +53,21 @@ final class AccountNoticePolicyService
                 $ready[$channel] = ['status' => empty($mapping[NoticeEventCatalog::key($key)]) || empty($config[$field]) ? 'pending_configuration' : (empty($config['is_'.$channel]) ? 'disabled' : 'ready'),
                     'framework_template_id' => (string) ($config[$field] ?? ''), 'enabled' => !empty($config['is_'.$channel])];
             }
-            $events[] = array_replace($row, NoticeEventCatalog::EVENTS[$key], ['group' => str_starts_with($key, 'account_') ? 'account' : 'cooperation', 'event_key' => $key, 'notice_key' => NoticeEventCatalog::key($key), 'readiness' => $ready, 'variables' => NoticeEventCatalog::variables($key), 'field_types' => NoticeEventCatalog::fieldTypes($key)]);
+            $events[] = array_replace($row, NoticeEventCatalog::EVENTS[$key], [
+                    'group' => str_starts_with($key, 'account_') ? 'account' : 'cooperation',
+                    'event_key' => $key,
+                    'notice_key' => NoticeEventCatalog::key($key),
+                    'readiness' => $ready,
+                    'variables' => NoticeEventCatalog::variables($key),
+                    'field_types' => NoticeEventCatalog::fieldTypes($key)
+                ]);
         }
         return array_replace($policy, ['events' => $events, 'installed' => self::installed($site), 'variables' => NoticeEventCatalog::VARIABLES + NoticeEventCatalog::COOP_VARIABLES,
-            'channel_routes' => ['weapp' => '/site/channel/weapp/message', 'wechat' => '/site/channel/wechat/message', 'sms' => '/site/setting/notice/template'],
+            'channel_routes' => [
+                'weapp' => '/site/channel/weapp/message',
+                'wechat' => '/site/channel/wechat/message',
+                'sms' => '/site/setting/notice/template'
+            ],
             'message' => '默认不发送；只处理启用后的新业务。接单超时不自动撤回或限制接单，发布方可继续等待或重新选择。用户仍需订阅授权。']);
     }
     public function save(Context $context, array $input): array
@@ -126,7 +146,19 @@ final class AccountNoticePolicyService
         Db::transaction(function () use ($site) {
             Db::name('site')->where('site_id', $site)->lock(true)->find();
             foreach (NoticeEventCatalog::EVENTS as $event => $definition)if (!Db::name('sys_notice')->where('site_id', $site)->where('key', NoticeEventCatalog::key($event))->count())
-                Db::name('sys_notice')->insert(['site_id' => $site, 'key' => NoticeEventCatalog::key($event), 'is_weapp' => 0, 'is_wechat' => 0, 'is_sms' => 0, 'weapp_template_id' => '', 'wechat_template_id' => '', 'sms_id' => '', 'sms_content' => '', 'wechat_first' => '', 'wechat_remark' => '']);
+                Db::name('sys_notice')->insert([
+                        'site_id' => $site,
+                        'key' => NoticeEventCatalog::key($event),
+                        'is_weapp' => 0,
+                        'is_wechat' => 0,
+                        'is_sms' => 0,
+                        'weapp_template_id' => '',
+                        'wechat_template_id' => '',
+                        'sms_id' => '',
+                        'sms_content' => '',
+                        'wechat_first' => '',
+                        'wechat_remark' => ''
+                    ]);
         });
     }
     public static function mapping(int $site, string $channel, bool $pending = false): array
@@ -139,10 +171,22 @@ final class AccountNoticePolicyService
             $key = NoticeEventCatalog::key($event);
             if ($config && self::validStoredTemplate($channel, $config, $event)) {
                 $content = array_map(static fn ($f) => [$f['label'], '{'.$f['variable'].'}', $f['keyword']], $config['fields']);
-                $result[$key] = $channel === 'weapp' ? ['tid' => $config['tid'], 'kid_list' => $config['kid_list'], 'scene_desc' => $config['scene_desc'], 'content' => $content]
+                $result[$key] = $channel === 'weapp' ? [
+                    'tid' => $config['tid'],
+                    'kid_list' => $config['kid_list'],
+                    'scene_desc' => $config['scene_desc'],
+                    'content' => $content
+                ]
                     : ['temp_key' => $config['temp_key'], 'keyword_name_list' => array_column($config['fields'], 'label'), 'content' => $content];
             } elseif ($pending && $channel === 'weapp' && defined(\app\service\admin\weapp\WeappTemplateService::class.'::SUPPORTS_PENDING_DEFINITIONS'))
-                $result[$key] = ['tid' => '', 'kid_list' => [], 'scene_desc' => '', 'content' => [], 'configuration_required' => true, 'configuration_message' => '通知尚未开通，请在商户协作「通知中心」核验本站真实模板后获取。'];
+                $result[$key] = [
+                    'tid' => '',
+                    'kid_list' => [],
+                    'scene_desc' => '',
+                    'content' => [],
+                    'configuration_required' => true,
+                    'configuration_message' => '通知尚未开通，请在商户协作「通知中心」核验本站真实模板后获取。'
+                ];
         }return $result;
     }
     private static function validStoredTemplate(string $channel, array $row, string $event): bool
@@ -161,7 +205,8 @@ final class AccountNoticePolicyService
         $idField = $channel === 'weapp' ? 'tid' : 'temp_key';
         $id = (string) ($row[$idField] ?? '');
         if ($id === '')return [];
-        if (($row['confirmed'] ?? false) !== true || !preg_match($channel === 'weapp' ? '/^[1-9][0-9]{0,19}$/D' : '/^[A-Za-z0-9_-]{1,64}$/D', $id))throw new CommonException('请核验本站官方模板与字段并确认；不可复用他站模板ID');
+        if (($row['confirmed'] ?? false) !== true
+            || !preg_match($channel === 'weapp' ? '/^[1-9][0-9]{0,19}$/D' : '/^[A-Za-z0-9_-]{1,64}$/D', $id))throw new CommonException('请核验本站官方模板与字段并确认；不可复用他站模板ID');
         $fields = $row['fields'] ?? [];
         if (!is_array($fields) || !$fields || count($fields) > 10)throw new CommonException('模板字段应为1—10项');
         $clean = [];
@@ -171,7 +216,13 @@ final class AccountNoticePolicyService
             $variable = $field['variable'] ?? '';
             $keyword = $field['keyword'] ?? '';
             $label = trim((string) ($field['label'] ?? ''));
-            if (!isset(NoticeEventCatalog::variables($event)[$variable]) || $label === '' || mb_strlen($label) > 30 || !is_string($keyword) || !preg_match('/^(thing|character_string|time|date|phrase|number'.($channel === 'wechat' ? '|keyword' : '').')([1-9][0-9]{0,2})$/D', $keyword, $parts) || isset($kids[(int) $parts[2]]) || isset($vars[$variable]))throw new CommonException('模板字段类型暂不支持，或安全通知变量不匹配、重复；请核验真实官方模板');
+            if (!isset(NoticeEventCatalog::variables($event)[$variable])
+                || $label === ''
+                || mb_strlen($label) > 30
+                || !is_string($keyword)
+                || !preg_match('/^(thing|character_string|time|date|phrase|number'.($channel === 'wechat' ? '|keyword' : '').')([1-9][0-9]{0,2})$/D', $keyword, $parts)
+                || isset($kids[(int) $parts[2]])
+                || isset($vars[$variable]))throw new CommonException('模板字段类型暂不支持，或安全通知变量不匹配、重复；请核验真实官方模板');
             // Decimal money is formatted as text, never forced into an unverified money/amount or integer keyword.
             $allowed = NoticeEventCatalog::fieldTypes($event, $channel === 'wechat')[$parts[1]] ?? [];
             if (!in_array($variable, $allowed, true))throw new CommonException('通知字段类型与当前事件不匹配');

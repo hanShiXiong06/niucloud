@@ -66,7 +66,12 @@ final class PromotionService
             if ((int) $merchant['status'] !== 1 || !$partner || (int) $partner['blocked_at'] > 0) $allowed = false;
             if ($allowed && $partner) {
                 $state = EntityMembershipService::state($site, (int) $merchant['id']);
-                if (!empty($state['active'])) $level = ['code' => (string) $state['level_code'], 'level_id' => (int) $state['level_id'], 'name' => (string) $state['level_name'], 'active' => true];
+                if (!empty($state['active'])) $level = [
+                    'code' => (string) $state['level_code'],
+                    'level_id' => (int) $state['level_id'],
+                    'name' => (string) $state['level_name'],
+                    'active' => true
+                ];
             }
         }
         return ['role' => !empty($provider['enabled']) ? 'provider' : 'normal', 'promotion_allowed' => $allowed, 'provider' => $provider, 'level' => $level];
@@ -78,12 +83,22 @@ final class PromotionService
     /** New orders freeze policy; receipts freeze identities and actual earning facts. */
     public static function policyForNewOrder(int $site): array
     {
-        return ['schema_version' => 'hsx_lead.promotion.policy.v2', 'site_id' => $site, 'created_at' => time(), 'configuration' => PromotionRules::config(self::configuration($site))];
+        return [
+            'schema_version' => 'hsx_lead.promotion.policy.v2',
+            'site_id' => $site,
+            'created_at' => time(),
+            'configuration' => PromotionRules::config(self::configuration($site))
+        ];
     }
     private static function configView(int $site, array $config): array
     {
         $levels = [];
-        foreach (MembershipCatalogService::levels($site) as $level) $levels[] = ['code' => $level['code'], 'level_id' => $level['level_id'], 'name' => $level['name'], 'display_rank' => $level['display_rank']];
+        foreach (MembershipCatalogService::levels($site) as $level) $levels[] = [
+            'code' => $level['code'],
+            'level_id' => $level['level_id'],
+            'name' => $level['name'],
+            'display_rank' => $level['display_rank']
+        ];
         return $config + ['member_levels' => $levels];
     }
     private static function statusLabel(string $status): string
@@ -97,8 +112,16 @@ final class PromotionService
         if (!$merchant) throw new CommonException('请先完善门店资料后再申请服务商');
         $partner = Store::query('partner', $site)->where('merchant_id', $merchant['id'])->find();
         if ((int) $merchant['status'] !== 1 || !$partner || (int) $partner['blocked_at'] > 0) throw new CommonException('当前门店已停用或停止合作，不能申请服务商');
-        foreach (['name', 'contact_name', 'mobile', 'address'] as $key) if (trim((string) ($merchant[$key] ?? '')) === '') throw new CommonException('请先补齐门店、联系人、电话及地址后再申请');
-        if (!preg_match('/^1[0-9]{10}$/D', (string) $merchant['mobile']) || (int) $merchant['province_id'] <= 0 || (int) $merchant['city_id'] <= 0 || (int) $merchant['district_id'] <= 0) throw new CommonException('请先核对门店电话及省市区后再申请');
+        foreach ([
+                'name',
+                'contact_name',
+                'mobile',
+                'address'
+            ] as $key) if (trim((string) ($merchant[$key] ?? '')) === '') throw new CommonException('请先补齐门店、联系人、电话及地址后再申请');
+        if (!preg_match('/^1[0-9]{10}$/D', (string) $merchant['mobile'])
+            || (int) $merchant['province_id'] <= 0
+            || (int) $merchant['city_id'] <= 0
+            || (int) $merchant['district_id'] <= 0) throw new CommonException('请先核对门店电话及省市区后再申请');
         $region = Data::regionNames($merchant);
         $city = (string) ($region['city_name'] ?? '');
         if ($city === '') throw new CommonException('门店城市暂时无法核对，请先完善门店地区');
@@ -149,7 +172,11 @@ final class PromotionService
             $next = array_replace($provider ?? [], $facts, ['status' => 'pending', 'enabled' => false, 'version' => $version, 'reason' => '', 'disabled_mode' => 'normal',
                 'submitted_at' => time(), 'reviewed_at' => 0, 'update_time' => time()]);
             (new CoreConfigService())->setConfig($site, self::PROVIDER_PREFIX.$id, $next);
-            $this->context->audit('promotion_provider', $id, 'applied', ['version' => $version, 'previous_status' => $provider['status'] ?? 'none', 'merchant_id' => $facts['merchant_id']]);
+            $this->context->audit('promotion_provider', $id, 'applied', [
+                    'version' => $version,
+                    'previous_status' => $provider['status'] ?? 'none',
+                    'merchant_id' => $facts['merchant_id']
+                ]);
             return ['application' => $this->applicationView($id, self::provider($site, $id)), 'already_submitted' => false];
         });
     }
@@ -187,7 +214,11 @@ final class PromotionService
         $member = Db::name('member')->where('site_id', $this->context->site)->where('member_id', $pid)->where('is_del', 0)->where('delete_time', 0)->find();
         if (!$member) return null;
         $provider = self::provider($this->context->site, $pid);
-        return self::summary($member) + ['provider_enabled' => (bool) ($provider['enabled'] ?? false), 'role' => !empty($provider['enabled']) ? 'provider' : 'normal', 'city' => (string) ($provider['city'] ?? '')];
+        return self::summary($member) + [
+            'provider_enabled' => (bool) ($provider['enabled'] ?? false),
+            'role' => !empty($provider['enabled']) ? 'provider' : 'normal',
+            'city' => (string) ($provider['city'] ?? '')
+        ];
     }
     public function overview(): array
     {
@@ -227,7 +258,12 @@ final class PromotionService
     {
         $page = max(1, (int) ($params['page'] ?? 1));
         $size = max(1, min(100, (int) ($params['limit'] ?? 20)));
-        return ['data' => (clone $query)->order('member_id desc')->page($page, $size)->select()->toArray(), 'total' => (int) (clone $query)->count(), 'per_page' => $size, 'current_page' => $page];
+        return [
+            'data' => (clone $query)->order('member_id desc')->page($page, $size)->select()->toArray(),
+            'total' => (int) (clone $query)->count(),
+            'per_page' => $size,
+            'current_page' => $page
+        ];
     }
     public function team(array $params = []): array
     {
@@ -289,7 +325,13 @@ final class PromotionService
                     $membership['level_name'] = (string) $state['level_name'];
                 } elseif (isset($paidSubjects[$mid]))$membership['status'] = 'inactive';
             }
-            $membership['status_label'] = ['not_opened' => '未开通', 'active' => '生效中', 'expired' => '已到期', 'inactive' => '当前未生效', 'review' => '待核对'][$membership['status']];
+            $membership['status_label'] = [
+                'not_opened' => '未开通',
+                'active' => '生效中',
+                'expired' => '已到期',
+                'inactive' => '当前未生效',
+                'review' => '待核对'
+            ][$membership['status']];
             $stage = $shop ? ($shared ? '已加入门店' : '已登记门店') : '待完善门店';
             $rows[] = self::summary($row) + ['merchant_name' => (string) ($shop['name'] ?? ''), 'region_text' => (string) ($region['region_text'] ?? ''),
                 'stage' => $stage, 'stage_key' => $shop ? 'onboarded' : 'registered', 'stage_label' => $stage, 'membership' => $membership, 'create_time' => (int) $row['create_time']];
@@ -309,7 +351,12 @@ final class PromotionService
         elseif ($id === (int) $own['member_id']) $reason = '不能把自己设为邀请人';
         elseif (!$role['promotion_allowed']) $reason = '该邀请人的推广资格已被禁止或门店已停止合作';
         elseif ((int) $own['pid'] > 0) $reason = (int) $own['pid'] === $id ? '邀请关系已存在，无需重复绑定' : '已有邀请人，本次不会覆盖原关系';
-        return ['inviter' => self::summary($inviter) + ['role' => $role['role'], 'city' => (string) ($provider['city'] ?? '')], 'current_upstream' => $this->upstream((int) $own['pid']), 'can_bind' => $reason === '', 'reason' => $reason];
+        return [
+            'inviter' => self::summary($inviter) + ['role' => $role['role'], 'city' => (string) ($provider['city'] ?? '')],
+            'current_upstream' => $this->upstream((int) $own['pid']),
+            'can_bind' => $reason === '',
+            'reason' => $reason
+        ];
     }
     public function bind(array $input): array
     {
@@ -356,7 +403,9 @@ final class PromotionService
             $indexes = Db::query('SELECT INDEX_NAME,COLUMN_NAME,NON_UNIQUE FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? ORDER BY INDEX_NAME,SEQ_IN_INDEX', [$table]);
             $map = [];
             foreach ($indexes as $index)if ((int) $index['NON_UNIQUE'] === 0)$map[$index['INDEX_NAME']][] = $index['COLUMN_NAME'];
-            if (!$column || ($map['uk_site_order_level'] ?? []) !== ['site_id', 'coop_order_id', 'commission_level'] || isset($map['uk_site_order']))throw new CommonException('二级推广结构尚未升级，请管理员先执行 php addon/hsx_lead/scripts/upgrade-promotion-levels.php --check，备份并执行 --apply 后重试');
+            if (!$column
+                || ($map['uk_site_order_level'] ?? []) !== ['site_id', 'coop_order_id', 'commission_level']
+                || isset($map['uk_site_order']))throw new CommonException('二级推广结构尚未升级，请管理员先执行 php addon/hsx_lead/scripts/upgrade-promotion-levels.php --check，备份并执行 --apply 后重试');
         }
         Db::transaction(function () use ($next): void {
             self::lockSite($this->context->site);
@@ -432,7 +481,10 @@ final class PromotionService
     private static function assertProviderVersion(?array $provider, array $input): int
     {
         $version = $input['version'] ?? null;
-        if ((!is_int($version) && !is_string($version)) || !preg_match('/^(?:0|[1-9][0-9]{0,9})$/D', (string) $version) || (int) $version !== (int) ($provider['version'] ?? 0) || (int) $version >= 2147483647) throw new CommonException('服务商资料或申请已变化，请刷新后重新核对，不会覆盖其他人的处理');
+        if ((!is_int($version) && !is_string($version))
+            || !preg_match('/^(?:0|[1-9][0-9]{0,9})$/D', (string) $version)
+            || (int) $version !== (int) ($provider['version'] ?? 0)
+            || (int) $version >= 2147483647) throw new CommonException('服务商资料或申请已变化，请刷新后重新核对，不会覆盖其他人的处理');
         return (int) $version + 1;
     }
     public function saveProvider(int $id, array $input): array
@@ -460,7 +512,12 @@ final class PromotionService
             $next = array_replace($old ?? [], $facts, ['status' => $status, 'enabled' => $status === 'approved', 'version' => $version, 'disabled_mode' => $mode,
                 'city' => $effectiveCity, 'remark' => $remark, 'reason' => $reason, 'reviewed_at' => time(), 'update_time' => time(), 'operator_uid' => $this->context->uid]);
             (new CoreConfigService())->setConfig($site, self::PROVIDER_PREFIX.$id, $next);
-            $this->context->audit('promotion_provider', $id, $status === 'approved' ? 'manually_approved' : 'disabled', ['version' => $version, 'previous_status' => $old['status'] ?? 'none', 'disabled_mode' => $mode, 'reason' => $reason]);
+            $this->context->audit('promotion_provider', $id, $status === 'approved' ? 'manually_approved' : 'disabled', [
+                    'version' => $version,
+                    'previous_status' => $old['status'] ?? 'none',
+                    'disabled_mode' => $mode,
+                    'reason' => $reason
+                ]);
         });
         return $this->providerItem(self::member($this->context->site, $id));
     }
@@ -488,7 +545,10 @@ final class PromotionService
     /** Called only after a matching receipt. Even a non-award decision is frozen. */
     public static function snapshotForOrder(int $site, array $order): array
     {
-        if (($order['status'] ?? '') !== 'paid' || empty($order['out_trade_no']) || (int) ($order['id'] ?? 0) <= 0 || (int) ($order['pay_time'] ?? 0) <= 0) throw new CommonException('推广快照缺少已支付业务凭据');
+        if (($order['status'] ?? '') !== 'paid'
+            || empty($order['out_trade_no'])
+            || (int) ($order['id'] ?? 0) <= 0
+            || (int) ($order['pay_time'] ?? 0) <= 0) throw new CommonException('推广快照缺少已支付业务凭据');
         $policy = Data::decode($order['rule_json'] ?? '')['promotion_policy'] ?? null;
         if (is_array($policy))return self::snapshotV2($site, $order, $policy);
         $source = PromotionRules::source((string) $order['purpose']);
@@ -519,22 +579,50 @@ final class PromotionService
         if ($order['purpose'] === 'membership') $previous->where('merchant_id', $order['merchant_id']);
         else $previous->where('member_id', $payer['member_id']);
         $renewal = $source !== 'maintenance' && $previous->count() > 0;
-        $snapshot = array_replace($snapshot, ['renewal' => $renewal, 'settlement_days' => $config['settlement_days'], 'eligibility_months' => $config['eligibility_months'], 'bound_at' => $boundAt, 'available_at' => $paidAt + $config['settlement_days'] * 86400]);
+        $snapshot = array_replace($snapshot, [
+                'renewal' => $renewal,
+                'settlement_days' => $config['settlement_days'],
+                'eligibility_months' => $config['eligibility_months'],
+                'bound_at' => $boundAt,
+                'available_at' => $paidAt + $config['settlement_days'] * 86400
+            ]);
         if (!PromotionRules::eligible($config, $source, $renewal, $boundAt, $paidAt)) return array_replace($snapshot, ['reason' => 'outside_eligibility']);
         $gross = Rules::cents((string) $order['amount']);
         $base = $source === 'membership' ? MembershipCostService::promotionBase($order) : Rules::cents((string) $order['fee_amount']);
         if ($base > $gross) throw new CommonException('推广计佣基数超过实收，需平台核对，不会减少发布方收益');
         $rate = self::rateFor($config, $source, $resolved['role'], $resolved['level']['code']);
         $amount = PromotionRules::reward($base, $rate);
-        return array_replace($snapshot, ['eligible' => $amount > 0, 'reason' => $amount > 0 ? 'eligible' : 'zero_reward', 'base_amount' => Rules::amount($base), 'rate' => $rate, 'amount' => Rules::amount($amount)]);
+        return array_replace($snapshot, [
+                'eligible' => $amount > 0,
+                'reason' => $amount > 0 ? 'eligible' : 'zero_reward',
+                'base_amount' => Rules::amount($base),
+                'rate' => $rate,
+                'amount' => Rules::amount($amount)
+            ]);
     }
     private static function snapshotV2(int $site, array $order, array $policy): array
     {
-        if (($policy['schema_version'] ?? '') !== 'hsx_lead.promotion.policy.v2' || (int) ($policy['site_id'] ?? 0) !== $site || !is_array($policy['configuration'] ?? null) || (int) ($policy['created_at'] ?? 0) <= 0)throw new CommonException('原订单推广规则快照不完整，不能按当前配置替代');
+        if (($policy['schema_version'] ?? '') !== 'hsx_lead.promotion.policy.v2'
+            || (int) ($policy['site_id'] ?? 0) !== $site
+            || !is_array($policy['configuration'] ?? null)
+            || (int) ($policy['created_at'] ?? 0) <= 0)throw new CommonException('原订单推广规则快照不完整，不能按当前配置替代');
         $config = PromotionRules::config($policy['configuration']);
         $source = PromotionRules::source((string) $order['purpose']);
         $paid = (int) $order['pay_time'];
-        $snapshot = ['schema_version' => 'hsx_lead.promotion.v2', 'site_id' => $site, 'order_id' => (int) $order['id'], 'out_trade_no' => (string) $order['out_trade_no'], 'payer_member_id' => (int) $order['member_id'], 'paid_at' => $paid, 'gross_amount' => (string) $order['amount'], 'source' => $source, 'eligible' => false, 'reason' => 'promotion_disabled', 'max_level' => $config['max_level'], 'rewards' => []];
+        $snapshot = [
+            'schema_version' => 'hsx_lead.promotion.v2',
+            'site_id' => $site,
+            'order_id' => (int) $order['id'],
+            'out_trade_no' => (string) $order['out_trade_no'],
+            'payer_member_id' => (int) $order['member_id'],
+            'paid_at' => $paid,
+            'gross_amount' => (string) $order['amount'],
+            'source' => $source,
+            'eligible' => false,
+            'reason' => 'promotion_disabled',
+            'max_level' => $config['max_level'],
+            'rewards' => []
+        ];
         if (!$config['enabled'])return $snapshot;
         if ($source === '' || empty($config['sources'][$source]['enabled']))return array_replace($snapshot, ['reason' => 'source_disabled']);
         $payer = self::member($site, (int) $order['member_id'], true);
@@ -575,7 +663,26 @@ final class PromotionService
             $allowed = PromotionRules::eligible($config, $source, $renewal, $bound, $paid);
             $amount = $allowed ? PromotionRules::reward($base, $rate) : 0;
             $total += $amount;
-            $entry = ['commission_level' => $level, 'inviter_member_id' => $id, 'promoter_role' => $resolved['role'], 'promoter_level_code' => $resolved['level']['code'], 'promoter_level_name' => $resolved['level']['name'], 'provider_status' => $provider['status'] ?? 'none', 'provider_version' => (int) ($provider['version'] ?? 0), 'provider_city' => (string) ($provider['city'] ?? ''), 'base_amount' => Rules::amount($base), 'rate' => $rate, 'amount' => Rules::amount($amount), 'eligible' => $amount > 0, 'reason' => !$allowed ? 'outside_eligibility' : ($amount > 0 ? 'eligible' : 'zero_reward'), 'renewal' => $renewal, 'settlement_days' => $config['settlement_days'], 'eligibility_months' => $config['eligibility_months'], 'bound_at' => $bound, 'available_at' => $paid + $config['settlement_days'] * 86400];
+            $entry = [
+                'commission_level' => $level,
+                'inviter_member_id' => $id,
+                'promoter_role' => $resolved['role'],
+                'promoter_level_code' => $resolved['level']['code'],
+                'promoter_level_name' => $resolved['level']['name'],
+                'provider_status' => $provider['status'] ?? 'none',
+                'provider_version' => (int) ($provider['version'] ?? 0),
+                'provider_city' => (string) ($provider['city'] ?? ''),
+                'base_amount' => Rules::amount($base),
+                'rate' => $rate,
+                'amount' => Rules::amount($amount),
+                'eligible' => $amount > 0,
+                'reason' => !$allowed ? 'outside_eligibility' : ($amount > 0 ? 'eligible' : 'zero_reward'),
+                'renewal' => $renewal,
+                'settlement_days' => $config['settlement_days'],
+                'eligibility_months' => $config['eligibility_months'],
+                'bound_at' => $bound,
+                'available_at' => $paid + $config['settlement_days'] * 86400
+            ];
             $snapshot['rewards'][] = $entry;
             $child = $parent;
             if (!$allowed)break;
@@ -588,12 +695,16 @@ final class PromotionService
     private static function assertSnapshot(int $site, array $order, array $snapshot): void
     {
         if (($snapshot['schema_version'] ?? '') === 'hsx_lead.promotion.v2') {
-            if (!in_array($snapshot['max_level'] ?? null, [1, 2], true) || !is_array($snapshot['rewards'] ?? null) || count($snapshot['rewards']) > $snapshot['max_level'])throw new CommonException('原多级推广快照不完整');
+            if (!in_array($snapshot['max_level'] ?? null, [1, 2], true)
+                || !is_array($snapshot['rewards'] ?? null)
+                || count($snapshot['rewards']) > $snapshot['max_level'])throw new CommonException('原多级推广快照不完整');
             $ids = [];
             $total = 0;
             $eligible = false;
             foreach ($snapshot['rewards'] as $position => $entry) {
-                if (!is_array($entry) || (int) ($entry['commission_level'] ?? 0) !== $position + 1 || isset($ids[(int) ($entry['inviter_member_id'] ?? 0)]))throw new CommonException('原推广层级或受益人重复，不能生成奖励');
+                if (!is_array($entry)
+                    || (int) ($entry['commission_level'] ?? 0) !== $position + 1
+                    || isset($ids[(int) ($entry['inviter_member_id'] ?? 0)]))throw new CommonException('原推广层级或受益人重复，不能生成奖励');
                 $ids[(int) $entry['inviter_member_id']] = true;
                 $single = array_replace($snapshot, $entry, ['schema_version' => 'hsx_lead.promotion.v1']);
                 unset($single['rewards']);
@@ -609,15 +720,26 @@ final class PromotionService
             if ($total > $base || $snapshot['eligible'] !== $eligible)throw new CommonException('多级奖励合计与原快照不一致');
             return;
         }
-        if (($snapshot['schema_version'] ?? '') !== 'hsx_lead.promotion.v1' || (int) ($snapshot['site_id'] ?? 0) !== $site || (int) ($snapshot['order_id'] ?? 0) !== (int) $order['id']
-            || ($snapshot['out_trade_no'] ?? '') !== $order['out_trade_no'] || (int) ($snapshot['payer_member_id'] ?? 0) !== (int) $order['member_id'] || (int) ($snapshot['paid_at'] ?? 0) !== (int) $order['pay_time']
-            || Rules::cents($snapshot['gross_amount'] ?? '') !== Rules::cents((string) $order['amount']) || ($snapshot['source'] ?? '') !== PromotionRules::source((string) $order['purpose']) || !is_bool($snapshot['eligible'] ?? null)) throw new CommonException('原付款推广快照不完整或归属不符，不能按当前规则补算');
+        if (($snapshot['schema_version'] ?? '') !== 'hsx_lead.promotion.v1'
+            || (int) ($snapshot['site_id'] ?? 0) !== $site
+            || (int) ($snapshot['order_id'] ?? 0) !== (int) $order['id']
+            || ($snapshot['out_trade_no'] ?? '') !== $order['out_trade_no']
+                || (int) ($snapshot['payer_member_id'] ?? 0) !== (int) $order['member_id']
+                || (int) ($snapshot['paid_at'] ?? 0) !== (int) $order['pay_time']
+            || Rules::cents($snapshot['gross_amount'] ?? '') !== Rules::cents((string) $order['amount'])
+                || ($snapshot['source'] ?? '') !== PromotionRules::source((string) $order['purpose'])
+                || !is_bool($snapshot['eligible'] ?? null)) throw new CommonException('原付款推广快照不完整或归属不符，不能按当前规则补算');
         if (!$snapshot['eligible']) return;
         $base = Rules::cents($snapshot['base_amount'] ?? '');
         $amount = Rules::cents($snapshot['amount'] ?? '');
         $expectedBase = $snapshot['source'] === 'membership' ? MembershipCostService::promotionBase($order) : Rules::cents((string) $order['fee_amount']);
-        if (!in_array($snapshot['promoter_role'] ?? '', ['normal', 'provider'], true) || (int) ($snapshot['inviter_member_id'] ?? 0) <= 0 || (int) $snapshot['inviter_member_id'] === (int) $order['member_id']
-            || $base !== $expectedBase || $base > Rules::cents((string) $order['amount']) || $amount <= 0 || $amount !== PromotionRules::reward($base, (string) ($snapshot['rate'] ?? ''))
+        if (!in_array($snapshot['promoter_role'] ?? '', ['normal', 'provider'], true)
+            || (int) ($snapshot['inviter_member_id'] ?? 0) <= 0
+            || (int) $snapshot['inviter_member_id'] === (int) $order['member_id']
+            || $base !== $expectedBase
+                || $base > Rules::cents((string) $order['amount'])
+                || $amount <= 0
+                || $amount !== PromotionRules::reward($base, (string) ($snapshot['rate'] ?? ''))
             || (int) ($snapshot['available_at'] ?? 0) < (int) $order['pay_time']) throw new CommonException('原推广分账快照无法核对，未生成奖励');
     }
     /** Settlement and refund reserve consume the same immutable order decision. */
@@ -628,8 +750,20 @@ final class PromotionService
         self::assertSnapshot($site, $order, $snapshot);
         $level = (int) ($row['commission_level'] ?? 1);
         $entry = ($snapshot['schema_version'] ?? '') === 'hsx_lead.promotion.v2' ? ($snapshot['rewards'][$level - 1] ?? null) : ($level === 1 ? $snapshot : null);
-        if (!is_array($entry) || empty($entry['eligible']) || (int) $row['site_id'] !== $site || (int) $row['coop_order_id'] !== (int) $order['id'] || (int) $row['provider_member_id'] !== (int) $entry['inviter_member_id'] || (int) $row['payer_member_id'] !== (int) $order['member_id'] || (string) $row['out_trade_no'] !== (string) $order['out_trade_no'] || $row['source'] !== $snapshot['source'] || (int) $row['available_at'] !== (int) $entry['available_at'])throw new CommonException('原奖励层级或收款归属与冻结快照不符');
-        foreach (['base_amount', 'rate', 'amount'] as $key)if (Rules::cents((string) $row[$key]) !== Rules::cents((string) $entry[$key]))throw new CommonException('原奖励金额与冻结快照不符');
+        if (!is_array($entry)
+            || empty($entry['eligible'])
+            || (int) $row['site_id'] !== $site
+            || (int) $row['coop_order_id'] !== (int) $order['id']
+            || (int) $row['provider_member_id'] !== (int) $entry['inviter_member_id']
+            || (int) $row['payer_member_id'] !== (int) $order['member_id']
+            || (string) $row['out_trade_no'] !== (string) $order['out_trade_no']
+            || $row['source'] !== $snapshot['source']
+            || (int) $row['available_at'] !== (int) $entry['available_at'])throw new CommonException('原奖励层级或收款归属与冻结快照不符');
+        foreach ([
+                'base_amount',
+                'rate',
+                'amount'
+            ] as $key)if (Rules::cents((string) $row[$key]) !== Rules::cents((string) $entry[$key]))throw new CommonException('原奖励金额与冻结快照不符');
     }
     /** Invoked within the receipt transaction; a later retry uses this same frozen decision. */
     public static function recordPaid(int $site, array $order): void
@@ -637,7 +771,9 @@ final class PromotionService
         if (($order['status'] ?? '') !== 'paid' || empty($order['out_trade_no'])) throw new CommonException('推广奖励缺少已支付凭据');
         $saved = Store::row('coop_order', $site, (int) $order['id'], true);
         $receipt = Db::name('pay')->where('site_id', $site)->where('trade_type', PaymentService::TRADE_TYPE)->where('trade_id', $saved['id'])->where('out_trade_no', $saved['out_trade_no'])->find();
-        if ($saved['status'] !== 'paid' || $saved['out_trade_no'] !== $order['out_trade_no'] || !PaymentService::receiptMatches($receipt, $saved)) throw new CommonException('未找到可核对的已支付事实，不会生成推广奖励');
+        if ($saved['status'] !== 'paid'
+            || $saved['out_trade_no'] !== $order['out_trade_no']
+            || !PaymentService::receiptMatches($receipt, $saved)) throw new CommonException('未找到可核对的已支付事实，不会生成推广奖励');
         $rule = Data::decode($saved['rule_json']);
         if (!empty($rule['requires_manual_review'])) return;
         $snapshot = $rule['promotion_snapshot'] ?? null;
@@ -654,7 +790,14 @@ final class PromotionService
         foreach ($existing as $row) {
             $level = (int) ($row['commission_level'] ?? 1);
             $entry = $expected[$level] ?? null;
-            if (!$entry || (int) $row['provider_member_id'] !== (int) $entry['inviter_member_id'] || (int) $row['payer_member_id'] !== (int) $saved['member_id'] || (string) $row['out_trade_no'] !== (string) $saved['out_trade_no'] || $row['source'] !== $snapshot['source'] || Rules::cents((string) $row['base_amount']) !== Rules::cents($entry['base_amount']) || Rules::cents((string) $row['rate']) !== Rules::cents($entry['rate']) || Rules::cents((string) $row['amount']) !== Rules::cents($entry['amount']))throw new CommonException('原推广奖励与冻结层级不符，不会重复发放');
+            if (!$entry
+                || (int) $row['provider_member_id'] !== (int) $entry['inviter_member_id']
+                || (int) $row['payer_member_id'] !== (int) $saved['member_id']
+                || (string) $row['out_trade_no'] !== (string) $saved['out_trade_no']
+                || $row['source'] !== $snapshot['source']
+                || Rules::cents((string) $row['base_amount']) !== Rules::cents($entry['base_amount'])
+                || Rules::cents((string) $row['rate']) !== Rules::cents($entry['rate'])
+                || Rules::cents((string) $row['amount']) !== Rules::cents($entry['amount']))throw new CommonException('原推广奖励与冻结层级不符，不会重复发放');
             unset($expected[$level]);
         }
         foreach ($expected as $level => $entry)self::query($site)->insert(['site_id' => $site, 'coop_order_id' => $saved['id'], 'commission_level' => $level, 'out_trade_no' => $saved['out_trade_no'], 'source' => $snapshot['source'],
@@ -684,7 +827,14 @@ final class PromotionService
                 Cache::delete(self::paymentReviewsCacheKey($site));
             } catch (\Throwable $ignored) {
             }
-            return ['order_id' => $id, 'status' => 'paid', 'promotion_review_required' => false, 'reward_created' => (bool) $rewards, 'reward' => $rewards[0] ?? null, 'rewards' => $rewards];
+            return [
+                'order_id' => $id,
+                'status' => 'paid',
+                'promotion_review_required' => false,
+                'reward_created' => (bool) $rewards,
+                'reward' => $rewards[0] ?? null,
+                'rewards' => $rewards
+            ];
         });
     }
     public function rewards(array $params = [], bool $admin = false): array
@@ -768,10 +918,21 @@ final class PromotionService
             $row['review_required'] = (bool) $row['review_required'];
             $row['source'] = $row['income_type'];
             $row['title'] = ['publisher' => '线索交付收益', 'membership' => '会员服务费推广佣金', 'maintenance' => '平台维护费推广佣金'][$row['income_type']] ?? '推广收益';
-            $row['status_label'] = $row['review_required'] && $row['status'] === 'settled' ? '已入账·待平台核对' : (['pending' => '待结算', 'settled' => '已入账', 'held' => '暂停待核对'][$row['status']] ?? '待核对');
+            $row['status_label'] = $row['review_required']
+                && $row['status'] === 'settled' ? '已入账·待平台核对' : (['pending' => '待结算', 'settled' => '已入账', 'held' => '暂停待核对'][$row['status']] ?? '待核对');
         }unset($row);
-        return ['account' => PaymentService::accountSummary($site, $id), 'entries' => ['data' => $rows, 'total' => $total, 'current_page' => $page, 'per_page' => $size],
-            'types' => [['value' => 'all', 'label' => '全部'], ['value' => 'publisher', 'label' => '交付收益'], ['value' => 'membership', 'label' => '会员服务费'], ['value' => 'maintenance', 'label' => '平台维护费']]];
+        return ['account' => PaymentService::accountSummary($site, $id), 'entries' => [
+                'data' => $rows,
+                'total' => $total,
+                'current_page' => $page,
+                'per_page' => $size
+            ],
+            'types' => [
+                ['value' => 'all', 'label' => '全部'],
+                ['value' => 'publisher', 'label' => '交付收益'],
+                ['value' => 'membership', 'label' => '会员服务费'],
+                ['value' => 'maintenance', 'label' => '平台维护费']
+            ]];
     }
     private static function paymentReviewsCacheKey(int $site): string
     {
@@ -848,9 +1009,12 @@ final class PromotionService
         $sourceOrder = $orders === null ? Store::query('coop_order', $this->context->site)->where('id', $row['coop_order_id'])->field('order_no,rule_json')->find() : ($orders[(int) $row['coop_order_id']] ?? null);
         $row['order_no'] = (string) ($sourceOrder['order_no'] ?? '');
         $row['source_label'] = ['membership' => '会员服务费', 'maintenance' => '平台维护费'][$row['source']] ?? '待核对';
-        $row['status_label'] = !empty($row['review_required']) && $row['status'] === 'settled' ? '已入账·待人工追偿' : (['pending' => '待结算', 'settled' => '已入框架佣金', 'held' => '暂停待核对'][$row['status']] ?? '待核对');
+        $row['status_label'] = !empty($row['review_required'])
+            && $row['status'] === 'settled' ? '已入账·待人工追偿' : (['pending' => '待结算', 'settled' => '已入框架佣金', 'held' => '暂停待核对'][$row['status']] ?? '待核对');
         $sourceRefund = $sourceOrder ? Data::decode($sourceOrder['rule_json'])[PaymentRefundService::KEY] ?? [] : [];
-        if (($sourceRefund['status'] ?? '') === 'refunded' && $row['status'] === 'held' && empty($row['review_required']))$row['status_label'] = (int) $row['account_log_id'] > 0 ? '原推广奖励已退回' : '原推广奖励已取消';
+        if (($sourceRefund['status'] ?? '') === 'refunded'
+            && $row['status'] === 'held'
+            && empty($row['review_required']))$row['status_label'] = (int) $row['account_log_id'] > 0 ? '原推广奖励已退回' : '原推广奖励已取消';
         $row['commission_level'] = (int) ($row['commission_level'] ?? 1);
         $row['commission_level_label'] = $admin ? ($row['commission_level'] === 2 ? '二级奖励' : '一级奖励') : ($row['commission_level'] === 1 ? '直接邀请奖励' : '推广奖励');
         $row['review_required'] = (bool) $row['review_required'];
@@ -877,7 +1041,10 @@ final class PromotionService
                 $order = Store::row('coop_order', $site, (int) $row['coop_order_id'], true);
                 $pay = Db::name('pay')->where('site_id', $site)->where('trade_type', PaymentService::TRADE_TYPE)->where('trade_id', $order['id'])->where('out_trade_no', $row['out_trade_no'])->find();
                 $reason = '';
-                if ($order['status'] !== 'paid' || (string) $order['out_trade_no'] !== (string) $row['out_trade_no'] || (int) $order['member_id'] !== (int) $row['payer_member_id'] || !PaymentService::receiptMatches($pay, $order)) $reason = '原业务或支付凭据变化，暂停结算，请核对';
+                if ($order['status'] !== 'paid'
+                    || (string) $order['out_trade_no'] !== (string) $row['out_trade_no']
+                    || (int) $order['member_id'] !== (int) $row['payer_member_id']
+                    || !PaymentService::receiptMatches($pay, $order)) $reason = '原业务或支付凭据变化，暂停结算，请核对';
                 elseif (!empty(Data::decode($order['rule_json'])['requires_manual_review'])) $reason = '原付款业务存在待核对记录，暂停结算，请平台核对';
                 elseif (!empty(Data::decode($order['rule_json'])['promotion_review_required'])) $reason = '原付款推广层级尚待核对，请先按原快照恢复完整奖励';
                 elseif (self::hasRefund($site, (string) $row['out_trade_no'])) $reason = '原支付存在退款申请或已退款，暂停结算，请人工核对';
@@ -893,7 +1060,8 @@ final class PromotionService
                     $member = null;
                 }
                 $amount = Rules::cents((string) $row['amount']);
-                if ($member && ($amount <= 0 || Rules::cents((string) $member['commission']) + $amount > self::MAX_CENTS || Rules::cents((string) $member['commission_get']) + $amount > self::MAX_CENTS)) $reason = $reason ?: '会员佣金账户金额精度不足，暂停结算，请人工核对';
+                if ($member
+                    && ($amount <= 0 || Rules::cents((string) $member['commission']) + $amount > self::MAX_CENTS || Rules::cents((string) $member['commission_get']) + $amount > self::MAX_CENTS)) $reason = $reason ?: '会员佣金账户金额精度不足，暂停结算，请人工核对';
                 if ($reason !== '') {
                     self::query($site)->where('id', $id)->update(['status' => 'held', 'review_required' => 1, 'reason' => $reason, 'update_time' => time()]);
                     return 'held';
@@ -901,7 +1069,12 @@ final class PromotionService
                 $existing = Db::name('member_account_log')->where('site_id', $site)->where('account_type', MemberAccountTypeDict::COMMISSION)->where('from_type', self::INCOME_TYPE)->where('related_id', $id)->find();
                 if ($existing) throw new CommonException('推广奖励与框架流水状态不一致，请人工核对，不会重复入账');
                 $log = (new CoreMemberAccountService())->addLog($site, (int) $row['provider_member_id'], MemberAccountTypeDict::COMMISSION, (string) $row['amount'], self::INCOME_TYPE, ((int) ($row['commission_level'] ?? 1) === 1 ? '直接邀请奖励' : '推广奖励').' #'.$id, $id);
-                self::query($site)->where('id', $id)->update(['status' => 'settled', 'account_log_id' => $log, 'settled_at' => time(), 'update_time' => time()]);
+                self::query($site)->where('id', $id)->update([
+                        'status' => 'settled',
+                        'account_log_id' => $log,
+                        'settled_at' => time(),
+                        'update_time' => time()
+                    ]);
                 Data::audit($site, 0, 0, 'promotion_reward', (int) $id, 'settled', ['member_id' => (int) $row['provider_member_id'], 'amount' => $row['amount']]);
                 return 'settled';
             });
@@ -922,7 +1095,11 @@ final class PromotionService
     }
     private static function hasRefund(int $site, string $no): bool
     {
-        $refunds = Db::name('pay_refund')->where('site_id', $site)->where('out_trade_no', $no)->whereIn('status', [RefundDict::WAIT, RefundDict::DEALING, RefundDict::SUCCESS])->select()->toArray();
+        $refunds = Db::name('pay_refund')->where('site_id', $site)->where('out_trade_no', $no)->whereIn('status', [
+                RefundDict::WAIT,
+                RefundDict::DEALING,
+                RefundDict::SUCCESS
+            ])->select()->toArray();
         if (!$refunds)return false;
         $order = Store::query('coop_order', $site)->where('out_trade_no', $no)->where('purpose', 'membership')->find();
         if ($order) {
@@ -944,7 +1121,12 @@ final class PromotionService
                                 continue;
                             }$seen[$number] = $amount;
                             $allocation = $rule['membership_refund_allocations'][$number] ?? null;
-                            if (!is_array($allocation) || $amount <= 0 || Rules::cents($allocation['deposit'] ?? '') !== $amount || Rules::cents($allocation['service'] ?? '') !== 0 || Rules::cents($allocation['experience'] ?? '') !== 0 || Rules::cents($allocation['quantity'] ?? '') !== 0) {
+                            if (!is_array($allocation)
+                                || $amount <= 0
+                                || Rules::cents($allocation['deposit'] ?? '') !== $amount
+                                || Rules::cents($allocation['service'] ?? '') !== 0
+                                || Rules::cents($allocation['experience'] ?? '') !== 0
+                                || Rules::cents($allocation['quantity'] ?? '') !== 0) {
                                 $known = false;
                                 break;
                             }
@@ -967,7 +1149,12 @@ final class PromotionService
             self::lockSite($this->context->site);
             $row = self::query($this->context->site)->where('id', $id)->lock(true)->find();
             if (!$row) throw new CommonException('推广奖励不存在或不属于本站');
-            self::query($this->context->site)->where('id', $id)->update(['status' => $row['status'] === 'settled' ? 'settled' : 'held', 'review_required' => 1, 'reason' => $reason, 'update_time' => time()]);
+            self::query($this->context->site)->where('id', $id)->update([
+                    'status' => $row['status'] === 'settled' ? 'settled' : 'held',
+                    'review_required' => 1,
+                    'reason' => $reason,
+                    'update_time' => time()
+                ]);
             $this->context->audit('promotion_reward', $id, 'held', ['reason' => $reason, 'already_credited' => $row['status'] === 'settled']);
         });
         return $this->presentReward(self::query($this->context->site)->where('id', $id)->find(), true);
@@ -986,12 +1173,18 @@ final class PromotionService
             self::assertRewardSnapshot($site, $order, $row);
             if (!empty(Data::decode($order['rule_json'])['requires_manual_review'])) throw new CommonException('原付款业务仍待核对，不能恢复结算');
             $pay = Db::name('pay')->where('site_id', $site)->where('trade_type', PaymentService::TRADE_TYPE)->where('trade_id', $order['id'])->where('out_trade_no', $row['out_trade_no'])->find();
-            if ($order['status'] !== 'paid' || $order['out_trade_no'] !== $row['out_trade_no'] || (int) $order['member_id'] !== (int) $row['payer_member_id'] || !PaymentService::receiptMatches($pay, $order)) throw new CommonException('原业务或付款凭据仍不一致，不能恢复结算');
+            if ($order['status'] !== 'paid'
+                || $order['out_trade_no'] !== $row['out_trade_no']
+                || (int) $order['member_id'] !== (int) $row['payer_member_id']
+                || !PaymentService::receiptMatches($pay, $order)) throw new CommonException('原业务或付款凭据仍不一致，不能恢复结算');
             if (self::hasRefund($site, (string) $row['out_trade_no'])) throw new CommonException('原支付仍有待退款、退款中或已退款记录，不能恢复结算');
             $member = self::member($site, (int) $row['provider_member_id'], true);
             $amount = Rules::cents((string) $row['amount']);
-            if ($amount <= 0 || Rules::cents((string) $member['commission']) + $amount > self::MAX_CENTS || Rules::cents((string) $member['commission_get']) + $amount > self::MAX_CENTS) throw new CommonException('会员佣金账户金额容量仍不足，不能恢复结算');
-            if ((int) $row['account_log_id'] > 0 || Db::name('member_account_log')->where('site_id', $site)->where('account_type', MemberAccountTypeDict::COMMISSION)->where('from_type', self::INCOME_TYPE)->where('related_id', $id)->count() > 0) throw new CommonException('发现本笔奖励已有账本记录，不能恢复或重复入账，请人工核对');
+            if ($amount <= 0
+                || Rules::cents((string) $member['commission']) + $amount > self::MAX_CENTS
+                || Rules::cents((string) $member['commission_get']) + $amount > self::MAX_CENTS) throw new CommonException('会员佣金账户金额容量仍不足，不能恢复结算');
+            if ((int) $row['account_log_id'] > 0
+                || Db::name('member_account_log')->where('site_id', $site)->where('account_type', MemberAccountTypeDict::COMMISSION)->where('from_type', self::INCOME_TYPE)->where('related_id', $id)->count() > 0) throw new CommonException('发现本笔奖励已有账本记录，不能恢复或重复入账，请人工核对');
             self::query($site)->where('id', $id)->update(['status' => 'pending', 'review_required' => 0, 'reason' => $reason, 'update_time' => time()]);
             $this->context->audit('promotion_reward', $id, 'resumed', ['reason' => $reason]);
         });
@@ -1027,7 +1220,12 @@ final class PromotionService
                 if (!self::hasRefund($site, (string) $row['out_trade_no']))continue;
                 if (($managed['refund_no'] ?? '') === $no && ($managed['status'] ?? '') === 'refunded') {
                     // The reviewed order refund already reclaimed every credited reward atomically before dispatch.
-                    self::query($site)->where('id', $row['id'])->update(['status' => 'held', 'review_required' => 0, 'reason' => (int) $row['account_log_id'] > 0 ? '原支付已退款，原推广奖励已从可用佣金退回' : '原支付已退款，未发放的推广奖励已取消', 'update_time' => time()]);
+                    self::query($site)->where('id', $row['id'])->update([
+                            'status' => 'held',
+                            'review_required' => 0,
+                            'reason' => (int) $row['account_log_id'] > 0 ? '原支付已退款，原推广奖励已从可用佣金退回' : '原支付已退款，未发放的推广奖励已取消',
+                            'update_time' => time()
+                        ]);
                     continue;
                 }
                 $credited = $row['status'] === 'settled';

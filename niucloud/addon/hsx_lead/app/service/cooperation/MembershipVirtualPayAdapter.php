@@ -195,7 +195,8 @@ final class MembershipVirtualPayAdapter
             throw new CommonException('外部退款关联凭据不完整');
         }
         $rule = Data::decode($business['rule_json']);
-        if ((string) $business['out_trade_no'] !== '' && !hash_equals((string) $business['out_trade_no'], (string) $pay['out_trade_no']))return $this->completeAdditionalRefund($site, $business, $pay, $fact);
+        if ((string) $business['out_trade_no'] !== ''
+            && !hash_equals((string) $business['out_trade_no'], (string) $pay['out_trade_no']))return $this->completeAdditionalRefund($site, $business, $pay, $fact);
         $originals = Db::name('pay_refund')->where('site_id', $site)
             ->where('out_trade_no', $pay['out_trade_no'])->lock(true)->select()->toArray();
         foreach ($originals as $original) {
@@ -215,7 +216,12 @@ final class MembershipVirtualPayAdapter
         }
         $allocation = ['deposit' => '0.00', 'service' => Rules::amount($amount), 'experience' => '0.00', 'quantity' => '0.00'];
         if (!$pure) {
-            foreach (['deposit' => 'deposit_amount', 'service' => 'service_amount', 'experience' => 'experience_amount', 'quantity' => 'experience_quantity'] as $key => $field) {
+            foreach ([
+                    'deposit' => 'deposit_amount',
+                    'service' => 'service_amount',
+                    'experience' => 'experience_amount',
+                    'quantity' => 'experience_quantity'
+                ] as $key => $field) {
                 $allocation[$key] = Rules::amount(Rules::cents($rule[$field]) - $parts[$key]);
             }
         }
@@ -287,7 +293,8 @@ final class MembershipVirtualPayAdapter
             'amount' => Rules::amount((int) $stored['amount_cents']), 'confirmed_at' => (int) $stored['finish_time']];
         $new = !isset($refunds[$key]);
         if (!$new && $refunds[$key] !== $record)throw new CommonException('额外款退款回执与已记录事实不一致');
-        foreach ($refunds as $id => $previous)if ((string) $id !== $key && ($previous['wx_refund_id'] ?? '') === $record['wx_refund_id'])throw new CommonException('同一额外款退款回执不能重复计入');
+        foreach ($refunds as $id => $previous)if ((string) $id !== $key
+            && ($previous['wx_refund_id'] ?? '') === $record['wx_refund_id'])throw new CommonException('同一额外款退款回执不能重复计入');
         $refunds[$key] = $record;
         $total = 0;
         foreach ($refunds as $part)$total += Rules::cents((string) $part['amount']);
@@ -306,7 +313,17 @@ final class MembershipVirtualPayAdapter
         else unset($rule['financial_requires_manual_review']);
         Store::query('coop_order', $site)->where('id', $business['id'])->update(['rule_json' => Data::json($rule), 'update_time' => time()]);
         if ($new)Data::audit($site, 0, (int) $business['member_id'], 'coop_order', (int) $business['id'], 'additional_payment_external_refund_confirmed',
-            ['virtual_refund_id' => (int) $stored['id'], 'out_trade_no' => $no, 'amount' => (string) $record['amount'], 'fully_refunded' => $receipt['financial_status'] === 'refunded']);
-        return ['status' => 'success', 'refund_no' => null, 'projection' => 'additional_receipt', 'requires_review' => $this->requiresReview($site, (int) $business['id'])];
+            [
+                'virtual_refund_id' => (int) $stored['id'],
+                'out_trade_no' => $no,
+                'amount' => (string) $record['amount'],
+                'fully_refunded' => $receipt['financial_status'] === 'refunded'
+            ]);
+        return [
+            'status' => 'success',
+            'refund_no' => null,
+            'projection' => 'additional_receipt',
+            'requires_review' => $this->requiresReview($site, (int) $business['id'])
+        ];
     }
 }

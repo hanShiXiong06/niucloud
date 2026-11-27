@@ -94,7 +94,11 @@ final class JkbProvider extends AbstractProvider implements CredentialChallengeP
         ]);
         $this->success($response, 'stock');
         $data = $response['data'] ?? null;
-        if (!is_array($data) || PhpRuntime::isList($data) || !is_array($data['data'] ?? null) || !PhpRuntime::isList($data['data']) || count($data['data']) > $size)
+        if (!is_array($data)
+            || PhpRuntime::isList($data)
+            || !is_array($data['data'] ?? null)
+            || !PhpRuntime::isList($data['data'])
+            || count($data['data']) > $size)
             throw new ProviderException('schema_changed', '库存分页结构变化，本轮未发布');
         $units = $this->stockQuantity($data['goods_sum'] ?? null);
         if ($units === null || isset($cursor['goods_sum']) && $cursor['goods_sum'] !== $units)

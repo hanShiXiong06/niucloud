@@ -49,7 +49,13 @@ final class ConnectionService
         } catch (\Throwable $error) {
             $credentialError = true;
             $result['credential_error'] = '凭据无法读取，请核对部署密钥后重新探测授权';
-            $result['auth_renewal'] = ['automatic' => false, 'ready' => false, 'mode' => '', 'status' => 'credential_error', 'message' => '登录资料无法解密，未尝试自动登录；请核对部署密钥后重新验证。'];
+            $result['auth_renewal'] = [
+                'automatic' => false,
+                'ready' => false,
+                'mode' => '',
+                'status' => 'credential_error',
+                'message' => '登录资料无法解密，未尝试自动登录；请核对部署密钥后重新验证。'
+            ];
         }
         return array_replace($result, ConnectionAttention::project($result, $definition, $credentials, $credentialError));
     }
@@ -155,7 +161,11 @@ final class ConnectionService
             $scope['store_id'] = $verified['store_id'];
         }
         (new ProviderChannelService($this->context->site))->assertEnabled($definition->key());
-        $page = $provider->fetchPage($credentials, ['page' => 1], ['tenant_id' => $scope['tenant_id'] ?: null, 'store_id' => $scope['store_id'] ?: null, 'page_size' => 100]);
+        $page = $provider->fetchPage($credentials, ['page' => 1], [
+                'tenant_id' => $scope['tenant_id'] ?: null,
+                'store_id' => $scope['store_id'] ?: null,
+                'page_size' => 100
+            ]);
         $stores = [];
         $tenants = [];
         $items = [];
@@ -211,7 +221,10 @@ final class ConnectionService
         $cipher = Cache::get($this->cacheKey($token));
         if (!is_string($cipher) || $cipher === '') throw new CommonException('校验凭证已过期或已使用，请重新探测');
         $proof = Cipher::decrypt($cipher, $this->context->site, -$merchantId);
-        if (($proof['site'] ?? 0) !== $this->context->site || ($proof['merchant_id'] ?? 0) !== $merchantId || ($proof['uid'] ?? 0) !== $this->context->uid || (int) ($proof['member_id'] ?? 0) !== $this->context->memberId
+        if (($proof['site'] ?? 0) !== $this->context->site
+            || ($proof['merchant_id'] ?? 0) !== $merchantId
+            || ($proof['uid'] ?? 0) !== $this->context->uid
+            || (int) ($proof['member_id'] ?? 0) !== $this->context->memberId
             || (int) ($proof['expires_at'] ?? 0) <= time() || !is_array($proof['credentials'] ?? null)
             || !hash_equals((string) ($proof['credentials_fingerprint'] ?? ''), $this->fingerprint($proof['credentials']))) {
             throw new CommonException('校验凭证不属于当前操作或已过期，请重新探测');
@@ -239,7 +252,12 @@ final class ConnectionService
                 $conn = Data::row('connection', $this->context->site, $id, true);
             }
             if ((int) $conn['active_run_id'] > 0) Data::query('sync_run', $this->context->site)->where('id', $conn['active_run_id'])
-                ->whereIn('status', ['pending', 'running'])->update(['status' => 'cancelled', 'error_message' => '授权已重新验证并激活，请使用新配置同步', 'finished_at' => time(), 'update_time' => time()]);
+                ->whereIn('status', ['pending', 'running'])->update([
+                        'status' => 'cancelled',
+                        'error_message' => '授权已重新验证并激活，请使用新配置同步',
+                        'finished_at' => time(),
+                        'update_time' => time()
+                    ]);
             Data::query('connection', $this->context->site)->where('id', $conn['id'])->update([
                 'provider' => $definition->key(), 'credentials_cipher' => Cipher::encrypt($proof['credentials'], $this->context->site, (int) $conn['id']),
                 'expected_tenant_id' => $scope['tenant_id'], 'store_id' => $scope['store_id'], 'config_version' => (int) $conn['config_version'] + 1,
@@ -294,7 +312,13 @@ final class ConnectionService
     }
     private function revision(?array $conn): string
     {
-        return hash('sha256', Data::json($conn ? array_intersect_key($conn, array_flip(['id', 'config_version', 'provider', 'expected_tenant_id', 'store_id'])) : []));
+        return hash('sha256', Data::json($conn ? array_intersect_key($conn, array_flip([
+                            'id',
+                            'config_version',
+                            'provider',
+                            'expected_tenant_id',
+                            'store_id'
+                        ])) : []));
     }
     private function cacheKey(#[\SensitiveParameter] string $token): string
     {
@@ -310,7 +334,10 @@ final class ConnectionService
     private function impact(?array $conn, ProviderDefinition $definition, #[\SensitiveParameter] array $credentials, array $scope): array
     {
         $secretTrace = \addon\hsx_lead\app\support\PhpRuntime::guardSecrets();
-        $switched = $conn === null || $conn['provider'] !== $definition->key() || (string) $conn['expected_tenant_id'] !== $scope['tenant_id'] || (string) $conn['store_id'] !== $scope['store_id'];
+        $switched = $conn === null
+            || $conn['provider'] !== $definition->key()
+            || (string) $conn['expected_tenant_id'] !== $scope['tenant_id']
+            || (string) $conn['store_id'] !== $scope['store_id'];
         if ($conn && !$switched) {
             try {
                 $old = Cipher::decrypt((string) $conn['credentials_cipher'], $this->context->site, (int) $conn['id']);

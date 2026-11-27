@@ -22,7 +22,8 @@ final class BusinessLicenseService
 
     private function member(): void
     {
-        if ($this->context->memberId <= 0 || !Db::name('member')->where('site_id', $this->context->site)->where('member_id', $this->context->memberId)->where('status', 1)->where('is_del', 0)->where('delete_time', 0)->find()) throw new CommonException('请先登录本站有效会员，才能查看或上传营业执照');
+        if ($this->context->memberId <= 0
+            || !Db::name('member')->where('site_id', $this->context->site)->where('member_id', $this->context->memberId)->where('status', 1)->where('is_del', 0)->where('delete_time', 0)->find()) throw new CommonException('请先登录本站有效会员，才能查看或上传营业执照');
     }
     private function writable(): void
     {
@@ -49,7 +50,12 @@ final class BusinessLicenseService
     private function metadata(int $member, string $token): array
     {
         $meta = $this->config(self::uploadKey($member, $token));
-        if (($meta['schema'] ?? '') !== 'hsx.lead.license.v1' || (int) ($meta['member_id'] ?? 0) !== $member || !hash_equals((string) ($meta['token'] ?? ''), $token) || !in_array($meta['mime'] ?? '', self::TYPES, true) || (int) ($meta['bytes'] ?? 0) < 1 || (int) $meta['bytes'] > self::MAX_BYTES) throw new CommonException('营业执照不存在或不属于当前账号，请重新上传');
+        if (($meta['schema'] ?? '') !== 'hsx.lead.license.v1'
+            || (int) ($meta['member_id'] ?? 0) !== $member
+            || !hash_equals((string) ($meta['token'] ?? ''), $token)
+            || !in_array($meta['mime'] ?? '', self::TYPES, true)
+            || (int) ($meta['bytes'] ?? 0) < 1
+            || (int) $meta['bytes'] > self::MAX_BYTES) throw new CommonException('营业执照不存在或不属于当前账号，请重新上传');
         return $meta;
     }
     private function file(int $member, string $token, bool $create = false): string
@@ -91,12 +97,23 @@ final class BusinessLicenseService
         if ($bytes === false || strlen($bytes) > self::MAX_BYTES) throw new CommonException('营业执照图片读取失败，请重新上传');
         $image = @getimagesizefromstring($bytes);
         $mime = $image['mime'] ?? '';
-        if (!$image || !in_array($mime, self::TYPES, true) || !in_array(strtolower($file->getOriginalExtension()), ['jpg', 'jpeg', 'png', 'webp'], true) || (int) $image[0] * (int) $image[1] > 25000000) throw new CommonException('请选择清晰的JPG、PNG或WebP营业执照图片，像素不超过2500万');
+        if (!$image
+            || !in_array($mime, self::TYPES, true)
+            || !in_array(strtolower($file->getOriginalExtension()), ['jpg', 'jpeg', 'png', 'webp'], true)
+            || (int) $image[0] * (int) $image[1] > 25000000) throw new CommonException('请选择清晰的JPG、PNG或WebP营业执照图片，像素不超过2500万');
         $this->reserveUpload();
         $member = $this->context->memberId;
         $token = bin2hex(random_bytes(32));
         $now = time();
-        $meta = ['schema' => 'hsx.lead.license.v1', 'member_id' => $member, 'token' => $token, 'mime' => $mime, 'bytes' => strlen($bytes), 'sha256' => hash('sha256', $bytes), 'uploaded_at' => $now];
+        $meta = [
+            'schema' => 'hsx.lead.license.v1',
+            'member_id' => $member,
+            'token' => $token,
+            'mime' => $mime,
+            'bytes' => strlen($bytes),
+            'sha256' => hash('sha256', $bytes),
+            'uploaded_at' => $now
+        ];
         try {
             $encrypted = Cipher::encrypt(['kind' => 'business_license', 'token' => $token, 'image' => base64_encode($bytes)], $this->context->site, $member);
         } catch (CommonException $e) {
@@ -153,7 +170,8 @@ final class BusinessLicenseService
     {
         if ($this->context->memberId <= 0 || (int) $merchant['member_id'] !== $this->context->memberId) return [];
         $value = $this->config(self::PROFILE.(int) $merchant['id']);
-        if ($value && (int) ($value['member_id'] ?? 0) !== $this->context->memberId) return ['business_license_token' => '', 'business_license_uploaded_at' => 0];
+        if ($value
+            && (int) ($value['member_id'] ?? 0) !== $this->context->memberId) return ['business_license_token' => '', 'business_license_uploaded_at' => 0];
         return ['business_license_token' => (string) ($value['token'] ?? ''), 'business_license_uploaded_at' => (int) ($value['uploaded_at'] ?? 0)];
     }
     public function preview(string $token): array
@@ -192,7 +210,16 @@ final class BusinessLicenseService
             throw new CommonException('营业执照解密未完成，请平台核对原部署密钥及文件备份');
         }
         $bytes = base64_decode((string) ($value['image'] ?? ''), true);
-        if (($value['kind'] ?? '') !== 'business_license' || ($value['token'] ?? '') !== $token || $bytes === false || strlen($bytes) !== (int) $meta['bytes'] || !hash_equals((string) $meta['sha256'], hash('sha256', $bytes))) throw new CommonException('营业执照文件校验失败，请平台核对原件');
-        return ['has_image' => true, 'data_url' => 'data:'.$meta['mime'].';base64,'.base64_encode($bytes), 'mime' => $meta['mime'], 'uploaded_at' => (int) $meta['uploaded_at']];
+        if (($value['kind'] ?? '') !== 'business_license'
+            || ($value['token'] ?? '') !== $token
+            || $bytes === false
+            || strlen($bytes) !== (int) $meta['bytes']
+            || !hash_equals((string) $meta['sha256'], hash('sha256', $bytes))) throw new CommonException('营业执照文件校验失败，请平台核对原件');
+        return [
+            'has_image' => true,
+            'data_url' => 'data:'.$meta['mime'].';base64,'.base64_encode($bytes),
+            'mime' => $meta['mime'],
+            'uploaded_at' => (int) $meta['uploaded_at']
+        ];
     }
 }

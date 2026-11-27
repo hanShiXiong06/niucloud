@@ -12,7 +12,11 @@ return ['listen' => [
     'PayCreate' => ['addon\hsx_lead\app\listener\pay\CooperationPayCreate'],
     'PaySuccess' => ['addon\hsx_lead\app\listener\pay\CooperationPaySuccess'],
     'PayClose' => ['addon\hsx_lead\app\listener\pay\CooperationPayCloseGuard'],
-    'RefundSuccess' => ['addon\hsx_lead\app\listener\pay\MembershipRefundSuccess', 'addon\hsx_lead\app\listener\pay\CooperationOrderRefundSuccess', 'addon\hsx_lead\app\listener\pay\PromotionRefundSuccess'],
+    'RefundSuccess' => [
+        'addon\hsx_lead\app\listener\pay\MembershipRefundSuccess',
+        'addon\hsx_lead\app\listener\pay\CooperationOrderRefundSuccess',
+        'addon\hsx_lead\app\listener\pay\PromotionRefundSuccess'
+    ],
     'HsxLeadCollaborationChanged' => ['addon\hsx_lead\app\listener\notice\CooperationChanged'],
     'NoticeData' => ['addon\hsx_lead\app\listener\notice\CooperationNoticeData', 'addon\hsx_lead\app\listener\notice\AccountNoticeData'],
 ]];

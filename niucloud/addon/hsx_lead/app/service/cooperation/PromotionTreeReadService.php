@@ -59,9 +59,30 @@ final class PromotionTreeReadService
             $path = $paths[$id] ?? ['path' => [], 'truncated' => false];
             $rows[] = ['member_id' => $id, 'parent_member_id' => (int) $member['pid'], 'name' => self::name($member), 'member_no' => (string) $member['member_no'], 'mobile_masked' => strlen($phone) >= 7 ? substr($phone, 0, 3).'****'.substr($phone, -4) : '', 'avatar' => (string) $member['headimg'], 'status' => (int) $member['status'], 'has_children' => $direct > 0, 'children_count' => $direct, 'direct_invite_count' => $direct, 'indirect_invite_count' => $indirect, 'subtree_count' => $direct + $indirect, 'subtree_depth' => 2, 'path' => $path['path'], 'path_truncated' => $path['truncated'],
                 'merchant' => $facts[$id]['merchant'], 'membership' => $facts[$id]['membership'], 'payment' => $facts[$id]['payment'], 'rewards' => $rewards[$id] ?? PromotionRelationsReadService::emptyRewards(),
-                'activity' => array_replace(['activity_days' => $days, 'last_visit_time' => (int) $member['last_visit_time'], 'login_time' => (int) $member['login_time'], 'login_count' => (int) $member['login_count'], 'active_30d' => max((int) $member['last_visit_time'], (int) $member['login_time']) >= time() - 30 * 86400, 'active' => max((int) $member['last_visit_time'], (int) $member['login_time']) >= time() - $days * 86400, 'published_count' => 0, 'accepted_count' => 0, 'deal_count' => 0, 'last_business_at' => 0], $activity[$id] ?? [])];
+                'activity' => array_replace([
+                        'activity_days' => $days,
+                        'last_visit_time' => (int) $member['last_visit_time'],
+                        'login_time' => (int) $member['login_time'],
+                        'login_count' => (int) $member['login_count'],
+                        'active_30d' => max((int) $member['last_visit_time'], (int) $member['login_time']) >= time() - 30 * 86400,
+                        'active' => max((int) $member['last_visit_time'], (int) $member['login_time']) >= time() - $days * 86400,
+                        'published_count' => 0,
+                        'accepted_count' => 0,
+                        'deal_count' => 0,
+                        'last_business_at' => 0
+                    ], $activity[$id] ?? [])];
         }
-        return ['data' => $rows, 'total' => $total, 'current_page' => $page, 'per_page' => $size, 'parent_member_id' => $parent, 'searching' => $keyword !== '', 'subtree_depth' => 2, 'tree_depth_limit' => 20, 'activity_days' => $days];
+        return [
+            'data' => $rows,
+            'total' => $total,
+            'current_page' => $page,
+            'per_page' => $size,
+            'parent_member_id' => $parent,
+            'searching' => $keyword !== '',
+            'subtree_depth' => 2,
+            'tree_depth_limit' => 20,
+            'activity_days' => $days
+        ];
     }
     private static function name(array $row): string
     {
@@ -88,7 +109,11 @@ final class PromotionTreeReadService
         $cancelled = "r.status='held' AND r.review_required=0 AND JSON_UNQUOTE(JSON_EXTRACT(IF(JSON_VALID(o.rule_json),o.rule_json,'{}'),'$.order_refund.status'))='refunded'";
         $q = Db::name('hsx_lead_promotion_reward')->alias('r')->leftJoin([$prefix.'hsx_lead_coop_order' => 'o'], 'o.site_id=r.site_id AND o.id=r.coop_order_id')->where('r.site_id', $this->context->site)->whereIn('r.provider_member_id', $ids);
         $fields = "r.provider_member_id,SUM(CASE WHEN $cancelled THEN r.amount ELSE 0 END) AS cancelled,MAX(r.review_required) AS review_required";
-        foreach (['pending', 'settled', 'held'] as $status)$fields .= ",SUM(CASE WHEN r.status='$status' AND NOT(COALESCE(($cancelled),0)) THEN r.amount ELSE 0 END) AS $status";
+        foreach ([
+                'pending',
+                'settled',
+                'held'
+            ] as $status)$fields .= ",SUM(CASE WHEN r.status='$status' AND NOT(COALESCE(($cancelled),0)) THEN r.amount ELSE 0 END) AS $status";
         foreach ($q->fieldRaw($fields)->group('r.provider_member_id')->select()->toArray() as $row) {
             $id = (int) $row['provider_member_id'];
             unset($row['provider_member_id']);
@@ -101,7 +126,11 @@ final class PromotionTreeReadService
     {
         if (!$ids)return [];
         $out = [];
-        $q = Db::name('hsx_lead_audit')->where('site_id', $this->context->site)->whereIn('operator_member_id', $ids)->where('entity_type', 'collaboration')->where('create_time', '>=', time() - $days * 86400)->whereIn('action', ['published', 'accept', 'deal']);
+        $q = Db::name('hsx_lead_audit')->where('site_id', $this->context->site)->whereIn('operator_member_id', $ids)->where('entity_type', 'collaboration')->where('create_time', '>=', time() - $days * 86400)->whereIn('action', [
+                'published',
+                'accept',
+                'deal'
+            ]);
         $fields = "operator_member_id,MAX(create_time) AS last_business_at,COUNT(DISTINCT CASE WHEN action='published' THEN entity_id END) AS published_count,COUNT(DISTINCT CASE WHEN action='accept' THEN entity_id END) AS accepted_count,COUNT(DISTINCT CASE WHEN action='deal' THEN entity_id END) AS deal_count";
         foreach ($q->fieldRaw($fields)->group('operator_member_id')->select()->toArray() as $row) {
             $id = (int) $row['operator_member_id'];

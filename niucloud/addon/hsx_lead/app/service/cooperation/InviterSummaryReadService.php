@@ -26,7 +26,11 @@ final class InviterSummaryReadService
         $providerIds = $this->providerIds();
         if ($role === 'provider')$query->whereIn('member_id', $providerIds ?: [0]);
         elseif ($role === 'normal' && $providerIds)$query->whereNotIn('member_id', $providerIds);
-        if (!in_array($params['provider_member_id'] ?? '', ['', 0, '0'], true))$query->where('member_id', OwnershipScope::ownerId($params['provider_member_id']));
+        if (!in_array($params['provider_member_id'] ?? '', [
+                    '',
+                    0,
+                    '0'
+                ], true))$query->where('member_id', OwnershipScope::ownerId($params['provider_member_id']));
         $keyword = Data::text($params, 'keyword', 100);
         if ($keyword !== '') {
             $like = '%'.addcslashes($keyword, '\\%_').'%';
@@ -56,7 +60,12 @@ final class InviterSummaryReadService
                 'mobile_masked' => strlen($phone) >= 7 ? substr($phone, 0, 3).'****'.substr($phone, -4) : '',
                 'role' => in_array($id, $providerIds, true) ? 'provider' : 'normal',
                 'direct_invite_count' => $relationships[$id]['total'] ?? 0, 'indirect_invite_count' => $indirect[$id] ?? 0, 'paid_invitee_count' => $relationships[$id]['paid'] ?? 0, 'review_invitee_count' => $relationships[$id]['review'] ?? 0,
-                'activity' => ['last_visit_time' => (int) $member['last_visit_time'], 'login_time' => (int) $member['login_time'], 'login_count' => (int) $member['login_count'], 'active_30d' => max((int) $member['last_visit_time'], (int) $member['login_time']) >= time() - 30 * 86400],
+                'activity' => [
+                    'last_visit_time' => (int) $member['last_visit_time'],
+                    'login_time' => (int) $member['login_time'],
+                    'login_count' => (int) $member['login_count'],
+                    'active_30d' => max((int) $member['last_visit_time'], (int) $member['login_time']) >= time() - 30 * 86400
+                ],
                 'promotion' => $rewards[$id] ?? PromotionRelationsReadService::emptyRewards()];
         }
         return ['data' => $rows, 'total' => $total, 'current_page' => $page, 'per_page' => $limit,
@@ -95,7 +104,9 @@ final class InviterSummaryReadService
                 $totals[$parent]['total']++;
                 $payment = $payments[(int) $child['member_id']];
                 if ($payment['status'] === 'review')$totals[$parent]['review']++;
-                elseif ($payment['status'] === 'paid' && $payment['service_net'] !== null && Rules::cents($payment['service_net']) > 0)$totals[$parent]['paid']++;
+                elseif ($payment['status'] === 'paid'
+                    && $payment['service_net'] !== null
+                    && Rules::cents($payment['service_net']) > 0)$totals[$parent]['paid']++;
             }
         } while (count($children) === self::CHUNK);
         return $totals;

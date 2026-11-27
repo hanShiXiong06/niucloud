@@ -65,7 +65,20 @@ final class MerchantListService
             $membership = $memberships[$id];
             $rights = Rules::capabilities($partner, $config, $membership);
             $available = !empty($config['enabled']) && (int) $partner['blocked_at'] === 0 && (int) $merchant['status'] === 1;
-            $row = array_intersect_key($merchant, array_flip(['id', 'name', 'contact_name', 'mobile', 'province_id', 'city_id', 'district_id', 'address', 'member_id', 'status', 'create_time', 'update_time']));
+            $row = array_intersect_key($merchant, array_flip([
+                        'id',
+                        'name',
+                        'contact_name',
+                        'mobile',
+                        'province_id',
+                        'city_id',
+                        'district_id',
+                        'address',
+                        'member_id',
+                        'status',
+                        'create_time',
+                        'update_time'
+                    ]));
             $names = [];
             foreach (['province', 'city', 'district'] as $key) {
                 $name = (string) ($areas[(int) $merchant[$key.'_id']] ?? '');
@@ -76,7 +89,22 @@ final class MerchantListService
             $row['status'] = (int) $row['status'];
             $member = $members[(int) $merchant['member_id']] ?? null;
             $row['member_name'] = (string) ($member['nickname'] ?? '');
-            foreach (['provider', 'provider_name', 'connection_id', 'auth_renewal', 'next_sync_at', 'channel_enabled', 'channel_message', 'last_sync_status', 'last_sync_at', 'last_sync_message', 'published_run_id', 'sync_error_code', 'sync_attention', 'authorization_attention'] as $key) $row[$key] = $conn[$key];
+            foreach ([
+                    'provider',
+                    'provider_name',
+                    'connection_id',
+                    'auth_renewal',
+                    'next_sync_at',
+                    'channel_enabled',
+                    'channel_message',
+                    'last_sync_status',
+                    'last_sync_at',
+                    'last_sync_message',
+                    'published_run_id',
+                    'sync_error_code',
+                    'sync_attention',
+                    'authorization_attention'
+                ] as $key) $row[$key] = $conn[$key];
             $row['sync_interval_minutes'] = $conn['interval_minutes'];
             $row['sync_enabled'] = $conn['enabled'];
             $row['last_run_id'] = $conn['active_run_id'];
@@ -134,7 +162,13 @@ final class MerchantListService
             $result['auth_renewal'] = $definition->renewalStatus($credentials);
         } catch (\Throwable $error) {
             $credentialError = true;
-            $result['auth_renewal'] = ['automatic' => false, 'ready' => false, 'mode' => '', 'status' => 'credential_error', 'message' => '登录资料无法解密，未尝试自动登录；请核对部署密钥后重新验证。'];
+            $result['auth_renewal'] = [
+                'automatic' => false,
+                'ready' => false,
+                'mode' => '',
+                'status' => 'credential_error',
+                'message' => '登录资料无法解密，未尝试自动登录；请核对部署密钥后重新验证。'
+            ];
         }
         return array_replace($result, ConnectionAttention::project($result, $definition, $credentials, $credentialError));
     }

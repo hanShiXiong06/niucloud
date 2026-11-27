@@ -63,9 +63,18 @@ final class ManualPaymentService
             $message = '已有实际到账记录，请核对原记录，不要再次收款。';
         }
         $payer = Db::name('member')->where('site_id', $this->context->site)->where('member_id', (int) $row['member_id'])->field('member_id,member_no,nickname,mobile')->find();
-        return ['order' => PaymentService::presentOrder($row), 'payer' => $payer ? ['member_id' => (int) $payer['member_id'], 'member_no' => (string) $payer['member_no'], 'nickname' => (string) $payer['nickname'], 'mobile' => (string) $payer['mobile']] : null, 'default_amount' => '99.00', 'order_amount' => (string) $row['amount'], 'amount_matches' => $amount === (string) $row['amount'], 'settlement_mode' => self::BALANCE_MODE, 'source_fingerprint' => self::fingerprint($row),
+        return ['order' => PaymentService::presentOrder($row), 'payer' => $payer ? [
+                'member_id' => (int) $payer['member_id'],
+                'member_no' => (string) $payer['member_no'],
+                'nickname' => (string) $payer['nickname'],
+                'mobile' => (string) $payer['mobile']
+            ] : null, 'default_amount' => '99.00', 'order_amount' => (string) $row['amount'], 'amount_matches' => $amount === (string) $row['amount'], 'settlement_mode' => self::BALANCE_MODE, 'source_fingerprint' => self::fingerprint($row),
             'methods' => [['value' => 'wechat', 'label' => '线下微信收款']],
-            'membership_costs' => ['service_amount' => (string) ($rule['service_amount'] ?? '0.00'), 'deposit_amount' => (string) ($rule['deposit_amount'] ?? '0.00'), 'experience_amount' => (string) ($rule['experience_amount'] ?? '0.00')],
+            'membership_costs' => [
+                'service_amount' => (string) ($rule['service_amount'] ?? '0.00'),
+                'deposit_amount' => (string) ($rule['deposit_amount'] ?? '0.00'),
+                'experience_amount' => (string) ($rule['experience_amount'] ?? '0.00')
+            ],
             'can_confirm' => $allowed,
             'receipt' => $existing ? $this->present($existing) : null, 'message' => $message];
     }
@@ -82,7 +91,8 @@ final class ManualPaymentService
                 self::purpose($source);
                 $old = Db::name(self::TABLE)->where('site_id', $this->context->site)->where('kind', 'payment')->where('request_id', $data['request_id'])->lock(true)->find();
                 if ($old) {
-                    if ((int) $old['order_id'] !== $id || !hash_equals((string) (Data::decode($old['snapshot_json'])['input_fingerprint'] ?? ''), $data['input_fingerprint']))throw new CommonException('该收款请求已用于其他内容，请核对原收款记录；未重复入账');
+                    if ((int) $old['order_id'] !== $id
+                        || !hash_equals((string) (Data::decode($old['snapshot_json'])['input_fingerprint'] ?? ''), $data['input_fingerprint']))throw new CommonException('该收款请求已用于其他内容，请核对原收款记录；未重复入账');
                     return $old;
                 }
                 $this->assertOriginalPayable($source);
@@ -93,7 +103,9 @@ final class ManualPaymentService
                 $data['reference_hash'] = self::referenceHash('payment', 'wechat', $data['account_label'], $data['external_no']);
                 $same = Db::name(self::TABLE)->where('site_id', $this->context->site)->where('reference_hash', $data['reference_hash'])->lock(true)->find();
                 if ($same) {
-                    if ($same['kind'] === 'payment' && (int) $same['order_id'] === $id && hash_equals((string) (Data::decode($same['snapshot_json'])['input_fingerprint'] ?? ''), $data['input_fingerprint']))return $same;
+                    if ($same['kind'] === 'payment'
+                        && (int) $same['order_id'] === $id
+                        && hash_equals((string) (Data::decode($same['snapshot_json'])['input_fingerprint'] ?? ''), $data['input_fingerprint']))return $same;
                     throw new CommonException('这笔到账流水已登记，请核对原记录，不能重复用于其他订单');
                 }
                 $active = Db::name(self::TABLE)->where('site_id', $this->context->site)->where('kind', 'payment')
@@ -235,10 +247,17 @@ final class ManualPaymentService
         $site = $this->context->site;
         $rows = Db::name('pay')->where('site_id', $site)->where('trade_type', PaymentService::TRADE_TYPE)->where('trade_id', $order['id'])->order('id')->select()->toArray();
         foreach ($rows as $pay) {
-            if ($pay['main_type'] !== PayDict::MEMBER || (int) $pay['main_id'] !== (int) $order['member_id'] || Rules::cents((string) $pay['money']) !== Rules::cents((string) $order['amount']))throw new CommonException('原支付的身份或金额与订单不一致，实际到账已保留，请核对原记录。');
+            if ($pay['main_type'] !== PayDict::MEMBER
+                || (int) $pay['main_id'] !== (int) $order['member_id']
+                || Rules::cents((string) $pay['money']) !== Rules::cents((string) $order['amount']))throw new CommonException('原支付的身份或金额与订单不一致，实际到账已保留，请核对原记录。');
             if ((int) $pay['status'] === (int) PayDict::STATUS_CANCEL)continue;
             if ((int) $pay['status'] === (int) PayDict::STATUS_FINISH) {
-                PaymentService::confirm(['site_id' => $site, 'trade_type' => PaymentService::TRADE_TYPE, 'trade_id' => (int) $order['id'], 'out_trade_no' => $pay['out_trade_no']]);
+                PaymentService::confirm([
+                        'site_id' => $site,
+                        'trade_type' => PaymentService::TRADE_TYPE,
+                        'trade_id' => (int) $order['id'],
+                        'out_trade_no' => $pay['out_trade_no']
+                    ]);
                 return;
             }
             if (PaymentService::hasUnconfirmedBalanceDebit($site, $pay))throw new CommonException('原订单存在余额扣款，实际到账已保留，请先核对原扣款；未重复入账。');
@@ -276,7 +295,8 @@ final class ManualPaymentService
             $receipt = $this->row($id, true);
             $snapshot = $this->snapshot($receipt);
             if ($receipt['status'] === 'posted')return;
-            if ((int) $receipt['target_order_id'] !== $target || Rules::cents((string) $receipt['amount']) !== Rules::cents((string) $order['amount']))throw new CommonException('实际到账与最终订单金额不一致，未开通权益，请核对。');
+            if ((int) $receipt['target_order_id'] !== $target
+                || Rules::cents((string) $receipt['amount']) !== Rules::cents((string) $order['amount']))throw new CommonException('实际到账与最终订单金额不一致，未开通权益，请核对。');
             $this->identity($order, $snapshot['source']);
             PaymentService::assertReplacementChain($site, $order, true);
             if ($order['status'] === 'paid') {
@@ -301,7 +321,9 @@ final class ManualPaymentService
                 }
                 $no = (string) $pay['out_trade_no'];
                 $voucher = 'manual-receipt:'.$id;
-                if ($pay['main_type'] !== PayDict::MEMBER || (int) $pay['main_id'] !== (int) $order['member_id'] || Rules::cents((string) $pay['money']) !== Rules::cents((string) $receipt['amount']))throw new CommonException('原支付身份或金额不符，未充值或扣款。');
+                if ($pay['main_type'] !== PayDict::MEMBER
+                    || (int) $pay['main_id'] !== (int) $order['member_id']
+                    || Rules::cents((string) $pay['money']) !== Rules::cents((string) $receipt['amount']))throw new CommonException('原支付身份或金额不符，未充值或扣款。');
                 $this->assertOriginalPayable($order);
                 $member = Db::name('member')->where('site_id', $site)->where('member_id', (int) $order['member_id'])->lock(true)->find();
                 if (!$member)throw new CommonException('原付款会员不存在或不属于本站，未充值或扣款。');
@@ -314,12 +336,18 @@ final class ManualPaymentService
                 $rechargeId = (int) (new CoreMemberAccountService())->addLog($site, (int) $order['member_id'], MemberAccountTypeDict::BALANCE, $receipt['amount'], self::RECHARGE_TYPE, '管理员确认线下微信收款，充值后支付原订单', $voucher);
                 (new CoreBalanceService())->pay(['site_id' => $site, 'out_trade_no' => $no, 'money' => $receipt['amount']]);
                 $debits = Db::name('member_account_log')->where('site_id', $site)->where('member_id', (int) $order['member_id'])->where('account_type', MemberAccountTypeDict::BALANCE)->where('from_type', 'order')->where('related_id', $no)->lock(true)->select()->toArray();
-                if (count($debits) !== 1 || self::ledgerCents((string) $debits[0]['account_data']) !== -$cents)throw new CommonException('未找到唯一余额消费账目，充值与消费已撤销。');
+                if (count($debits) !== 1
+                    || self::ledgerCents((string) $debits[0]['account_data']) !== -$cents)throw new CommonException('未找到唯一余额消费账目，充值与消费已撤销。');
                 $after = (string) Db::name('member')->where('site_id', $site)->where('member_id', (int) $order['member_id'])->value('balance');
                 if (Rules::cents($after) !== $before)throw new CommonException('充值与消费后余额不一致，整笔操作已撤销。');
                 $snapshot['core_payment'] = ['out_trade_no' => $no, 'type' => PayDict::BALANCEPAY, 'order_fingerprint' => self::fingerprint($order), 'merchant_id' => (int) $order['merchant_id'], 'member_id' => (int) $order['member_id'], 'amount' => (string) $order['amount'], 'voucher' => $voucher,
                     'recharge_log_id' => $rechargeId, 'debit_log_id' => (int) $debits[0]['id'], 'member_balance_before' => Rules::amount($before), 'member_balance_after' => $after];
-                Db::name(self::TABLE)->where('site_id', $site)->where('id', $id)->update(['out_trade_no' => $no, 'status' => 'processing', 'snapshot_json' => Data::json($snapshot), 'update_time' => time()]);
+                Db::name(self::TABLE)->where('site_id', $site)->where('id', $id)->update([
+                        'out_trade_no' => $no,
+                        'status' => 'processing',
+                        'snapshot_json' => Data::json($snapshot),
+                        'update_time' => time()
+                    ]);
                 // The core balance driver really consumed the funded balance.
                 // Do not label a synthetic offline callback as a WeChat payment.
                 $core->paySuccess($site, ['out_trade_no' => $no, 'type' => PayDict::BALANCEPAY, 'trade_no' => $receipt['external_no'], 'voucher' => $voucher]);
@@ -335,13 +363,25 @@ final class ManualPaymentService
     {
         $receipt = $this->row($id, true);
         $pay = Db::name('pay')->where('site_id', $this->context->site)->where('out_trade_no', $receipt['out_trade_no'])->find();
-        if (!$pay || (int) $pay['status'] !== (int) PayDict::STATUS_FINISH || !in_array($pay['type'], [PayDict::OFFLINEPAY, PayDict::BALANCEPAY], true))throw new CommonException('实际到账记录尚未关联有效支付流水，请核对后重试。');
+        if (!$pay
+            || (int) $pay['status'] !== (int) PayDict::STATUS_FINISH
+            || !in_array($pay['type'], [PayDict::OFFLINEPAY, PayDict::BALANCEPAY], true))throw new CommonException('实际到账记录尚未关联有效支付流水，请核对后重试。');
         self::assertReceipt($this->context->site, $order, $pay, true);
         $rule = Data::decode($order['rule_json']);
-        $posted = $order['status'] === 'paid' && hash_equals((string) $receipt['out_trade_no'], (string) $order['out_trade_no']) && empty($rule['requires_manual_review']);
+        $posted = $order['status'] === 'paid'
+            && hash_equals((string) $receipt['out_trade_no'], (string) $order['out_trade_no'])
+            && empty($rule['requires_manual_review']);
         if (!$posted)throw new CommonException('原订单或权益未完成入账，本次充值和余额消费均已撤销；原实际收款登记保留待核对。');
-        Db::name(self::TABLE)->where('site_id', $this->context->site)->where('id', $id)->update(['status' => $posted ? 'posted' : 'attention', 'message' => $posted ? '已核实线下收款，业务入账已完成。' : '已核实线下收款，业务或权益仍需核对；请勿再次收款。', 'update_time' => time()]);
-        $this->context->audit('manual_receipt', $id, $posted ? 'posted' : 'delivery_attention', ['order_id' => (int) $order['id'], 'amount' => $receipt['amount'], 'out_trade_no' => $receipt['out_trade_no']]);
+        Db::name(self::TABLE)->where('site_id', $this->context->site)->where('id', $id)->update([
+                'status' => $posted ? 'posted' : 'attention',
+                'message' => $posted ? '已核实线下收款，业务入账已完成。' : '已核实线下收款，业务或权益仍需核对；请勿再次收款。',
+                'update_time' => time()
+            ]);
+        $this->context->audit('manual_receipt', $id, $posted ? 'posted' : 'delivery_attention', [
+                'order_id' => (int) $order['id'],
+                'amount' => $receipt['amount'],
+                'out_trade_no' => $receipt['out_trade_no']
+            ]);
     }
 
     public static function assertPaymentReceipt(int $site, array $order, array $pay): void
@@ -351,7 +391,12 @@ final class ManualPaymentService
 
     public static function assertReceipt(int $site, array $order, array $pay, bool $lock = false): array
     {
-        if ($site <= 0 || (int) ($order['site_id'] ?? 0) !== $site || (int) ($pay['site_id'] ?? 0) !== $site || !in_array($pay['type'] ?? '', [PayDict::OFFLINEPAY, PayDict::BALANCEPAY], true) || ($pay['trade_type'] ?? '') !== PaymentService::TRADE_TYPE || (int) $pay['trade_id'] !== (int) $order['id'])throw new CommonException('人工收款凭据与业务不符，未确认支付成功');
+        if ($site <= 0
+            || (int) ($order['site_id'] ?? 0) !== $site
+            || (int) ($pay['site_id'] ?? 0) !== $site
+            || !in_array($pay['type'] ?? '', [PayDict::OFFLINEPAY, PayDict::BALANCEPAY], true)
+            || ($pay['trade_type'] ?? '') !== PaymentService::TRADE_TYPE
+            || (int) $pay['trade_id'] !== (int) $order['id'])throw new CommonException('人工收款凭据与业务不符，未确认支付成功');
         $query = Db::name(self::TABLE)->where('site_id', $site)->where('kind', 'payment')->where('target_order_id', (int) $order['id'])->where('out_trade_no', (string) $pay['out_trade_no']);
         if ($lock)$query->lock(true);
         $rows = $query->limit(2)->select()->toArray();
@@ -359,16 +404,32 @@ final class ManualPaymentService
         $row = $rows[0];
         $snapshot = Data::decode($row['snapshot_json']);
         $binding = $snapshot['core_payment'] ?? [];
-        if (($snapshot['schema'] ?? '') !== self::SCHEMA || ($snapshot['acknowledged'] ?? false) !== true || !in_array($row['status'], ['recorded', 'processing', 'posted', 'attention'], true)
-            || (int) $row['operator_uid'] <= 0 || (int) $row['received_at'] <= 0 || (int) $row['received_at'] > time() + 60 || $row['external_no'] === '' || $row['account_label'] === ''
-            || !isset(self::METHODS[$row['method']]) || (int) $row['member_id'] !== (int) $order['member_id'] || (int) $pay['main_id'] !== (int) $row['member_id'] || $pay['main_type'] !== PayDict::MEMBER
-            || Rules::cents((string) $row['amount']) !== Rules::cents((string) $order['amount']) || Rules::cents((string) $pay['money']) !== Rules::cents((string) $row['amount'])
+        if (($snapshot['schema'] ?? '') !== self::SCHEMA
+            || ($snapshot['acknowledged'] ?? false) !== true
+            || !in_array($row['status'], ['recorded', 'processing', 'posted', 'attention'], true)
+            || (int) $row['operator_uid'] <= 0
+                || (int) $row['received_at'] <= 0
+                || (int) $row['received_at'] > time() + 60
+                || $row['external_no'] === ''
+                || $row['account_label'] === ''
+            || !isset(self::METHODS[$row['method']])
+                || (int) $row['member_id'] !== (int) $order['member_id']
+                || (int) $pay['main_id'] !== (int) $row['member_id']
+                || $pay['main_type'] !== PayDict::MEMBER
+            || Rules::cents((string) $row['amount']) !== Rules::cents((string) $order['amount'])
+                || Rules::cents((string) $pay['money']) !== Rules::cents((string) $row['amount'])
             || !hash_equals(self::referenceHash('payment', $row['method'], $row['account_label'], $row['external_no']), (string) $row['reference_hash'])
-            || ($binding['out_trade_no'] ?? '') !== (string) $pay['out_trade_no'] || (int) ($binding['merchant_id'] ?? 0) !== (int) $order['merchant_id'] || (int) ($binding['member_id'] ?? 0) !== (int) $row['member_id']
+            || ($binding['out_trade_no'] ?? '') !== (string) $pay['out_trade_no']
+                || (int) ($binding['merchant_id'] ?? 0) !== (int) $order['merchant_id']
+                || (int) ($binding['member_id'] ?? 0) !== (int) $row['member_id']
             || ($binding['amount'] ?? '') !== (string) $row['amount'] || !hash_equals((string) ($binding['order_fingerprint'] ?? ''), self::fingerprint($order))
-            || ($pay['voucher'] ?? '') !== ($binding['voucher'] ?? null) || ($pay['trade_no'] ?? '') !== $row['external_no'])throw new CommonException('人工到账凭据的金额、归属或流水不一致，未开通权益或增加收益');
+            || ($pay['voucher'] ?? '') !== ($binding['voucher'] ?? null)
+                || ($pay['trade_no'] ?? '') !== $row['external_no'])throw new CommonException('人工到账凭据的金额、归属或流水不一致，未开通权益或增加收益');
         if ($pay['type'] === PayDict::BALANCEPAY) {
-            if (($snapshot['settlement_mode'] ?? '') !== self::BALANCE_MODE || ($binding['type'] ?? '') !== PayDict::BALANCEPAY || $row['method'] !== 'wechat' || $binding['voucher'] !== 'manual-receipt:'.$row['id'])throw new CommonException('人工余额收款缺少充值及消费证明，未确认支付成功');
+            if (($snapshot['settlement_mode'] ?? '') !== self::BALANCE_MODE
+                || ($binding['type'] ?? '') !== PayDict::BALANCEPAY
+                || $row['method'] !== 'wechat'
+                || $binding['voucher'] !== 'manual-receipt:'.$row['id'])throw new CommonException('人工余额收款缺少充值及消费证明，未确认支付成功');
             $recharge = (int) ($binding['recharge_log_id'] ?? 0);
             $debit = (int) ($binding['debit_log_id'] ?? 0);
             if ($recharge <= 0 || $debit <= 0 || $recharge === $debit)throw new CommonException('人工余额收款缺少两条独立账户账目，未确认支付成功');
@@ -377,9 +438,15 @@ final class ManualPaymentService
             $b = $logs[$debit] ?? [];
             $amount = Rules::cents((string) $row['amount']);
             $before = Rules::cents($binding['member_balance_before'] ?? '');
-            if (count($logs) !== 2 || ($a['from_type'] ?? '') !== self::RECHARGE_TYPE || ($a['related_id'] ?? '') !== $binding['voucher'] || Rules::cents((string) ($a['account_data'] ?? '0.00')) !== $amount
-                || ($b['from_type'] ?? '') !== 'order' || ($b['related_id'] ?? '') !== $pay['out_trade_no'] || self::ledgerCents((string) ($b['account_data'] ?? '0.00')) !== -$amount
-                || Rules::cents((string) ($a['account_sum'] ?? '0.00')) !== $before + $amount || Rules::cents((string) ($b['account_sum'] ?? '0.00')) !== $before
+            if (count($logs) !== 2
+                || ($a['from_type'] ?? '') !== self::RECHARGE_TYPE
+                || ($a['related_id'] ?? '') !== $binding['voucher']
+                || Rules::cents((string) ($a['account_data'] ?? '0.00')) !== $amount
+                || ($b['from_type'] ?? '') !== 'order'
+                    || ($b['related_id'] ?? '') !== $pay['out_trade_no']
+                    || self::ledgerCents((string) ($b['account_data'] ?? '0.00')) !== -$amount
+                || Rules::cents((string) ($a['account_sum'] ?? '0.00')) !== $before + $amount
+                    || Rules::cents((string) ($b['account_sum'] ?? '0.00')) !== $before
                 || Rules::cents($binding['member_balance_after'] ?? '') !== $before)throw new CommonException('人工收款充值与消费账目不完整或不匹配，未确认支付成功');
         } elseif (isset($snapshot['settlement_mode']))throw new CommonException('人工收款的资金路径与支付类型不一致，未确认支付成功');
         return $row;
@@ -432,7 +499,11 @@ final class ManualPaymentService
             $wanted = array_fill_keys($chunk, true);
             foreach ($rows as $row)foreach ([(int) $row['order_id'], (int) $row['target_order_id']] as $id) {
                 if (!isset($wanted[$id]) || isset($out[$id]))continue;
-                $out[$id] = ['manual_payment_status' => $row['status'], 'manual_payment_message' => $row['status'] === 'attention' ? '线下到账已登记，业务仍需平台核对；请勿再次付款。' : '线下到账已登记，正在核对入账；请勿再次付款。', 'can_pay' => false];
+                $out[$id] = [
+                    'manual_payment_status' => $row['status'],
+                    'manual_payment_message' => $row['status'] === 'attention' ? '线下到账已登记，业务仍需平台核对；请勿再次付款。' : '线下到账已登记，正在核对入账；请勿再次付款。',
+                    'can_pay' => false
+                ];
             }
         }
         return $out;
@@ -460,7 +531,12 @@ final class ManualPaymentService
     public static function referenceHash(string $kind, string $method, string $account, string $external): string
     {
         if (!in_array($kind, ['payment', 'refund'], true) || !isset(self::METHODS[$method]))throw new CommonException('收付款凭据类型无效');
-        return hash('sha256', Data::json([$kind, $method, mb_strtolower((string) preg_replace('/\s+/u', '', trim($account))), mb_strtoupper((string) preg_replace('/\s+/u', '', trim($external)))]));
+        return hash('sha256', Data::json([
+                    $kind,
+                    $method,
+                    mb_strtolower((string) preg_replace('/\s+/u', '', trim($account))),
+                    mb_strtoupper((string) preg_replace('/\s+/u', '', trim($external)))
+                ]));
     }
 
     private function input(array $input): array
@@ -543,20 +619,35 @@ final class ManualPaymentService
     private function snapshot(array $row): array
     {
         $value = Data::decode($row['snapshot_json']);
-        if (($value['schema'] ?? '') !== self::SCHEMA || ($value['acknowledged'] ?? false) !== true || !is_array($value['source'] ?? null) || (int) $value['source']['order_id'] !== (int) $row['order_id'] || (int) $value['source']['member_id'] !== (int) $row['member_id'])throw new CommonException('原人工收款凭据不完整，请核对，未重复入账');
+        if (($value['schema'] ?? '') !== self::SCHEMA
+            || ($value['acknowledged'] ?? false) !== true
+            || !is_array($value['source'] ?? null)
+            || (int) $value['source']['order_id'] !== (int) $row['order_id']
+            || (int) $value['source']['member_id'] !== (int) $row['member_id'])throw new CommonException('原人工收款凭据不完整，请核对，未重复入账');
         return $value;
     }
     private function identity(array $order, array $source): void
     {
-        if ((int) $order['site_id'] !== $this->context->site || (int) $order['member_id'] !== (int) $source['member_id'] || (int) $order['merchant_id'] !== (int) $source['merchant_id'] || $order['purpose'] !== $source['purpose'])throw new CommonException('原订单与收款登记归属不一致，实际到账已保留，请核对');
+        if ((int) $order['site_id'] !== $this->context->site
+            || (int) $order['member_id'] !== (int) $source['member_id']
+            || (int) $order['merchant_id'] !== (int) $source['merchant_id']
+            || $order['purpose'] !== $source['purpose'])throw new CommonException('原订单与收款登记归属不一致，实际到账已保留，请核对');
     }
     private function attention(int $id, string $message): void
     {
         Db::transaction(function () use ($id, $message): void {
             $row = $this->row($id, true);
             if ($row['status'] === 'posted')return;
-            Db::name(self::TABLE)->where('site_id', $this->context->site)->where('id', $id)->update(['status' => 'attention', 'message' => mb_substr($message, 0, 500), 'update_time' => time()]);
-            $this->context->audit('manual_receipt', $id, 'attention', ['order_id' => (int) $row['order_id'], 'target_order_id' => (int) $row['target_order_id'], 'amount' => $row['amount']]);
+            Db::name(self::TABLE)->where('site_id', $this->context->site)->where('id', $id)->update([
+                    'status' => 'attention',
+                    'message' => mb_substr($message, 0, 500),
+                    'update_time' => time()
+                ]);
+            $this->context->audit('manual_receipt', $id, 'attention', [
+                    'order_id' => (int) $row['order_id'],
+                    'target_order_id' => (int) $row['target_order_id'],
+                    'amount' => $row['amount']
+                ]);
         });
     }
     private function locked(int $orderId, callable $operation)

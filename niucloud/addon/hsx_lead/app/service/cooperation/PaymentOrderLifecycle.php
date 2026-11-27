@@ -21,7 +21,8 @@ final class PaymentOrderLifecycle
 
     private function own(): void
     {
-        if ($this->context->memberId <= 0 || !Db::name('member')->where('site_id', $this->context->site)->where('member_id', $this->context->memberId)->where('status', 1)->where('is_del', 0)->where('delete_time', 0)->find())throw new CommonException('请先登录有效会员账号');
+        if ($this->context->memberId <= 0
+            || !Db::name('member')->where('site_id', $this->context->site)->where('member_id', $this->context->memberId)->where('status', 1)->where('is_del', 0)->where('delete_time', 0)->find())throw new CommonException('请先登录有效会员账号');
     }
     public function orders(array $params = []): array
     {
@@ -105,7 +106,8 @@ final class PaymentOrderLifecycle
             if (isset($snapshot['result']))return $snapshot['result'];
             $recovered = self::recoverFinished($site, $id, $snapshot);
             if ($recovered !== null)return $recovered;
-            if ($snapshot['recover_receipt'] && !array_filter($snapshot['pays'], static fn (array $pay): bool => (int) $pay['status'] === (int) PayDict::STATUS_ING && PaymentGatewayReconciler::supports($pay)))return self::closeCheck($site, $id, 'paid_pending', '渠道已返回收款，但本地成功凭据仍待核对；未取消或再次扣款');
+            if ($snapshot['recover_receipt']
+                && !array_filter($snapshot['pays'], static fn (array $pay): bool => (int) $pay['status'] === (int) PayDict::STATUS_ING && PaymentGatewayReconciler::supports($pay)))return self::closeCheck($site, $id, 'paid_pending', '渠道已返回收款，但本地成功凭据仍待核对；未取消或再次扣款');
             foreach ($snapshot['pays'] as $original) {
                 // Release site/order row locks before each potentially slow
                 // channel request. The same-order advisory lock remains held.
@@ -119,7 +121,10 @@ final class PaymentOrderLifecycle
                     $pay = $candidate;
                     break;
                 }
-                if ($pay === null || (string) $pay['out_trade_no'] !== (string) $original['out_trade_no'] || (string) $pay['type'] !== (string) $original['type'] || (string) $pay['channel'] !== (string) $original['channel'])throw new CommonException('原付款流水已变化，未关闭业务，请刷新核对');
+                if ($pay === null
+                    || (string) $pay['out_trade_no'] !== (string) $original['out_trade_no']
+                    || (string) $pay['type'] !== (string) $original['type']
+                    || (string) $pay['channel'] !== (string) $original['channel'])throw new CommonException('原付款流水已变化，未关闭业务，请刷新核对');
                 if ((int) $pay['status'] === (int) PayDict::STATUS_CANCEL)continue;
                 if ($fresh['recover_receipt'] && (int) $pay['status'] !== (int) PayDict::STATUS_ING)continue;
                 if ((int) $pay['status'] === (int) PayDict::STATUS_WAIT) {
@@ -145,10 +150,20 @@ final class PaymentOrderLifecycle
                 self::assertSameCloseBusiness($snapshot['row'], $row);
                 foreach ($fresh['pays'] as $pay)if ((int) $pay['status'] !== (int) PayDict::STATUS_CANCEL)throw new CommonException('原支付未全部确认关闭，当前未关闭业务');
                 $rule = $fresh['rule'];
-                $rule['closure'] = ['at' => time(), 'by' => $by, 'reason' => $reason, 'operator_uid' => $operatorUid, 'operator_member_id' => $operatorMemberId];
+                $rule['closure'] = [
+                    'at' => time(),
+                    'by' => $by,
+                    'reason' => $reason,
+                    'operator_uid' => $operatorUid,
+                    'operator_member_id' => $operatorMemberId
+                ];
                 $rule['close_check'] = ['at' => time(), 'state' => 'closed', 'message' => '原付款已核实关闭'];
                 Store::query('coop_order', $site)->where('id', $id)->update(['status' => 'closed', 'rule_json' => Data::json($rule), 'update_time' => time()]);
-                Data::audit($site, $operatorUid, $operatorMemberId, 'coop_order', $id, 'closed', ['purpose' => $row['purpose'], 'by' => $by, 'reason' => $reason]);
+                Data::audit($site, $operatorUid, $operatorMemberId, 'coop_order', $id, 'closed', [
+                        'purpose' => $row['purpose'],
+                        'by' => $by,
+                        'reason' => $reason
+                    ]);
                 return PaymentService::presentOrder(Store::row('coop_order', $site, $id));
             });
         } finally {
@@ -181,8 +196,15 @@ final class PaymentOrderLifecycle
             $pays = Db::name('pay')->where('site_id', $site)->where('trade_type', PaymentService::TRADE_TYPE)->where('trade_id', $id)->order('id')->lock(true)->select()->toArray();
             $knownNo = (string) $row['out_trade_no'] === '';
             foreach ($pays as $pay) {
-                if ($pay['main_type'] !== PayDict::MEMBER || (int) $pay['main_id'] !== (int) $row['member_id'] || Rules::cents((string) $pay['money']) !== Rules::cents((string) $row['amount']))throw new CommonException('原支付流水归属或金额异常，未关闭订单');
-                if (!in_array((int) $pay['status'], [(int) PayDict::STATUS_WAIT, (int) PayDict::STATUS_CANCEL, (int) PayDict::STATUS_ING, (int) PayDict::STATUS_FINISH], true))throw new CommonException('原收银台状态待核对；当前未关闭业务，请勿另开付款');
+                if ($pay['main_type'] !== PayDict::MEMBER
+                    || (int) $pay['main_id'] !== (int) $row['member_id']
+                    || Rules::cents((string) $pay['money']) !== Rules::cents((string) $row['amount']))throw new CommonException('原支付流水归属或金额异常，未关闭订单');
+                if (!in_array((int) $pay['status'], [
+                            (int) PayDict::STATUS_WAIT,
+                            (int) PayDict::STATUS_CANCEL,
+                            (int) PayDict::STATUS_ING,
+                            (int) PayDict::STATUS_FINISH
+                        ], true))throw new CommonException('原收银台状态待核对；当前未关闭业务，请勿另开付款');
                 if (PaymentService::hasUnconfirmedBalanceDebit($site, $pay))throw new CommonException('发现本次付款的账户扣款记录，未关闭订单，请核对到账情况');
                 if ((string) $pay['out_trade_no'] === (string) $row['out_trade_no'])$knownNo = true;
             }
@@ -193,8 +215,20 @@ final class PaymentOrderLifecycle
 
     private static function assertSameCloseBusiness(array $original, array $current): void
     {
-        foreach (['id', 'site_id', 'member_id', 'merchant_id', 'purpose', 'lead_id', 'amount', 'fee_amount', 'net_amount', 'create_time'] as $key)if ((string) ($original[$key] ?? '') !== (string) ($current[$key] ?? ''))throw new CommonException('订单归属、金额或期限已变化，未关闭业务，请刷新核对');
-        if ($current['purpose'] === 'membership' && !hash_equals(MembershipCostService::pricingFingerprint($original, Data::decode($original['rule_json'])), MembershipCostService::pricingFingerprint($current, Data::decode($current['rule_json']))))throw new CommonException('原会员付款合同已变化，未关闭业务，请刷新核对');
+        foreach ([
+                'id',
+                'site_id',
+                'member_id',
+                'merchant_id',
+                'purpose',
+                'lead_id',
+                'amount',
+                'fee_amount',
+                'net_amount',
+                'create_time'
+            ] as $key)if ((string) ($original[$key] ?? '') !== (string) ($current[$key] ?? ''))throw new CommonException('订单归属、金额或期限已变化，未关闭业务，请刷新核对');
+        if ($current['purpose'] === 'membership'
+            && !hash_equals(MembershipCostService::pricingFingerprint($original, Data::decode($original['rule_json'])), MembershipCostService::pricingFingerprint($current, Data::decode($current['rule_json']))))throw new CommonException('原会员付款合同已变化，未关闭业务，请刷新核对');
     }
 
     private static function recoverFinished(int $site, int $id, array $snapshot): ?array
@@ -226,7 +260,12 @@ final class PaymentOrderLifecycle
         // confirm owns its own short financial transaction and post-commit
         // notification. Never run it under a surrounding close transaction.
         try {
-            PaymentService::confirm(['site_id' => $site, 'trade_type' => PaymentService::TRADE_TYPE, 'trade_id' => $id, 'out_trade_no' => $paid['out_trade_no']]);
+            PaymentService::confirm([
+                    'site_id' => $site,
+                    'trade_type' => PaymentService::TRADE_TYPE,
+                    'trade_id' => $id,
+                    'out_trade_no' => $paid['out_trade_no']
+                ]);
         } catch (\Throwable $error) {
             return self::closeCheck($site, $id, 'paid_pending', '原单已收款，业务结果尚未确认；订单未取消，请勿再次付款', (string) $paid['out_trade_no']);
         }
@@ -250,7 +289,11 @@ final class PaymentOrderLifecycle
                 if (empty($rule['requires_manual_review']))$rule['requires_manual_review'] = 'gateway_payment_receipt_review';
                 if ($row['out_trade_no'] === '' && $no !== '')$row['out_trade_no'] = $no;
             }
-            Store::query('coop_order', $site)->where('id', $id)->update(['rule_json' => Data::json($rule), 'out_trade_no' => $row['out_trade_no'], 'update_time' => time()]);
+            Store::query('coop_order', $site)->where('id', $id)->update([
+                    'rule_json' => Data::json($rule),
+                    'out_trade_no' => $row['out_trade_no'],
+                    'update_time' => time()
+                ]);
             Data::audit($site, 0, 0, 'coop_order', $id, 'close_reconciled', ['state' => $state, 'message' => $message]);
             return PaymentService::presentOrder(Store::row('coop_order', $site, $id));
         });

@@ -16,7 +16,13 @@ final class VirtualPaySchema
     public function check(): array
     {
         $plan = $this->inspect();
-        return ['tables' => self::TABLES, 'missing_tables' => $plan['missing'], 'pending_statements' => count($plan['missing']), 'business_row_writes' => false, 'changes_existing_fields_or_indexes' => false];
+        return [
+            'tables' => self::TABLES,
+            'missing_tables' => $plan['missing'],
+            'pending_statements' => count($plan['missing']),
+            'business_row_writes' => false,
+            'changes_existing_fields_or_indexes' => false
+        ];
     }
     public function apply(): array
     {
@@ -39,7 +45,12 @@ final class VirtualPaySchema
             if (!$handle)throw new RuntimeException('结构备份创建失败');
             try {
                 if (!chmod($backup, 0600))throw new RuntimeException('结构备份权限设置失败');
-                $json = json_encode(['schema' => 'hsx_lead.virtual_payment.v1', 'metadata' => $plan['metadata'], 'missing_tables' => $plan['missing'], 'sql_sha256' => hash_file('sha256', $this->sqlFile())], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR);
+                $json = json_encode([
+                        'schema' => 'hsx_lead.virtual_payment.v1',
+                        'metadata' => $plan['metadata'],
+                        'missing_tables' => $plan['missing'],
+                        'sql_sha256' => hash_file('sha256', $this->sqlFile())
+                    ], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR);
                 if (fwrite($handle, $json) !== strlen($json) || !fflush($handle))throw new RuntimeException('结构备份写入未完成');
             } finally {
                 fclose($handle);
@@ -94,7 +105,12 @@ final class VirtualPaySchema
             foreach (preg_split('/\R/', trim($match[2])) as $line) {
                 $line = rtrim(trim($line), ',');
                 if (preg_match('/^`([a-z_]+)`\s+((?:bigint|int|tinyint) unsigned|(?:var)?char\([0-9]+\))\s+(NOT NULL|NULL)(?:\s+DEFAULT\s+(NULL|\'[^\']*\'|[0-9]+))?(?:\s+(AUTO_INCREMENT))?$/i', $line, $f)) {
-                    $columns[$f[1]] = ['type' => strtolower($f[2]), 'nullable' => $f[3] === 'NULL', 'default' => isset($f[4]) && $f[4] !== '' ? $this->default($f[4]) : null, 'auto' => !empty($f[5])];
+                    $columns[$f[1]] = [
+                        'type' => strtolower($f[2]),
+                        'nullable' => $f[3] === 'NULL',
+                        'default' => isset($f[4]) && $f[4] !== '' ? $this->default($f[4]) : null,
+                        'auto' => !empty($f[5])
+                    ];
                 } elseif (preg_match('/^(PRIMARY KEY|UNIQUE KEY `([a-z_]+)`|KEY `([a-z_]+)`)\s*\((`[a-z_]+`(?:,`[a-z_]+`)*)\)$/i', $line, $f)) {
                     preg_match_all('/`([a-z_]+)`/', $f[4], $parts);
                     $indexes[$f[1] === 'PRIMARY KEY' ? 'PRIMARY' : ($f[2] ?: $f[3])] = ['columns' => $parts[1], 'unique' => !str_starts_with($f[1], 'KEY ')];
@@ -121,14 +137,22 @@ final class VirtualPaySchema
                 $missing[] = $name;
                 continue;
             }
-            if (count($info) !== 1 || $info[0]['TABLE_TYPE'] !== 'BASE TABLE' || strtoupper((string) $info[0]['ENGINE']) !== 'INNODB' || !str_starts_with(strtolower((string) $info[0]['TABLE_COLLATION']), 'utf8mb4_'))throw new RuntimeException('同名表存储结构不符，不覆盖：'.$name);
+            if (count($info) !== 1
+                || $info[0]['TABLE_TYPE'] !== 'BASE TABLE'
+                || strtoupper((string) $info[0]['ENGINE']) !== 'INNODB'
+                || !str_starts_with(strtolower((string) $info[0]['TABLE_COLLATION']), 'utf8mb4_'))throw new RuntimeException('同名表存储结构不符，不覆盖：'.$name);
             $fields = Db::query('SELECT COLUMN_NAME,COLUMN_TYPE,IS_NULLABLE,COLUMN_DEFAULT,EXTRA FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? ORDER BY ORDINAL_POSITION', [$table]);
             $actual = [];
             foreach ($fields as $f) {
                 if (trim((string) str_ireplace('auto_increment', '', $f['EXTRA'])) !== '')throw new RuntimeException('不接受同名自动生成字段');
                 $default = $f['COLUMN_DEFAULT'];
                 if ($maria && $default !== null)$default = $this->default((string) $default);
-                $actual[$f['COLUMN_NAME']] = ['type' => preg_replace('/\b(bigint|int|tinyint)\([0-9]+\)/i', '$1', strtolower($f['COLUMN_TYPE'])), 'nullable' => $f['IS_NULLABLE'] === 'YES', 'default' => $default === null ? null : (string) $default, 'auto' => stripos($f['EXTRA'], 'auto_increment') !== false];
+                $actual[$f['COLUMN_NAME']] = [
+                    'type' => preg_replace('/\b(bigint|int|tinyint)\([0-9]+\)/i', '$1', strtolower($f['COLUMN_TYPE'])),
+                    'nullable' => $f['IS_NULLABLE'] === 'YES',
+                    'default' => $default === null ? null : (string) $default,
+                    'auto' => stripos($f['EXTRA'], 'auto_increment') !== false
+                ];
             }
             if ($actual !== $expected['columns'])throw new RuntimeException('同名表字段不符，不补字段或覆盖：'.$name);
             $parts = Db::query('SHOW INDEX FROM `'.$table.'`');

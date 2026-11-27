@@ -10,8 +10,22 @@ final class PromotionRules
     public static function defaults(): array
     {
         return ['enabled' => false, 'max_level' => 1, 'settlement_days' => 3, 'eligibility_months' => 0, 'sources' => [
-            'membership' => ['enabled' => false, 'normal_rate' => '0.00', 'provider_rate' => '0.00', 'level_rates' => [], 'renewal' => false, 'second_level' => ['normal_rate' => '0.00', 'provider_rate' => '0.00', 'level_rates' => []]],
-            'maintenance' => ['enabled' => false, 'normal_rate' => '0.00', 'provider_rate' => '0.00', 'level_rates' => [], 'renewal' => true, 'second_level' => ['normal_rate' => '0.00', 'provider_rate' => '0.00', 'level_rates' => []]],
+            'membership' => [
+                'enabled' => false,
+                'normal_rate' => '0.00',
+                'provider_rate' => '0.00',
+                'level_rates' => [],
+                'renewal' => false,
+                'second_level' => ['normal_rate' => '0.00', 'provider_rate' => '0.00', 'level_rates' => []]
+            ],
+            'maintenance' => [
+                'enabled' => false,
+                'normal_rate' => '0.00',
+                'provider_rate' => '0.00',
+                'level_rates' => [],
+                'renewal' => true,
+                'second_level' => ['normal_rate' => '0.00', 'provider_rate' => '0.00', 'level_rates' => []]
+            ],
         ]];
     }
     public static function source(string $purpose): string
@@ -52,7 +66,9 @@ final class PromotionRules
         $next['max_level'] = (int) $depth;
         foreach (['settlement_days' => [0, 365], 'eligibility_months' => [0, 120]] as $key => $range) {
             $value = $input[$key] ?? $next[$key];
-            if ((!is_int($value) && !is_string($value)) || !preg_match('/^(?:0|[1-9][0-9]{0,2})$/D', (string) $value) || (int) $value > $range[1]) throw new CommonException('推广期限设置不正确：'.$key);
+            if ((!is_int($value) && !is_string($value))
+                || !preg_match('/^(?:0|[1-9][0-9]{0,2})$/D', (string) $value)
+                || (int) $value > $range[1]) throw new CommonException('推广期限设置不正确：'.$key);
             $next[$key] = (int) $value;
         }
         if (isset($input['sources']) && !is_array($input['sources'])) throw new CommonException('推广收入规则格式不正确');
@@ -86,7 +102,9 @@ final class PromotionRules
     /** Exactly one tier applies; service-provider and normal rewards never stack. */
     public static function rateFor(array $config, string $source, string $role, string $levelCode = '', int $commissionLevel = 1): string
     {
-        if (!in_array($role, ['normal', 'provider'], true) || !isset($config['sources'][$source]) || !in_array($commissionLevel, [1, 2], true)) throw new CommonException('推广身份、层级或收入来源无效');
+        if (!in_array($role, ['normal', 'provider'], true)
+            || !isset($config['sources'][$source])
+            || !in_array($commissionLevel, [1, 2], true)) throw new CommonException('推广身份、层级或收入来源无效');
         if ($commissionLevel === 2 && (int) ($config['max_level'] ?? 1) < 2)return '0.00';
         $row = $commissionLevel === 1 ? $config['sources'][$source] : ($config['sources'][$source]['second_level'] ?? []);
         // A free member uses normal_rate; a paid entity tier may override it.

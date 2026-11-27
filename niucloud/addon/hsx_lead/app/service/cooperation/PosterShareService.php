@@ -33,7 +33,10 @@ final class PosterShareService
     public static function preview(int $site, string $scene, string $channel): array
     {
         self::scene($scene);
-        if ((int) request()->siteId() !== $site || !in_array(request()->appType(), ['site', 'admin'], true) || (int) request()->uid() <= 0 || $channel !== 'h5') {
+        if ((int) request()->siteId() !== $site
+            || !in_array(request()->appType(), ['site', 'admin'], true)
+            || (int) request()->uid() <= 0
+            || $channel !== 'h5') {
             throw new CommonException('请在站点海报编辑器中使用网页渠道预览');
         }
         (new Context($site, (int) request()->uid()))->manager();
@@ -107,13 +110,17 @@ final class PosterShareService
 
     private function assertRequest(): void
     {
-        if (request()->appType() !== 'api' || (int) request()->siteId() !== $this->context->site || (int) request()->memberId() !== $this->context->memberId || $this->context->memberId <= 0) {
+        if (request()->appType() !== 'api'
+            || (int) request()->siteId() !== $this->context->site
+            || (int) request()->memberId() !== $this->context->memberId
+            || $this->context->memberId <= 0) {
             throw new CommonException('分享身份已变化，请重新登录后再生成海报');
         }
     }
     private function channel(string $channel): void
     {
-        if (!in_array($channel, ['weapp', 'h5', 'wechat', 'app'], true) || request()->getChannel() !== $channel) throw new CommonException('当前分享渠道无效，请从小程序或手机页面重新进入');
+        if (!in_array($channel, ['weapp', 'h5', 'wechat', 'app'], true)
+            || request()->getChannel() !== $channel) throw new CommonException('当前分享渠道无效，请从小程序或手机页面重新进入');
     }
     private function text(string $value, int $limit): string
     {
@@ -124,7 +131,13 @@ final class PosterShareService
     {
         $base = rtrim((string) ((new CoreSysConfigService())->getSceneDomain($this->context->site)['wap_url'] ?? ''), '/');
         $parts = parse_url($base);
-        if (!$parts || !in_array($parts['scheme'] ?? '', ['http', 'https'], true) || empty($parts['host']) || isset($parts['user']) || isset($parts['pass']) || isset($parts['query']) || isset($parts['fragment'])) throw new CommonException('本站手机端访问地址未配置，请联系管理员');
+        if (!$parts
+            || !in_array($parts['scheme'] ?? '', ['http', 'https'], true)
+            || empty($parts['host'])
+            || isset($parts['user'])
+            || isset($parts['pass'])
+            || isset($parts['query'])
+            || isset($parts['fragment'])) throw new CommonException('本站手机端访问地址未配置，请联系管理员');
         $scene = implode('&', array_map(static fn (array $item): string => $item['key'].'-'.$item['value'], $data));
         if (strlen($scene) > 32) throw new CommonException('扫码参数超出小程序长度限制，请联系管理员');
         // Only actor-bound facts belong in GetPosterData. The framework replaces

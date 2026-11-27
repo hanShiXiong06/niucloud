@@ -59,7 +59,9 @@ final class SyncService
             $run['message'] = mb_substr($summary['note'], 0, 500).'（已取'.$run['page_count'].'页、'.$run['record_count'].'条设备）';
         }
         $run['scheduler_required'] = in_array($run['status'], ['pending', 'running'], true);
-        $run['can_advance'] = $run['scheduler_required'] && (int) $connection['active_run_id'] === $runId && (int) $connection['config_version'] === (int) $run['config_version'];
+        $run['can_advance'] = $run['scheduler_required']
+            && (int) $connection['active_run_id'] === $runId
+            && (int) $connection['config_version'] === (int) $run['config_version'];
         $provider = (string) $connection['provider'];
         $run['channel_enabled'] = $provider !== '' && (new ProviderChannelService($site))->enabled($provider);
         if (!$run['channel_enabled']) {
@@ -99,13 +101,27 @@ final class SyncService
                 return null;
             }
             if ((int) Data::row('merchant', $site, (int) $run['merchant_id'])['status'] !== 1) {
-                Data::query('sync_run', $site)->where('id', $runId)->update(['status' => 'cancelled', 'error_message' => '商户已暂停，本轮未发布', 'finished_at' => time(), 'update_time' => time()]);
+                Data::query('sync_run', $site)->where('id', $runId)->update([
+                        'status' => 'cancelled',
+                        'error_message' => '商户已暂停，本轮未发布',
+                        'finished_at' => time(),
+                        'update_time' => time()
+                    ]);
                 Data::query('connection', $site)->where('id', $conn['id'])->update(['active_run_id' => 0, 'lease_token' => '', 'lease_until' => 0,
                     'last_sync_status' => 'cancelled', 'last_sync_message' => '商户已暂停，本轮未发布', 'update_time' => time()]);
                 return null;
             }
-            Data::query('connection', $site)->where('id', $conn['id'])->update(['lease_token' => $lease, 'lease_until' => time() + 180, 'last_sync_status' => 'running', 'update_time' => time()]);
-            Data::query('sync_run', $site)->where('id', $runId)->update(['status' => 'running', 'started_at' => $run['started_at'] ?: time(), 'update_time' => time()]);
+            Data::query('connection', $site)->where('id', $conn['id'])->update([
+                    'lease_token' => $lease,
+                    'lease_until' => time() + 180,
+                    'last_sync_status' => 'running',
+                    'update_time' => time()
+                ]);
+            Data::query('sync_run', $site)->where('id', $runId)->update([
+                    'status' => 'running',
+                    'started_at' => $run['started_at'] ?: time(),
+                    'update_time' => time()
+                ]);
             return [$conn, $run];
         });
         if (!$claim) return $this->detail($site, $runId);
@@ -171,7 +187,8 @@ final class SyncService
                 if (count($tenants) > 1) throw new CommonException('库存响应跨租户，本轮未发布');
                 if ($conn['store_id'] === '' && count($stores) > 1) throw new CommonException('账号包含多个来源门店，请在高级设置填写来源门店ID后重新同步');
                 $key = hash('sha256', $item['source_key']);
-                if (isset($keys[$key]) || Data::query('inventory', $site)->where('connection_id', $conn['id'])->where('sync_run_id', $runId)->where('source_key', $key)->count()) {
+                if (isset($keys[$key])
+                    || Data::query('inventory', $site)->where('connection_id', $conn['id'])->where('sync_run_id', $runId)->where('source_key', $key)->count()) {
                     throw new CommonException('分页出现重复设备，本轮未发布，请稍后重新同步');
                 }
                 $keys[$key] = true;
@@ -198,7 +215,9 @@ final class SyncService
                 $policy = new ProviderChannelService($site);
                 $policy->lockSite();
                 $current = Data::row('connection', $site, (int) $conn['id'], true);
-                if ($current['lease_token'] !== $lease || (int) $current['active_run_id'] !== $runId || (int) $current['config_version'] !== (int) $run['config_version']) {
+                if ($current['lease_token'] !== $lease
+                    || (int) $current['active_run_id'] !== $runId
+                    || (int) $current['config_version'] !== (int) $run['config_version']) {
                     throw new CommonException('配置或执行权已变更，本轮数据未发布');
                 }
                 $policy->assertEnabled((string) $current['provider']);
@@ -241,7 +260,9 @@ final class SyncService
             $policy = new ProviderChannelService($site);
             $policy->lockSite();
             $current = Data::row('connection', $site, (int) $connection['id'], true);
-            if ($current['lease_token'] !== $lease || (int) $current['active_run_id'] !== $runId || (int) $current['config_version'] !== (int) $run['config_version']) {
+            if ($current['lease_token'] !== $lease
+                || (int) $current['active_run_id'] !== $runId
+                || (int) $current['config_version'] !== (int) $run['config_version']) {
                 throw new CommonException('配置或执行权已变更，新授权未写入；请核对当前接入');
             }
             $policy->assertEnabled((string) $current['provider']);
@@ -287,7 +308,13 @@ final class SyncService
     private function expireGeneration(int $site, array $run, array $connection): void
     {
         $message = '本轮暂存库存已过期，未发布；已保留历史。自动同步会重新完整读取，手动同步请启动新一轮。';
-        Data::query('sync_run', $site)->where('id', $run['id'])->update(['status' => 'cancelled', 'error_code' => 'generation_expired', 'error_message' => $message, 'finished_at' => time(), 'update_time' => time()]);
+        Data::query('sync_run', $site)->where('id', $run['id'])->update([
+                'status' => 'cancelled',
+                'error_code' => 'generation_expired',
+                'error_message' => $message,
+                'finished_at' => time(),
+                'update_time' => time()
+            ]);
         Data::query('connection', $site)->where('id', $connection['id'])->update(['active_run_id' => 0, 'lease_token' => '', 'lease_until' => 0,
             'last_sync_status' => 'cancelled', 'last_sync_message' => $message, 'next_sync_at' => time(), 'update_time' => time()]);
         Data::audit($site, 0, 0, 'sync_run', (int) $run['id'], 'generation_expired', []);

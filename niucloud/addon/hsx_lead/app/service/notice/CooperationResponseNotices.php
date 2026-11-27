@@ -33,13 +33,23 @@ final class CooperationResponseNotices
     {
         $policy = AccountNoticePolicyService::raw($site);
         $channels = array_keys(array_filter($policy['events'][self::ACCEPTED]['channels'] ?? []));
-        $typed = AccountNoticePolicyService::installed($site) && !empty($policy['enabled']) && !empty($policy['events'][self::ACCEPTED]['enabled']) && $channels !== [];
+        $typed = AccountNoticePolicyService::installed($site)
+            && !empty($policy['enabled'])
+            && !empty($policy['events'][self::ACCEPTED]['enabled'])
+            && $channels !== [];
         if (!$plan && !$typed)return [];
         if (!$plan) {
             $rule = Data::decode($lead['rule_json'] ?? '');
             $member = (int) ($rule['publisher_member_id'] ?? 0);
             if ($member <= 0)$member = (int) Data::row('merchant', $site, (int) $lead['publisher_id'])['member_id'];
-            $plan = ['version' => (int) $lead['assignment_version'], 'assigned_at' => (int) $lead['create_time'], 'deadline' => (int) $lead['response_deadline'], 'publisher_member_id' => $member, 'nodes' => [], 'events' => []];
+            $plan = [
+                'version' => (int) $lead['assignment_version'],
+                'assigned_at' => (int) $lead['create_time'],
+                'deadline' => (int) $lead['response_deadline'],
+                'publisher_member_id' => $member,
+                'nodes' => [],
+                'events' => []
+            ];
         }
         if ($typed)$plan['events'][self::ACCEPTED] = $channels;
         $plan['acceptance'] = ['accepted_at' => $acceptedAt, 'typed' => $typed, 'recordable' => $typed];
@@ -119,7 +129,16 @@ final class CooperationResponseNotices
     public static function invalidatePending(int $site, int $leadId): void
     {
         Db::name('hsx_lead_notice_task')->where('site_id', $site)->where('source_type', 'collaboration_assignment')->where('source_id', $leadId)
-            ->whereIn('event_key', [self::REMINDER, self::OVERDUE])->whereIn('status', ['pending', 'retry_wait', 'pending_configuration', 'pending_recipient', 'pending_authorization', 'paused', 'rejected', 'exhausted'])
+            ->whereIn('event_key', [self::REMINDER, self::OVERDUE])->whereIn('status', [
+                    'pending',
+                    'retry_wait',
+                    'pending_configuration',
+                    'pending_recipient',
+                    'pending_authorization',
+                    'paused',
+                    'rejected',
+                    'exhausted'
+                ])
             ->update(['status' => 'obsolete', 'last_message' => '交付已处理或已更换，不再发送原提醒', 'update_time' => time()]);
     }
     public static function enqueue(int $site, int $id): void
@@ -140,7 +159,13 @@ final class CooperationResponseNotices
         $cutoff = time() - (int) AccountNoticePolicyService::raw($site)['ttl_seconds'];
         // Only this release's explicit plan is recoverable. SQL excludes old unplanned/history rows before any source lock.
         // Existing collaboration indexes do not cover the JSON marker/deadline, so LIMIT bounds returned candidates, not all examined rows.
-        $rows = Db::name('hsx_lead_collaboration')->where('site_id', $site)->where('id', '>', $cursor)->whereIn('status', ['assigned', 'following', 'unpaid', 'paid', 'no_deal'])
+        $rows = Db::name('hsx_lead_collaboration')->where('site_id', $site)->where('id', '>', $cursor)->whereIn('status', [
+                'assigned',
+                'following',
+                'unpaid',
+                'paid',
+                'no_deal'
+            ])
             ->whereLike('rule_json', '%"response_notice_plan":{%')->where(function ($q) use ($cutoff) {$q->where('accepted_at', '>=', $cutoff)->whereOr(function ($pending) use ($cutoff) {$pending->where('status', 'assigned')->where('response_deadline', '>=', $cutoff);});})
             ->order('id')->limit(max(1, min(200, $limit)))->column('id');
         $count = 0;
@@ -153,19 +178,29 @@ final class CooperationResponseNotices
         $snapshot = Data::decode($task['payload_json'] ?? '');
         $lead = Store::query('collaboration', (int) $task['site_id'])->where('id', $task['source_id'])->find();
         if (!$lead || (int) ($snapshot['site_id'] ?? 0) !== (int) $task['site_id'] || (int) ($snapshot['lead_id'] ?? 0) !== (int) $task['source_id']
-            || (int) ($snapshot['assignment_version'] ?? 0) !== (int) $lead['assignment_version'] || (int) ($snapshot['receiver_id'] ?? 0) !== (int) $lead['receiver_id'] || (int) ($snapshot['publisher_id'] ?? 0) !== (int) $lead['publisher_id'])throw new ObsoleteNoticeException('原交付已变化');
+            || (int) ($snapshot['assignment_version'] ?? 0) !== (int) $lead['assignment_version']
+                || (int) ($snapshot['receiver_id'] ?? 0) !== (int) $lead['receiver_id']
+                || (int) ($snapshot['publisher_id'] ?? 0) !== (int) $lead['publisher_id'])throw new ObsoleteNoticeException('原交付已变化');
         $plan = Data::decode($lead['rule_json'] ?? '')['response_notice_plan'] ?? [];
         if ((int) ($plan['version'] ?? 0) !== (int) $lead['assignment_version'] || empty($plan['events'][$task['event_key']])
             || !in_array($task['channel'], $plan['events'][$task['event_key']], true))throw new ObsoleteNoticeException('原通知计划不存在');
         if ($task['event_key'] === self::ACCEPTED) {
-            if (empty($plan['acceptance']['recordable']) || (int) $lead['accepted_at'] <= 0 || (int) $lead['accepted_at'] !== (int) ($snapshot['accepted_at'] ?? 0) || !in_array($lead['status'], ['following', 'unpaid', 'paid', 'no_deal'], true))throw new ObsoleteNoticeException('接单事实未确认');
-        } elseif ($lead['status'] !== 'assigned' || (int) $lead['accepted_at'] !== 0 || (int) $lead['response_deadline'] !== (int) ($snapshot['response_deadline'] ?? 0))throw new ObsoleteNoticeException('原交付已处理');
-        elseif ($task['event_key'] === self::REMINDER && ((int) $snapshot['planned_at'] > time() || (int) $task['expires_at'] <= time() || (int) $lead['response_deadline'] <= time()))throw new ObsoleteNoticeException('原提醒节点已过时');
+            if (empty($plan['acceptance']['recordable'])
+                || (int) $lead['accepted_at'] <= 0
+                || (int) $lead['accepted_at'] !== (int) ($snapshot['accepted_at'] ?? 0)
+                || !in_array($lead['status'], ['following', 'unpaid', 'paid', 'no_deal'], true))throw new ObsoleteNoticeException('接单事实未确认');
+        } elseif ($lead['status'] !== 'assigned'
+            || (int) $lead['accepted_at'] !== 0
+            || (int) $lead['response_deadline'] !== (int) ($snapshot['response_deadline'] ?? 0))throw new ObsoleteNoticeException('原交付已处理');
+        elseif ($task['event_key'] === self::REMINDER
+            && ((int) $snapshot['planned_at'] > time() || (int) $task['expires_at'] <= time() || (int) $lead['response_deadline'] <= time()))throw new ObsoleteNoticeException('原提醒节点已过时');
         elseif ($task['event_key'] === self::OVERDUE && (int) $lead['response_deadline'] > time())throw new NoticePreflightException('尚未到超时提醒时刻');
         $party = $task['event_key'] === self::REMINDER ? 'receiver' : 'publisher';
         $recipients = self::recipients((int) $task['site_id'], $lead, $plan, $party);
         $recipient = $recipients[(int) $task['recipient_member_id']] ?? null;
-        if (!$recipient || (int) $recipient['merchant_id'] !== (int) ($snapshot['merchant_id'] ?? 0) || $recipient['role'] !== ($snapshot['recipient_role'] ?? ''))throw new ObsoleteNoticeException('接收成员已变化');
+        if (!$recipient
+            || (int) $recipient['merchant_id'] !== (int) ($snapshot['merchant_id'] ?? 0)
+            || $recipient['role'] !== ($snapshot['recipient_role'] ?? ''))throw new ObsoleteNoticeException('接收成员已变化');
         if ((int) ($snapshot['recipient_member_id'] ?? 0) !== (int) $task['recipient_member_id'])throw new NoticePreflightException('通知接收会员快照不一致');
         return $lead;
     }

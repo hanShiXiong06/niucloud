@@ -70,7 +70,8 @@ final class Workbench extends BaseAdminController
         $ctx = $this->context();
         $ctx->manager();
         $input = $this->request->param();
-        if (($input['library'] ?? null) === '1' || ($input['library'] ?? null) === 1) return success((new \addon\hsx_lead\app\service\WeappNoticeLibrary())->read($ctx->site, $input));
+        if (($input['library'] ?? null) === '1'
+            || ($input['library'] ?? null) === 1) return success((new \addon\hsx_lead\app\service\WeappNoticeLibrary())->read($ctx->site, $input));
         return success((new NoticeConfigService())->get($ctx->site));
     }
     public function saveNoticeConfig()

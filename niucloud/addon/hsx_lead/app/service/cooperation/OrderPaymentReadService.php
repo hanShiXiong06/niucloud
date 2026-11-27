@@ -33,7 +33,9 @@ final class OrderPaymentReadService
         $rows = $q->limit(2)->select()->toArray();
         if (!$rows)return null;
         if ((string) ($order['out_trade_no'] ?? '') !== '' && count($rows) !== 1)return null;
-        if (count($rows) > 1 && (int) $rows[0]['status'] === (int) PayDict::STATUS_FINISH && (int) $rows[1]['status'] === (int) PayDict::STATUS_FINISH)return null;
+        if (count($rows) > 1
+            && (int) $rows[0]['status'] === (int) PayDict::STATUS_FINISH
+            && (int) $rows[1]['status'] === (int) PayDict::STATUS_FINISH)return null;
         return $rows[0];
     }
     /** Typed source evidence is required for attested receipts, not for an
@@ -87,7 +89,11 @@ final class OrderPaymentReadService
             if (!is_string($value) || !in_array($value, $allowed, true))throw new CommonException('支付方式或终端筛选无效');
             // Match the same canonical cashier row used for presentation, not an abandoned attempt.
             // The plain int equality lets idx_site_trade (scripts/upgrade-pay-indexes.php) serve the lookup; BINARY keeps exact semantics.
-            $query->whereRaw("(SELECT p.`$field` FROM `{$prefix}pay` p WHERE p.site_id=? AND p.trade_type=? AND p.trade_id=`{$prefix}hsx_lead_coop_order`.id AND BINARY p.trade_id=BINARY CAST(`{$prefix}hsx_lead_coop_order`.id AS CHAR) AND (`{$prefix}hsx_lead_coop_order`.out_trade_no='' OR BINARY p.out_trade_no=BINARY `{$prefix}hsx_lead_coop_order`.out_trade_no) ORDER BY CASE WHEN p.status=2 THEN 0 WHEN p.status=1 THEN 1 WHEN p.status=0 THEN 2 ELSE 3 END,p.id DESC LIMIT 1)=?", [$site, PaymentService::TRADE_TYPE, $value]);
+            $query->whereRaw("(SELECT p.`$field` FROM `{$prefix}pay` p WHERE p.site_id=? AND p.trade_type=? AND p.trade_id=`{$prefix}hsx_lead_coop_order`.id AND BINARY p.trade_id=BINARY CAST(`{$prefix}hsx_lead_coop_order`.id AS CHAR) AND (`{$prefix}hsx_lead_coop_order`.out_trade_no='' OR BINARY p.out_trade_no=BINARY `{$prefix}hsx_lead_coop_order`.out_trade_no) ORDER BY CASE WHEN p.status=2 THEN 0 WHEN p.status=1 THEN 1 WHEN p.status=0 THEN 2 ELSE 3 END,p.id DESC LIMIT 1)=?", [
+                    $site,
+                    PaymentService::TRADE_TYPE,
+                    $value
+                ]);
         }
         if (isset($params['refund_status']) && $params['refund_status'] !== '') {
             $value = $params['refund_status'];

@@ -88,13 +88,17 @@ final class MembershipCatalogService
         $caps = [];
         foreach (self::CAPABILITIES as $key) $caps[$key] = self::flag($config[$key] ?? null, '协作权益 '.$key);
         $cycles = $config['cycles'] ?? null;
-        if (!is_array($cycles) || count($cycles) > 50 || !\addon\hsx_lead\app\support\PhpRuntime::isList($cycles)) throw new CommonException('会员购买周期请设置为最多50项的列表');
+        if (!is_array($cycles)
+            || count($cycles) > 50
+            || !\addon\hsx_lead\app\support\PhpRuntime::isList($cycles)) throw new CommonException('会员购买周期请设置为最多50项的列表');
         $seen = [];
         $periods = [];
         foreach ($cycles as $cycle) {
             if (!is_array($cycle)) throw new CommonException('会员购买周期格式异常');
             $key = $cycle['key'] ?? null;
-            if (!is_string($key) || !preg_match('/^[A-Za-z][A-Za-z0-9_-]{0,23}$/D', $key) || isset($seen[$key])) throw new CommonException('会员周期标识须唯一，使用24位以内的字母、数字、横线或下划线');
+            if (!is_string($key)
+                || !preg_match('/^[A-Za-z][A-Za-z0-9_-]{0,23}$/D', $key)
+                || isset($seen[$key])) throw new CommonException('会员周期标识须唯一，使用24位以内的字母、数字、横线或下划线');
             $seen[$key] = true;
             $on = self::flag($cycle['enabled'] ?? null, '购买周期开关');
             $months = self::integer($cycle['months'] ?? 1, 1, 120, '购买周期月份');
@@ -138,17 +142,37 @@ final class MembershipCatalogService
     {
         if (!is_array($input))throw new CommonException('等级外观配置请使用对象');
         $preset = $input['preset'] ?? 'auto';
-        if (!is_string($preset) || !in_array($preset, ['auto', 'bronze', 'silver', 'gold', 'sapphire', 'amethyst', 'obsidian', 'custom'], true))throw new CommonException('请选择有效的等级外观预设');
-        $resolved = $preset === 'auto' ? ($displayRank <= 0 ? 'neutral' : (['bronze', 'silver', 'gold', 'sapphire', 'amethyst', 'obsidian'][min(5, $displayRank - 1)])) : $preset;
+        if (!is_string($preset)
+            || !in_array($preset, [
+                    'auto',
+                    'bronze',
+                    'silver',
+                    'gold',
+                    'sapphire',
+                    'amethyst',
+                    'obsidian',
+                    'custom'
+                ], true))throw new CommonException('请选择有效的等级外观预设');
+        $resolved = $preset === 'auto' ? ($displayRank <= 0 ? 'neutral' : ([
+                    'bronze',
+                    'silver',
+                    'gold',
+                    'sapphire',
+                    'amethyst',
+                    'obsidian'
+                ][min(5, $displayRank - 1)])) : $preset;
         $base = self::VISUAL_PRESETS[$resolved === 'custom' ? 'bronze' : $resolved];
         $out = ['preset' => $resolved];
         foreach (['start_color', 'end_color', 'text_color', 'accent_color'] as $i => $key) {
             $color = $input[$key] ?? '';
-            if (!is_string($color) || ($color !== '' && !preg_match('/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/iD', $color)))throw new CommonException('等级外观颜色请使用#RGB或#RRGGBB格式');
+            if (!is_string($color)
+                || ($color !== '' && !preg_match('/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/iD', $color)))throw new CommonException('等级外观颜色请使用#RGB或#RRGGBB格式');
             $out[$key] = $preset === 'custom' && $color !== '' ? strtoupper($color) : $base[$i];
         }
         $angle = $input['angle'] ?? 135;
-        if ((!is_int($angle) && !is_string($angle)) || !preg_match('/^(?:0|[1-9][0-9]{0,2})$/D', (string) $angle) || (int) $angle > 360)throw new CommonException('等级渐变角度请填写0到360之间的整数');
+        if ((!is_int($angle) && !is_string($angle))
+            || !preg_match('/^(?:0|[1-9][0-9]{0,2})$/D', (string) $angle)
+            || (int) $angle > 360)throw new CommonException('等级渐变角度请填写0到360之间的整数');
         $out['angle'] = (int) $angle;
         $out['card_image'] = self::visualImage($input['card_image'] ?? '');
         $out['avatar_effect'] = self::flag($input['avatar_effect'] ?? true, '等级头像效果开关');
@@ -164,13 +188,20 @@ final class MembershipCatalogService
         $path = is_array($parts) ? (string) ($parts['path'] ?? '') : '';
         if (preg_match('~(?:^|/)\.\.(?:/|$)~', rawurldecode($path)))throw new CommonException('等级卡片图片地址不能跨越目录');
         if (preg_match('~^https?://~i', $value)) {
-            if (!filter_var($value, FILTER_VALIDATE_URL) || !is_array($parts) || empty($parts['host']) || isset($parts['user']) || isset($parts['pass']))throw new CommonException('请使用有效的HTTP或HTTPS图片地址');
+            if (!filter_var($value, FILTER_VALIDATE_URL)
+                || !is_array($parts)
+                || empty($parts['host'])
+                || isset($parts['user'])
+                || isset($parts['pass']))throw new CommonException('请使用有效的HTTP或HTTPS图片地址');
             return $value;
         }
         // Exactly the packaged membership-cover gallery, not arbitrary addon
         // files, encoded aliases or administrator-supplied resource names.
         if (preg_match('~^addon/hsx_lead/member-covers/(?:bronze|silver|gold|sapphire|amethyst|obsidian)\.(?:png|gif)$~D', $value))return $value;
-        if (!preg_match('~^/?(?:upload|uploads|attachment)/[^?#]+$~uD', $value) || !is_array($parts) || isset($parts['scheme']) || isset($parts['host']))throw new CommonException('请使用上传返回的相对图片路径或HTTP(S)图片地址');
+        if (!preg_match('~^/?(?:upload|uploads|attachment)/[^?#]+$~uD', $value)
+            || !is_array($parts)
+            || isset($parts['scheme'])
+            || isset($parts['host']))throw new CommonException('请使用上传返回的相对图片路径或HTTP(S)图片地址');
         return $value;
     }
     public static function validCode($code): bool
@@ -179,7 +210,11 @@ final class MembershipCatalogService
     }
     private static function integer($value, int $min, int $max, string $label): int
     {
-        if ((!is_int($value) && !is_string($value)) || !preg_match('/^(?:0|[1-9][0-9]*)$/D', (string) $value) || strlen((string) $value) > 10 || (int) $value < $min || (int) $value > $max) throw new CommonException($label.'无效');
+        if ((!is_int($value) && !is_string($value))
+            || !preg_match('/^(?:0|[1-9][0-9]*)$/D', (string) $value)
+            || strlen((string) $value) > 10
+            || (int) $value < $min
+            || (int) $value > $max) throw new CommonException($label.'无效');
         return (int) $value;
     }
     private static function flag($value, string $label): bool

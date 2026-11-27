@@ -147,6 +147,17 @@ final class SyncStatus
 
     private static function status(mixed $value): string
     {
-        return is_string($value) && in_array($value, ['idle', 'pending', 'running', 'completed', 'failed', 'cancelled', 'interrupted', 'paused', 'unknown'], true) ? $value : 'unknown';
+        return is_string($value)
+            && in_array($value, [
+                    'idle',
+                    'pending',
+                    'running',
+                    'completed',
+                    'failed',
+                    'cancelled',
+                    'interrupted',
+                    'paused',
+                    'unknown'
+                ], true) ? $value : 'unknown';
     }
 }

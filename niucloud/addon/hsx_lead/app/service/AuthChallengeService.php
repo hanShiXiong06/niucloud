@@ -147,7 +147,10 @@ final class AuthChallengeService
         if (!is_array($input)) throw new CommonException('请填写ERP授权账号');
         $keys = $capability['credential_fields'] ?? null;
         $fields = $definition->metadata()['fields'] ?? [];
-        if (!is_array($keys) || !\addon\hsx_lead\app\support\PhpRuntime::isList($keys) || !$keys || count($keys) > 10) throw new CommonException('ERP交互授权字段配置异常');
+        if (!is_array($keys)
+            || !\addon\hsx_lead\app\support\PhpRuntime::isList($keys)
+            || !$keys
+            || count($keys) > 10) throw new CommonException('ERP交互授权字段配置异常');
         $declared = [];
         foreach ($fields as $field) if (is_array($field) && is_string($field['key'] ?? null)) $declared[$field['key']] = $field;
         $identity = [];
@@ -245,7 +248,10 @@ final class AuthChallengeService
     private function companies(#[\SensitiveParameter] mixed $rows): array
     {
         $secretTrace = \addon\hsx_lead\app\support\PhpRuntime::guardSecrets();
-        if (!is_array($rows) || !\addon\hsx_lead\app\support\PhpRuntime::isList($rows) || !$rows || count($rows) > 100) throw new ProviderException('schema_changed', 'ERP未返回可核对的公司列表');
+        if (!is_array($rows)
+            || !\addon\hsx_lead\app\support\PhpRuntime::isList($rows)
+            || !$rows
+            || count($rows) > 100) throw new ProviderException('schema_changed', 'ERP未返回可核对的公司列表');
         $safe = [];
         $seen = [];
         foreach ($rows as $row) {
@@ -336,7 +342,13 @@ final class AuthChallengeService
     }
     private function rateKey(array $binding): string
     {
-        return 'hsx_lead.auth.rate.'.hash('sha256', Data::json(array_intersect_key($binding, array_flip(['site', 'uid', 'member_id', 'merchant_id', 'provider']))));
+        return 'hsx_lead.auth.rate.'.hash('sha256', Data::json(array_intersect_key($binding, array_flip([
+                            'site',
+                            'uid',
+                            'member_id',
+                            'merchant_id',
+                            'provider'
+                        ]))));
     }
 
     /** Cache get/set is not atomic. Serialize SMS claims across all sites and
@@ -361,7 +373,8 @@ final class AuthChallengeService
                     $key = 'hsx_lead.auth.sms.'.hash('sha256', Data::json(['provider' => $binding['provider'], 'identity_fingerprint' => $binding['identity_fingerprint']]));
                     $rate = Cache::get($key);
                     if (is_array($rate) && (int) ($rate['next_at'] ?? 0) > $now) throw new CommonException('请稍候再获取短信验证码；上次结果尚未确认时也不会自动重发');
-                    if (!is_array($rate) || (int) ($rate['reset_at'] ?? 0) <= $now) $rate = ['count' => 0, 'reset_at' => $now + self::SMS_HOUR_SECONDS, 'next_at' => 0];
+                    if (!is_array($rate)
+                        || (int) ($rate['reset_at'] ?? 0) <= $now) $rate = ['count' => 0, 'reset_at' => $now + self::SMS_HOUR_SECONDS, 'next_at' => 0];
                     if ((int) ($rate['count'] ?? 0) >= self::SMS_MAX_HOURLY) throw new CommonException('该手机号本小时验证码申请次数已达上限，请稍后再试');
                     $rate['count'] = (int) ($rate['count'] ?? 0) + 1;
                     $rate['next_at'] = $now + self::RATE_SECONDS;

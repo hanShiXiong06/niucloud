@@ -196,7 +196,8 @@ final class JixiaoerProvider extends AbstractProvider
         if (($cursor['version'] ?? null) !== self::CURSOR_VERSION || ($cursor['size'] ?? null) !== $size
             || ($cursor['scope'] ?? null) !== $fingerprint || !in_array($cursor['phase'] ?? null, ['catalog', 'listed', 'stock'], true)
             || !is_int($cursor['phase_page'] ?? null) || $cursor['phase_page'] < 1 || $cursor['phase_page'] > $page
-            || !array_key_exists('expected_total', $cursor) || ($cursor['expected_total'] !== null && (!is_int($cursor['expected_total']) || $cursor['expected_total'] < 0 || $cursor['expected_total'] > self::MAX_INDEX))
+            || !array_key_exists('expected_total', $cursor)
+                || ($cursor['expected_total'] !== null && (!is_int($cursor['expected_total']) || $cursor['expected_total'] < 0 || $cursor['expected_total'] > self::MAX_INDEX))
             || !is_int($cursor['skipped_parent'] ?? null) || $cursor['skipped_parent'] < 0) {
             throw new ProviderException('invalid_scope', '机小二同步进度或查询范围已变化，请重新开始同步');
         }

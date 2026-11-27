@@ -72,15 +72,23 @@ final class ProfileFormService
         if ($row['type'] !== 'DIY_FORM')throw new CommonException('门店补充资料请选择“自定义表单”，不能复用其他业务专用表单');
         $value = $row['value'];
         if (is_string($value))$value = json_decode($value, true);
-        if (!is_array($value) || !is_array($value['value'] ?? null) || count($value['value']) > 40 || strlen(Data::json($value)) > 524288)throw new CommonException('补充资料表单结构无效或超过40项，请管理员核对');
+        if (!is_array($value)
+            || !is_array($value['value'] ?? null)
+            || count($value['value']) > 40
+            || strlen(Data::json($value)) > 524288)throw new CommonException('补充资料表单结构无效或超过40项，请管理员核对');
         $components = [];
         $seen = [];
         foreach ($value['value'] as $component) {
             if (!is_array($component))throw new CommonException('补充资料存在无法识别的组件');
             if (($component['componentName'] ?? '') === 'FormSubmit')continue;
-            if (($component['componentType'] ?? '') !== 'diy_form' || !in_array($component['componentName'] ?? '', self::TYPES, true))throw new CommonException('补充资料暂不支持组件：'.substr((string) ($component['componentName'] ?? '未知'), 0, 60).'；请使用文本、电话、邮箱、数字、单多选或日期');
+            if (($component['componentType'] ?? '') !== 'diy_form'
+                || !in_array($component['componentName'] ?? '', self::TYPES, true))throw new CommonException('补充资料暂不支持组件：'.substr((string) ($component['componentName'] ?? '未知'), 0, 60).'；请使用文本、电话、邮箱、数字、单多选或日期');
             $id = $component['id'] ?? '';
-            if (!is_string($id) || !preg_match('/^[A-Za-z0-9_-]{1,100}$/D', $id) || in_array($id, ['__proto__', 'prototype', 'constructor'], true) || isset($seen[$id]) || !is_array($component['field'] ?? null))throw new CommonException('补充资料字段标识缺失、保留或重复，请管理员重新保存表单');
+            if (!is_string($id)
+                || !preg_match('/^[A-Za-z0-9_-]{1,100}$/D', $id)
+                || in_array($id, ['__proto__', 'prototype', 'constructor'], true)
+                || isset($seen[$id])
+                || !is_array($component['field'] ?? null))throw new CommonException('补充资料字段标识缺失、保留或重复，请管理员重新保存表单');
             $seen[$id] = true;
             $name = $component['field']['name'] ?? null;
             if (!is_string($name) || trim($name) === '' || mb_strlen($name) > 100)throw new CommonException('补充资料字段名称无效，请管理员核对');
@@ -93,17 +101,40 @@ final class ProfileFormService
                 foreach ($options as $option) {
                     $optionId = $option['id'] ?? null;
                     $optionText = $option['text'] ?? null;
-                    if (!is_array($option) || !is_string($optionId) || !preg_match('/^[A-Za-z0-9_-]{1,100}$/D', $optionId) || in_array($optionId, ['__proto__', 'prototype', 'constructor'], true) || isset($ids[$optionId]) || !is_string($optionText) || trim($optionText) === '' || mb_strlen($optionText) > 200)throw new CommonException('补充资料选择项标识或名称无效');
+                    if (!is_array($option)
+                        || !is_string($optionId)
+                        || !preg_match('/^[A-Za-z0-9_-]{1,100}$/D', $optionId)
+                        || in_array($optionId, ['__proto__', 'prototype', 'constructor'], true)
+                        || isset($ids[$optionId])
+                        || !is_string($optionText)
+                        || trim($optionText) === ''
+                        || mb_strlen($optionText) > 200)throw new CommonException('补充资料选择项标识或名称无效');
                     $ids[$optionId] = true;
                 }
                 $range = $component['selectableNum'] ?? ['min' => 0, 'max' => 0];
-                foreach (['min', 'max'] as $bound)if (!isset($range[$bound]) || !is_numeric($range[$bound]) || (int) $range[$bound] != (float) $range[$bound] || (int) $range[$bound] < 0 || (int) $range[$bound] > 100)throw new CommonException('多选数量范围无效');
+                foreach (['min', 'max'] as $bound)if (!isset($range[$bound])
+                    || !is_numeric($range[$bound])
+                    || (int) $range[$bound] != (float) $range[$bound]
+                    || (int) $range[$bound] < 0
+                    || (int) $range[$bound] > 100)throw new CommonException('多选数量范围无效');
                 if ((int) $range['max'] > 0 && (int) $range['min'] > (int) $range['max'])throw new CommonException('多选最少数量不能超过最多数量');
             }
-            if ($component['componentName'] === 'FormDate' && !in_array($component['dateFormat'] ?? 'YYYY年M月D日', ['YYYY年M月D日', 'YYYY-MM-DD', 'YYYY/MM/DD', 'YYYY-MM-DD HH:mm'], true))throw new CommonException('补充资料请选择日期或日期时间格式，暂不支持纯时间');
+            if ($component['componentName'] === 'FormDate'
+                && !in_array($component['dateFormat'] ?? 'YYYY年M月D日', [
+                        'YYYY年M月D日',
+                        'YYYY-MM-DD',
+                        'YYYY/MM/DD',
+                        'YYYY-MM-DD HH:mm'
+                    ], true))throw new CommonException('补充资料请选择日期或日期时间格式，暂不支持纯时间');
             if ($component['componentName'] === 'FormNumber') {
-                if (!is_array($component['formatLimit'] ?? []) || array_diff($component['formatLimit'] ?? [], ['support_negative_number', 'support_decimal', 'number_scope']))throw new CommonException('补充资料数字限制暂不支持');
-                if (in_array('number_scope', $component['formatLimit'] ?? [], true) && (!is_numeric($component['numberScope']['min'] ?? null) || !is_numeric($component['numberScope']['max'] ?? null) || (float) $component['numberScope']['min'] > (float) $component['numberScope']['max']))throw new CommonException('补充资料数字范围无效');
+                if (!is_array($component['formatLimit'] ?? [])
+                    || array_diff($component['formatLimit'] ?? [], [
+                            'support_negative_number',
+                            'support_decimal',
+                            'number_scope'
+                        ]))throw new CommonException('补充资料数字限制暂不支持');
+                if (in_array('number_scope', $component['formatLimit'] ?? [], true)
+                    && (!is_numeric($component['numberScope']['min'] ?? null) || !is_numeric($component['numberScope']['max'] ?? null) || (float) $component['numberScope']['min'] > (float) $component['numberScope']['max']))throw new CommonException('补充资料数字范围无效');
             }
             if (!empty($component['isHidden']))continue;
             $component['field']['cache'] = false;
@@ -117,7 +148,14 @@ final class ProfileFormService
             $components[] = $component;
         }
         if (!$components)throw new CommonException('补充资料表单没有可填写字段，请管理员核对');
-        return ['form_id' => (int) $row['form_id'], 'status' => 1, 'title' => (string) $row['title'], 'type' => 'DIY_FORM', 'global' => is_array($value['global'] ?? null) ? $value['global'] : [], 'value' => $components];
+        return [
+            'form_id' => (int) $row['form_id'],
+            'status' => 1,
+            'title' => (string) $row['title'],
+            'type' => 'DIY_FORM',
+            'global' => is_array($value['global'] ?? null) ? $value['global'] : [],
+            'value' => $components
+        ];
     }
     private function state(bool $strict = true, bool $lock = false): array
     {
@@ -152,7 +190,8 @@ final class ProfileFormService
         Db::transaction(function () use ($input, $next): void {
             Db::name('site')->where('site_id', $this->context->site)->lock(true)->find();
             $current = $this->state(false, true);
-            if (!is_string($input['expected_version'] ?? null) || !hash_equals($current['version'], $input['expected_version']))throw new CommonException('门店资料配置已变化，请刷新后重新核对');
+            if (!is_string($input['expected_version'] ?? null)
+                || !hash_equals($current['version'], $input['expected_version']))throw new CommonException('门店资料配置已变化，请刷新后重新核对');
             $this->definition($next, true);
             (new CoreConfigService())->setConfig($this->context->site, self::KEY, $next);
             $this->context->audit('profile_form_config', 0, 'updated', ['form_id' => $next['extra_form']['form_id'], 'enabled' => $next['extra_form']['enabled']]);
@@ -186,7 +225,10 @@ final class ProfileFormService
         $payload = $input['profile_form'] ?? null;
         $required = $state['extra_form']['enabled'] || $state['fields']['storefront_image']['required'] || $state['fields']['business_license']['required'];
         if ($payload !== null) {
-            if (!is_array($payload) || array_diff(array_keys($payload), ['version', 'form_id', 'values']) || !is_string($payload['version'] ?? null) || !hash_equals($state['version'], $payload['version']))throw new CommonException('门店资料表单已更新，请刷新后重新填写');
+            if (!is_array($payload)
+                || array_diff(array_keys($payload), ['version', 'form_id', 'values'])
+                || !is_string($payload['version'] ?? null)
+                || !hash_equals($state['version'], $payload['version']))throw new CommonException('门店资料表单已更新，请刷新后重新填写');
             $formId = $payload['form_id'] ?? null;
             if ((!is_int($formId) && !is_string($formId)) || !ctype_digit((string) $formId))throw new CommonException('补充资料表单标识无效');
         } elseif ($required)throw new CommonException('请刷新页面加载当前门店资料要求，再保存');
@@ -203,7 +245,8 @@ final class ProfileFormService
         $components = [];
         $fields = [];
         if ($state['extra_form']['enabled']) {
-            if ((int) ($payload['form_id'] ?? 0) !== $state['extra_form']['form_id'] || !is_array($payload['values'] ?? null))throw new CommonException('补充资料表单不匹配，请刷新后重新填写');
+            if ((int) ($payload['form_id'] ?? 0) !== $state['extra_form']['form_id']
+                || !is_array($payload['values'] ?? null))throw new CommonException('补充资料表单不匹配，请刷新后重新填写');
             $allowed = array_column($state['definition']['value'], null, 'id');
             if (array_diff(array_keys($payload['values']), array_keys($allowed)))throw new CommonException('补充资料包含未配置的字段');
             foreach ($allowed as $id => $component) {
@@ -211,20 +254,46 @@ final class ProfileFormService
                 if (self::blank($value) && $component['field']['required'])throw new CommonException(($component['field']['name'] ?? '资料项').'不能为空');
                 $component['field']['value'] = $value;
                 $components[] = $component;
-                $fields[] = ['id' => $id, 'label' => (string) ($component['field']['name'] ?? ''), 'type' => $component['componentName'], 'value' => $value, 'display_value' => self::display($value)];
+                $fields[] = [
+                    'id' => $id,
+                    'label' => (string) ($component['field']['name'] ?? ''),
+                    'type' => $component['componentName'],
+                    'value' => $value,
+                    'display_value' => self::display($value)
+                ];
             }
         } elseif ($payload !== null && ((int) ($payload['form_id'] ?? 0) !== 0 || !empty($payload['values'])))throw new CommonException('本站当前未启用补充资料表单，请刷新页面');
         $formId = $state['extra_form']['enabled'] ? $state['extra_form']['form_id'] : 0;
         // A plugin validation extension may reject by throwing. Its return
         // value is deliberately ignored: it cannot rewrite identity or rights.
-        event('HsxLeadMerchantProfileValidate', ['site_id' => $this->context->site, 'member_id' => $this->context->memberId, 'merchant_id' => (int) ($merchant['id'] ?? 0), 'form_id' => $formId, 'version' => $state['version'], 'fields' => $fields]);
-        return ['input' => $input, 'version' => $state['version'], 'form_id' => $formId, 'title' => $state['definition']['title'] ?? '', 'components' => $components, 'fields' => $fields];
+        event('HsxLeadMerchantProfileValidate', [
+                'site_id' => $this->context->site,
+                'member_id' => $this->context->memberId,
+                'merchant_id' => (int) ($merchant['id'] ?? 0),
+                'form_id' => $formId,
+                'version' => $state['version'],
+                'fields' => $fields
+            ]);
+        return [
+            'input' => $input,
+            'version' => $state['version'],
+            'form_id' => $formId,
+            'title' => $state['definition']['title'] ?? '',
+            'components' => $components,
+            'fields' => $fields
+        ];
     }
     public function persist(int $merchantId, array $prepared): void
     {
         if ((int) $prepared['form_id'] <= 0)return;
         try {
-            $id = (new CoreDiyFormRecordsService())->add(['site_id' => $this->context->site, 'member_id' => $this->context->memberId, 'relate_id' => $merchantId, 'form_id' => $prepared['form_id'], 'value' => $prepared['components']]);
+            $id = (new CoreDiyFormRecordsService())->add([
+                    'site_id' => $this->context->site,
+                    'member_id' => $this->context->memberId,
+                    'relate_id' => $merchantId,
+                    'form_id' => $prepared['form_id'],
+                    'value' => $prepared['components']
+                ]);
             if (!is_int($id) && (!is_string($id) || !ctype_digit($id)))throw new \RuntimeException('No verifiable framework record identity');
             $id = (int) $id;
             $hasAnswers = false;
@@ -237,7 +306,12 @@ final class ProfileFormService
                 $saved = Db::name('diy_form_records')->where('site_id', $this->context->site)->where('record_id', $id)->where('form_id', (int) $prepared['form_id'])->where('member_id', $this->context->memberId)->where('relate_id', $merchantId)->find();
                 if (!$saved || Data::decode($saved['value']) !== $prepared['components'])throw new \RuntimeException('Framework record read-back differs');
             }
-            $this->context->audit(self::ENTITY, $merchantId, 'saved', ['form_id' => (int) $prepared['form_id'], 'record_id' => $id, 'version' => $prepared['version'], 'title' => $prepared['title']]);
+            $this->context->audit(self::ENTITY, $merchantId, 'saved', [
+                    'form_id' => (int) $prepared['form_id'],
+                    'record_id' => $id,
+                    'version' => $prepared['version'],
+                    'title' => $prepared['title']
+                ]);
         } catch (\Throwable$error) {
             \think\facade\Log::warning('门店补充资料保存未完成：site='.$this->context->site.', merchant='.$merchantId.', type='.get_class($error));
             throw new CommonException('补充资料保存失败，门店资料未更新；请重试或联系管理员核对表单服务');
@@ -248,7 +322,11 @@ final class ProfileFormService
         $row = Data::query('audit', $this->context->site)->where('entity_type', self::ENTITY)->where('entity_id', $merchantId)->where('action', 'saved')->order('id desc')->find();
         if (!$row)return [];
         $data = Data::decode($row['detail_json']);
-        if ((int) ($data['record_id'] ?? 0) <= 0)return array_intersect_key($data, array_flip(['form_id', 'version', 'title'])) + ['fields' => [], '_submitted_member_id' => (int) $row['operator_member_id']];
+        if ((int) ($data['record_id'] ?? 0) <= 0)return array_intersect_key($data, array_flip([
+                    'form_id',
+                    'version',
+                    'title'
+                ])) + ['fields' => [], '_submitted_member_id' => (int) $row['operator_member_id']];
         // The record belongs to the merchant subject. The historical submitter
         // remains immutable if the current owner is legitimately reassigned.
         $record = Db::name('diy_form_records')->where('site_id', $this->context->site)->where('form_id', (int) ($data['form_id'] ?? 0))->where('record_id', (int) $data['record_id'])->where('relate_id', $merchantId)->where('member_id', (int) $row['operator_member_id'])->find();
@@ -258,9 +336,19 @@ final class ProfileFormService
         foreach ($components as $component) {
             if (!is_array($component) || !is_array($component['field'] ?? null))continue;
             $value = $component['field']['value'] ?? '';
-            $fields[] = ['id' => (string) $component['id'], 'label' => (string) ($component['field']['name'] ?? ''), 'type' => (string) $component['componentName'], 'value' => $value, 'display_value' => self::display($value)];
+            $fields[] = [
+                'id' => (string) $component['id'],
+                'label' => (string) ($component['field']['name'] ?? ''),
+                'type' => (string) $component['componentName'],
+                'value' => $value,
+                'display_value' => self::display($value)
+            ];
         }
-        return array_intersect_key($data, array_flip(['form_id', 'version', 'title'])) + ['fields' => $fields, '_submitted_member_id' => (int) $row['operator_member_id']];
+        return array_intersect_key($data, array_flip([
+                    'form_id',
+                    'version',
+                    'title'
+                ])) + ['fields' => $fields, '_submitted_member_id' => (int) $row['operator_member_id']];
     }
     public function adminRecord(int $merchantId): array
     {
@@ -293,7 +381,8 @@ final class ProfileFormService
         $type = $component['componentName'];
         $name = (string) ($component['field']['name'] ?? '资料项');
         if (self::blank($value)) {
-            if ($type === 'FormCheckbox' && (int) ($component['selectableNum']['min'] ?? 0) > 0)throw new CommonException($name.'至少选择'.(int) $component['selectableNum']['min'].'项');
+            if ($type === 'FormCheckbox'
+                && (int) ($component['selectableNum']['min'] ?? 0) > 0)throw new CommonException($name.'至少选择'.(int) $component['selectableNum']['min'].'项');
             return $type === 'FormDate' ? ['date' => '', 'timestamp' => ''] : (in_array($type, ['FormRadio', 'FormCheckbox'], true) ? [] : '');
         }
         if (in_array($type, ['FormRadio', 'FormCheckbox'], true)) {
@@ -307,34 +396,49 @@ final class ProfileFormService
                 $seen[$id] = true;
                 $result[] = ['id' => $id, 'text' => (string) $options[$id]['text']];
             }
-            if ($type === 'FormCheckbox' && (count($result) < (int) ($component['selectableNum']['min'] ?? 0) || ((int) ($component['selectableNum']['max'] ?? 0) > 0 && count($result) > (int) $component['selectableNum']['max'])))throw new CommonException($name.'选择数量不符合设置');
+            if ($type === 'FormCheckbox'
+                && (count($result) < (int) ($component['selectableNum']['min'] ?? 0) || ((int) ($component['selectableNum']['max'] ?? 0) > 0 && count($result) > (int) $component['selectableNum']['max'])))throw new CommonException($name.'选择数量不符合设置');
             return $result;
         }
         if ($type === 'FormDate') {
-            if (!is_array($value) || array_diff(array_keys($value), ['date', 'timestamp']) || !is_string($value['date'] ?? null) || mb_strlen($value['date']) > 64 || preg_match('/[<>\x00-\x1f]/u', $value['date']))throw new CommonException($name.'日期格式不正确');
+            if (!is_array($value)
+                || array_diff(array_keys($value), ['date', 'timestamp'])
+                || !is_string($value['date'] ?? null)
+                || mb_strlen($value['date']) > 64
+                || preg_match('/[<>\x00-\x1f]/u', $value['date']))throw new CommonException($name.'日期格式不正确');
             if (trim($value['date']) === '')return ['date' => '', 'timestamp' => ''];
             $date = trim($value['date']);
             $format = (string) ($component['dateFormat'] ?? 'YYYY年M月D日');
             if ($format === 'HH:mm') {
-                if (!preg_match('/^([0-9]{1,2}):([0-9]{2})$/D', $date, $parts) || (int) $parts[1] > 23 || (int) $parts[2] > 59)throw new CommonException($name.'时间不正确');
+                if (!preg_match('/^([0-9]{1,2}):([0-9]{2})$/D', $date, $parts)
+                    || (int) $parts[1] > 23
+                    || (int) $parts[2] > 59)throw new CommonException($name.'时间不正确');
                 $timestamp = mktime((int) $parts[1], (int) $parts[2], 0);
             } else {
                 if (!preg_match('/^([0-9]{4})(?:年|-|\/)([0-9]{1,2})(?:月|-|\/)([0-9]{1,2})日?(?: ([0-9]{1,2}):([0-9]{2}))?$/Du', $date, $parts)
-                    || !checkdate((int) $parts[2], (int) $parts[3], (int) $parts[1]) || (int) ($parts[4] ?? 0) > 23 || (int) ($parts[5] ?? 0) > 59)throw new CommonException($name.'日期不正确');
+                    || !checkdate((int) $parts[2], (int) $parts[3], (int) $parts[1])
+                        || (int) ($parts[4] ?? 0) > 23
+                        || (int) ($parts[5] ?? 0) > 59)throw new CommonException($name.'日期不正确');
                 $timestamp = mktime((int) ($parts[4] ?? 0), (int) ($parts[5] ?? 0), 0, (int) $parts[2], (int) $parts[3], (int) $parts[1]);
             }
             return ['date' => $date, 'timestamp' => $timestamp];
         }
         if (!is_string($value) && !is_int($value) && !is_float($value))throw new CommonException($name.'格式不正确');
         $value = trim((string) $value);
-        if (!mb_check_encoding($value, 'UTF-8') || mb_strlen($value) > ($type === 'FormTextarea' ? 4000 : 1000) || preg_match('/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/u', $value))throw new CommonException($name.'内容过长或含无效字符');
+        if (!mb_check_encoding($value, 'UTF-8')
+            || mb_strlen($value) > ($type === 'FormTextarea' ? 4000 : 1000)
+            || preg_match('/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/u', $value))throw new CommonException($name.'内容过长或含无效字符');
         if ($type === 'FormMobile')return PartnerService::phone($value);
         if ($type === 'FormEmail' && !filter_var($value, FILTER_VALIDATE_EMAIL))throw new CommonException($name.'邮箱格式不正确');
         if ($type === 'FormNumber') {
             if (!preg_match('/^-?[0-9]{1,12}(?:\.[0-9]{1,6})?$/D', $value))throw new CommonException($name.'请输入有效数字');
             $limits = (array) ($component['formatLimit'] ?? []);
-            if ((float) $value < 0 && !in_array('support_negative_number', $limits, true) || str_contains($value, '.') && !in_array('support_decimal', $limits, true))throw new CommonException($name.'数字格式不符合设置');
-            if (in_array('number_scope', $limits, true) && ((float) $value < (float) ($component['numberScope']['min'] ?? 0) || (float) $value > (float) ($component['numberScope']['max'] ?? 0)))throw new CommonException($name.'超出填写范围');
+            if ((float) $value < 0
+                && !in_array('support_negative_number', $limits, true)
+                || str_contains($value, '.')
+                && !in_array('support_decimal', $limits, true))throw new CommonException($name.'数字格式不符合设置');
+            if (in_array('number_scope', $limits, true)
+                && ((float) $value < (float) ($component['numberScope']['min'] ?? 0) || (float) $value > (float) ($component['numberScope']['max'] ?? 0)))throw new CommonException($name.'超出填写范围');
         }
         return $value;
     }

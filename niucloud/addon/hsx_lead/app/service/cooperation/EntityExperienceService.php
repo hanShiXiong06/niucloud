@@ -26,7 +26,10 @@ final class EntityExperienceService
         foreach ($query->select()->toArray() as $order) {
             try {
                 $rule = Data::decode($order['rule_json']);
-                if (($rule['purpose'] ?? '') !== 'commission' || !empty($rule['requires_manual_review']) || empty($order['out_trade_no']) || (int) $order['lead_id'] <= 0) {
+                if (($rule['purpose'] ?? '') !== 'commission'
+                    || !empty($rule['requires_manual_review'])
+                    || empty($order['out_trade_no'])
+                    || (int) $order['lead_id'] <= 0) {
                     $excluded++;
                     continue;
                 }
@@ -34,7 +37,12 @@ final class EntityExperienceService
                 if ($lock)$leadQuery->lock(true);
                 $lead = $leadQuery->find();
                 // A free internal hand-off is not an external paid delivery.
-                if (!$lead || $lead['status'] !== 'paid' || (int) $lead['receiver_id'] !== $merchant || (int) $lead['publisher_id'] <= 0 || (int) $lead['publisher_id'] === $merchant || (int) $lead['payment_order_id'] !== (int) $order['id']) {
+                if (!$lead
+                    || $lead['status'] !== 'paid'
+                    || (int) $lead['receiver_id'] !== $merchant
+                    || (int) $lead['publisher_id'] <= 0
+                    || (int) $lead['publisher_id'] === $merchant
+                    || (int) $lead['payment_order_id'] !== (int) $order['id']) {
                     $excluded++;
                     continue;
                 }
@@ -46,7 +54,10 @@ final class EntityExperienceService
                 $payQuery = Db::name('pay')->where('site_id', $site)->where('trade_type', PaymentService::TRADE_TYPE)->where('trade_id', (int) $order['id'])->where('out_trade_no', (string) $order['out_trade_no'])->where('status', PayDict::STATUS_FINISH);
                 if ($lock)$payQuery->lock(true);
                 $pay = $payQuery->find();
-                if (!$pay || $pay['main_type'] !== PayDict::MEMBER || (int) $pay['main_id'] !== (int) $order['member_id'] || Rules::cents((string) $pay['money']) !== $amount) {
+                if (!$pay
+                    || $pay['main_type'] !== PayDict::MEMBER
+                    || (int) $pay['main_id'] !== (int) $order['member_id']
+                    || Rules::cents((string) $pay['money']) !== $amount) {
                     $excluded++;
                     continue;
                 }
@@ -80,7 +91,18 @@ final class EntityExperienceService
         $earned = max(0, $paid - $refunded);
         $purchased = Rules::cents($costs['purchased_value']);
         if ($earned > PHP_INT_MAX - $purchased)throw new CommonException('门店经验累计超出系统精度');
-        return ['value' => Rules::amount($earned + $purchased), 'earned_value' => Rules::amount($earned), 'purchased_value' => Rules::amount($purchased), 'paid_amount' => Rules::amount($paid), 'refunded_amount' => Rules::amount($refunded), 'completed_orders' => $count, 'excluded_orders' => $excluded, 'updated_at' => max($updated, $costs['updated_at']), 'rule' => 'confirmed_commission_and_purchased_experience', 'cost_review_required' => $costs['review_required']];
+        return [
+            'value' => Rules::amount($earned + $purchased),
+            'earned_value' => Rules::amount($earned),
+            'purchased_value' => Rules::amount($purchased),
+            'paid_amount' => Rules::amount($paid),
+            'refunded_amount' => Rules::amount($refunded),
+            'completed_orders' => $count,
+            'excluded_orders' => $excluded,
+            'updated_at' => max($updated, $costs['updated_at']),
+            'rule' => 'confirmed_commission_and_purchased_experience',
+            'cost_review_required' => $costs['review_required']
+        ];
     }
 
     /** Every new opening, upgrade AND renewal is assessed on current facts. */
@@ -132,6 +154,16 @@ final class EntityExperienceService
         if (!$next) return null;
         $required = Rules::cents(self::required($next));
         $value = Rules::cents($experience['value']);
-        return ['code' => $next['code'], 'name' => $next['name'], 'experience_gate_enabled' => self::gateEnabled($next), 'experience_required' => Rules::amount($required), 'experience_remaining' => Rules::amount(max(0, $required - $value)), 'progress_percent' => $required === 0 ? 100 : ($value >= $required ? 100 : intdiv($value * 100, $required)), 'experience_eligible' => $value >= $required, 'level_color' => $next['level_color'], 'level_visual' => $next['level_visual']];
+        return [
+            'code' => $next['code'],
+            'name' => $next['name'],
+            'experience_gate_enabled' => self::gateEnabled($next),
+            'experience_required' => Rules::amount($required),
+            'experience_remaining' => Rules::amount(max(0, $required - $value)),
+            'progress_percent' => $required === 0 ? 100 : ($value >= $required ? 100 : intdiv($value * 100, $required)),
+            'experience_eligible' => $value >= $required,
+            'level_color' => $next['level_color'],
+            'level_visual' => $next['level_visual']
+        ];
     }
 }

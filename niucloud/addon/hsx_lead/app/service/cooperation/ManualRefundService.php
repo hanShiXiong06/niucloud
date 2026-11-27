@@ -23,7 +23,17 @@ final class ManualRefundService
         $this->context->permission('hsx_lead_cooperation_order_manual_refund');
         if (!$this->context->ownership()->scope()['all_data'])throw new CommonException('确认线下退款需要全站财务管理权限');
         if (Db::connect()->getPdo()->inTransaction())throw new CommonException('实际退款登记不能嵌套在其他事务，请先提交原业务操作');
-        if (array_diff(array_keys($input), ['refund_no', 'amount', 'request_id', 'method', 'account_label', 'external_no', 'received_at', 'reason', 'confirm']))throw new CommonException('线下退款包含不支持的字段');
+        if (array_diff(array_keys($input), [
+                    'refund_no',
+                    'amount',
+                    'request_id',
+                    'method',
+                    'account_label',
+                    'external_no',
+                    'received_at',
+                    'reason',
+                    'confirm'
+                ]))throw new CommonException('线下退款包含不支持的字段');
         if (!in_array($input['confirm'] ?? null, [true, 1, '1'], true))throw new CommonException('请确认已经实际退款；本操作仅登记，不会转账');
         $request = Store::requestId($input);
         $number = Data::text($input, 'refund_no', 64, true);
@@ -53,7 +63,11 @@ final class ManualRefundService
             if ($existing) {
                 if (count($existing) !== 1)throw new CommonException('原退款确认记录不唯一，请核对，未重复登记');
                 $old = $existing[0];
-                if ((int) $old['target_order_id'] !== $id || $old['refund_no'] !== $number || $old['reference_hash'] !== $hash || Rules::cents((string) $old['amount']) !== Rules::cents($amount) || $old['reason'] !== $reason
+                if ((int) $old['target_order_id'] !== $id
+                    || $old['refund_no'] !== $number
+                    || $old['reference_hash'] !== $hash
+                    || Rules::cents((string) $old['amount']) !== Rules::cents($amount)
+                    || $old['reason'] !== $reason
                     || ($explicitTime && (int) $old['received_at'] !== $at))throw new CommonException('本笔退款已有不同的确认记录，请核对原凭据，不能重复退款');
                 return $old;
             }
@@ -88,14 +102,20 @@ final class ManualRefundService
         $rows = $q->limit(2)->select()->toArray();
         if (count($rows) !== 1)throw new CommonException('原退款记录不存在或不唯一，请核对');
         $r = $rows[0];
-        if ($r['trade_type'] !== PaymentService::TRADE_TYPE || (string) $r['trade_id'] !== (string) $order['id'] || $r['out_trade_no'] !== $order['out_trade_no'] || $r['type'] !== PayDict::OFFLINEPAY)throw new CommonException('该退款不属于本订单的线下收款');
+        if ($r['trade_type'] !== PaymentService::TRADE_TYPE
+            || (string) $r['trade_id'] !== (string) $order['id']
+            || $r['out_trade_no'] !== $order['out_trade_no']
+            || $r['type'] !== PayDict::OFFLINEPAY)throw new CommonException('该退款不属于本订单的线下收款');
         return $r;
     }
     private static function payment(int $site, array $order, array $refund, bool $lock = false): array
     {
         $pay = OrderPaymentReadService::payment($order, $lock);
         if (!$pay || (int) $pay['site_id'] !== $site || $pay['type'] !== PayDict::OFFLINEPAY || (int) $pay['status'] !== (int) PayDict::STATUS_FINISH
-            || $pay['main_type'] !== PayDict::MEMBER || (int) $pay['main_id'] !== (int) $order['member_id'] || $pay['out_trade_no'] !== $refund['out_trade_no'] || $pay['channel'] !== $refund['channel']
+            || $pay['main_type'] !== PayDict::MEMBER
+                || (int) $pay['main_id'] !== (int) $order['member_id']
+                || $pay['out_trade_no'] !== $refund['out_trade_no']
+                || $pay['channel'] !== $refund['channel']
             || Rules::cents((string) $pay['money']) !== Rules::cents((string) $order['amount']))throw new CommonException('原线下收款身份、金额或渠道不一致');
         return $pay;
     }
@@ -108,20 +128,40 @@ final class ManualRefundService
     /** A typed, privileged actual-transfer record is mandatory before replaying successful offline hooks. */
     public static function assertRefundReceipt(int $site, array $order, array $refund): array
     {
-        if ((int) ($refund['site_id'] ?? 0) !== $site || ($refund['type'] ?? '') !== PayDict::OFFLINEPAY || ($refund['trade_type'] ?? '') !== PaymentService::TRADE_TYPE || (string) ($refund['trade_id'] ?? '') !== (string) $order['id'] || ($refund['out_trade_no'] ?? '') !== $order['out_trade_no'])throw new CommonException('实际线下退款不属于当前订单');
+        if ((int) ($refund['site_id'] ?? 0) !== $site
+            || ($refund['type'] ?? '') !== PayDict::OFFLINEPAY
+            || ($refund['trade_type'] ?? '') !== PaymentService::TRADE_TYPE
+            || (string) ($refund['trade_id'] ?? '') !== (string) $order['id']
+            || ($refund['out_trade_no'] ?? '') !== $order['out_trade_no'])throw new CommonException('实际线下退款不属于当前订单');
         $pay = self::payment($site, $order, $refund, true);
         $source = ManualPaymentService::assertReceipt($site, $order, $pay, true);
         $rows = Db::name('hsx_lead_manual_receipt')->where('site_id', $site)->where('kind', 'refund')->where('target_order_id', $order['id'])->where('refund_no', $refund['refund_no'])->lock(true)->limit(2)->select()->toArray();
         if (count($rows) !== 1)throw new CommonException('尚无唯一的实际线下退款凭据，不能确认业务退款');
         $r = $rows[0];
         $s = Data::decode($r['snapshot_json']);
-        if ((int) $r['order_id'] !== (int) $order['id'] || (int) $r['member_id'] !== (int) $order['member_id'] || (int) $r['source_receipt_id'] !== (int) $source['id'] || $r['out_trade_no'] !== $order['out_trade_no']
-            || Rules::cents((string) $r['amount']) !== Rules::cents((string) $refund['money']) || (int) $r['operator_uid'] <= 0 || (int) $r['received_at'] <= 0 || (int) $r['received_at'] > time() + 60 || (int) $r['received_at'] < (int) $pay['pay_time'] || $r['external_no'] === '' || $r['account_label'] === ''
+        if ((int) $r['order_id'] !== (int) $order['id']
+            || (int) $r['member_id'] !== (int) $order['member_id']
+            || (int) $r['source_receipt_id'] !== (int) $source['id']
+            || $r['out_trade_no'] !== $order['out_trade_no']
+            || Rules::cents((string) $r['amount']) !== Rules::cents((string) $refund['money'])
+                || (int) $r['operator_uid'] <= 0
+                || (int) $r['received_at'] <= 0
+                || (int) $r['received_at'] > time() + 60
+                || (int) $r['received_at'] < (int) $pay['pay_time']
+                || $r['external_no'] === ''
+                || $r['account_label'] === ''
             || !in_array($r['status'], ['recorded', 'processing', 'posted', 'attention'], true) || !isset(ManualPaymentService::METHODS[$r['method']])
             || !hash_equals((string) $r['reference_hash'], ManualPaymentService::referenceHash('refund', $r['method'], $r['account_label'], $r['external_no']))
-            || ($s['schema'] ?? '') !== 'hsx.lead.manual_refund.v1' || ($s['confirmed'] ?? false) !== true || (int) ($s['order_id'] ?? 0) !== (int) $order['id'] || (int) ($s['refund_record_id'] ?? 0) !== (int) $refund['id']
-            || (int) ($s['merchant_id'] ?? 0) !== (int) $order['merchant_id'] || ($s['refund_no'] ?? '') !== $refund['refund_no'] || ($s['out_trade_no'] ?? '') !== $order['out_trade_no']
-            || (int) ($s['member_id'] ?? 0) !== (int) $order['member_id'] || (int) ($s['source_receipt_id'] ?? 0) !== (int) $source['id'] || ($s['amount'] ?? '') !== (string) $r['amount']
+            || ($s['schema'] ?? '') !== 'hsx.lead.manual_refund.v1'
+                || ($s['confirmed'] ?? false) !== true
+                || (int) ($s['order_id'] ?? 0) !== (int) $order['id']
+                || (int) ($s['refund_record_id'] ?? 0) !== (int) $refund['id']
+            || (int) ($s['merchant_id'] ?? 0) !== (int) $order['merchant_id']
+                || ($s['refund_no'] ?? '') !== $refund['refund_no']
+                || ($s['out_trade_no'] ?? '') !== $order['out_trade_no']
+            || (int) ($s['member_id'] ?? 0) !== (int) $order['member_id']
+                || (int) ($s['source_receipt_id'] ?? 0) !== (int) $source['id']
+                || ($s['amount'] ?? '') !== (string) $r['amount']
             || ($s['reference_hash'] ?? '') !== $r['reference_hash'] || (int) ($s['received_at'] ?? 0) !== (int) $r['received_at']
             || ($refund['status'] === RefundDict::SUCCESS && ($refund['refund_type'] !== RefundDict::OFFLINE || $refund['voucher'] !== $r['external_no'] || (int) $refund['refund_time'] !== (int) $r['received_at'])))throw new CommonException('实际线下退款凭据与原单不一致，请平台核对');
         return $r;
@@ -145,10 +185,17 @@ final class ManualRefundService
                 Db::name('hsx_lead_manual_receipt')->where('site_id', $site)->where('id', $rid)->update(['status' => 'processing', 'update_time' => time()]);
                 if ($refund['status'] !== RefundDict::SUCCESS) {
                     $result = (new CoreOfflineService())->refund(['site_id' => $site, 'refund_no' => $refund['refund_no'], 'voucher' => $r['external_no']]);
-                    if (($result['status'] ?? '') !== RefundDict::SUCCESS || ($result['refund_no'] ?? '') !== $refund['refund_no'])throw new CommonException('线下退款凭据未确认');
+                    if (($result['status'] ?? '') !== RefundDict::SUCCESS
+                        || ($result['refund_no'] ?? '') !== $refund['refund_no'])throw new CommonException('线下退款凭据未确认');
                     Db::name('pay_refund')->where('site_id', $site)->where('id', $refund['id'])->update(['refund_type' => RefundDict::OFFLINE, 'refund_time' => (int) $r['received_at']]);
                 }
-                $event = ['out_trade_no' => $refund['out_trade_no'], 'refund_no' => $refund['refund_no'], 'trade_type' => PaymentService::TRADE_TYPE, 'trade_id' => (string) $order['id'], 'site_id' => $site];
+                $event = [
+                    'out_trade_no' => $refund['out_trade_no'],
+                    'refund_no' => $refund['refund_no'],
+                    'trade_type' => PaymentService::TRADE_TYPE,
+                    'trade_id' => (string) $order['id'],
+                    'site_id' => $site
+                ];
                 if ((new CoreRefundService())->refundSuccess($site, $event) !== true)throw new CommonException('原退款业务处理尚未完成');
                 // Event caches may still lack this plugin's newly installed
                 // listeners. Replay the same idempotent business handlers, never a
@@ -156,12 +203,24 @@ final class ManualRefundService
                 (new \addon\hsx_lead\app\listener\pay\MembershipRefundSuccess())->handle($event);
                 PaymentRefundService::confirmed($event);
                 PromotionService::refund($event);
-                Db::name('hsx_lead_manual_receipt')->where('site_id', $site)->where('id', $rid)->update(['status' => 'posted', 'message' => '已登记实际退款，业务结果已更新', 'update_time' => time()]);
-                Data::audit($site, (int) $r['operator_uid'], 0, 'coop_order', (int) $order['id'], 'manual_refund_posted', ['manual_receipt_id' => $rid, 'refund_no' => $refund['refund_no'], 'amount' => $r['amount']]);
+                Db::name('hsx_lead_manual_receipt')->where('site_id', $site)->where('id', $rid)->update([
+                        'status' => 'posted',
+                        'message' => '已登记实际退款，业务结果已更新',
+                        'update_time' => time()
+                    ]);
+                Data::audit($site, (int) $r['operator_uid'], 0, 'coop_order', (int) $order['id'], 'manual_refund_posted', [
+                        'manual_receipt_id' => $rid,
+                        'refund_no' => $refund['refund_no'],
+                        'amount' => $r['amount']
+                    ]);
             });
         } catch (\Throwable $error) {
             $message = $error instanceof CommonException ? mb_substr($error->getMessage().'；实际退款已登记，请勿再次转账', 0, 500) : '实际退款已登记，业务结果待核对；请刷新原退款，不要再次转账';
-            Db::name('hsx_lead_manual_receipt')->where('site_id', $site)->where('kind', 'refund')->where('id', $rid)->where('status', '<>', 'posted')->update(['status' => 'attention', 'message' => $message, 'update_time' => time()]);
+            Db::name('hsx_lead_manual_receipt')->where('site_id', $site)->where('kind', 'refund')->where('id', $rid)->where('status', '<>', 'posted')->update([
+                    'status' => 'attention',
+                    'message' => $message,
+                    'update_time' => time()
+                ]);
         }
     }
     /** Compensation only for already recorded real transfers; never creates a receipt or sends money. */
@@ -176,7 +235,11 @@ final class ManualRefundService
     {
         $table = (string) Db::name('hsx_lead_manual_receipt')->getTable();
         if (!(int) (Db::query('SELECT COUNT(*) AS n FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name=?', [$table])[0]['n'] ?? 0))return;
-        $rows = Db::name('hsx_lead_manual_receipt')->where('kind', 'refund')->whereIn('status', ['recorded', 'processing', 'attention'])->order('update_time,id')->limit(max(1, min(50, $limit)))->field('id,site_id')->select()->toArray();
+        $rows = Db::name('hsx_lead_manual_receipt')->where('kind', 'refund')->whereIn('status', [
+                'recorded',
+                'processing',
+                'attention'
+            ])->order('update_time,id')->limit(max(1, min(50, $limit)))->field('id,site_id')->select()->toArray();
         foreach ($rows as $r)try {
             self::post((int) $r['site_id'], (int) $r['id']);
         } catch (\Throwable$e) {
@@ -204,6 +267,14 @@ final class ManualRefundService
         $r = Db::name('hsx_lead_manual_receipt')->where('site_id', $site)->where('kind', 'refund')->where('id', $id)->find();
         if (!$r)throw new CommonException('原人工退款记录不存在');
         $refund = Db::name('pay_refund')->where('site_id', $site)->where('refund_no', $r['refund_no'])->find();
-        return ['order_id' => (int) $r['target_order_id'], 'refund_no' => $r['refund_no'], 'amount' => $r['amount'], 'manual_receipt_id' => (int) $r['id'], 'status' => $r['status'] === 'posted' ? 'posted' : 'attention', 'refund_status' => (string) ($refund['status'] ?? 'wait'), 'message' => $r['message']];
+        return [
+            'order_id' => (int) $r['target_order_id'],
+            'refund_no' => $r['refund_no'],
+            'amount' => $r['amount'],
+            'manual_receipt_id' => (int) $r['id'],
+            'status' => $r['status'] === 'posted' ? 'posted' : 'attention',
+            'refund_status' => (string) ($refund['status'] ?? 'wait'),
+            'message' => $r['message']
+        ];
     }
 }

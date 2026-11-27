@@ -57,7 +57,16 @@ final class MerchantService
         $q->field('id,site_id,name,contact_name,mobile,province_id,city_id,district_id,address,member_id,status,create_time,update_time');
         $ready = Data::text($params, 'ready_state', 32);
         if ($ready !== '') {
-            if (!in_array($ready, ['member_required', 'membership_required', 'capability_required', 'connection_required', 'sync_required', 'ready', 'attention', 'paused'], true)) throw new CommonException('请选择有效的商户就绪状态');
+            if (!in_array($ready, [
+                        'member_required',
+                        'membership_required',
+                        'capability_required',
+                        'connection_required',
+                        'sync_required',
+                        'ready',
+                        'attention',
+                        'paused'
+                    ], true)) throw new CommonException('请选择有效的商户就绪状态');
             // Readiness spans merchant/member/auth/publication freshness. Filter the full
             // scoped set before pagination, never merely the currently requested page.
             $presenter = new MerchantListService($this->context);
@@ -120,7 +129,12 @@ final class MerchantService
 
     private function businessDefinitions(): array
     {
-        return array_map(function (array $business): array {return array_intersect_key($business, array_flip(['key', 'name', 'enabled', 'dimension'])) + ['options' => (new BusinessService($this->context))->options($business)];}, (new ConfigService($this->context))->get()['businesses']);
+        return array_map(function (array $business): array {return array_intersect_key($business, array_flip([
+                        'key',
+                        'name',
+                        'enabled',
+                        'dimension'
+                    ])) + ['options' => (new BusinessService($this->context))->options($business)];}, (new ConfigService($this->context))->get()['businesses']);
     }
 
     public function save(int $id, #[\SensitiveParameter] array $input): array
@@ -135,7 +149,10 @@ final class MerchantService
             $memberId = (int) ($input['member_id'] ?? 0);
             if ($memberId > 0) {
                 $member = Db::name('member')->where('site_id', $site)->where('member_id', $memberId)->lock(true)->find();
-                if (!$member || (int) $member['status'] !== 1 || (int) $member['is_del'] !== 0 || (int) $member['delete_time'] > 0) throw new CommonException('请选择本站启用中的会员');
+                if (!$member
+                    || (int) $member['status'] !== 1
+                    || (int) $member['is_del'] !== 0
+                    || (int) $member['delete_time'] > 0) throw new CommonException('请选择本站启用中的会员');
                 if (Data::query('merchant', $site)->where('member_id', $memberId)->where('id', '<>', $id)->lock(true)->find()) throw new CommonException('该会员已绑定其他商户');
                 if (Db::name('hsx_lead_merchant_member')->where('site_id', $site)->where('member_id', $memberId)->whereIn('status', ['active', 'pending'])->lock(true)->find()) throw new CommonException('该会员已有门店成员关系或待确认申请，请先处理原归属，不能直接绑定为另一主体负责人');
             }
@@ -170,7 +187,10 @@ final class MerchantService
 
     public static function readiness(array $merchant, array $conn, ?array $member): array
     {
-        if (!$member || (int) $member['status'] !== 1 || (int) $member['is_del'] !== 0 || (int) $member['delete_time'] > 0) return ['member_required', '请先绑定本站启用中的会员，商户才可独立接单'];
+        if (!$member
+            || (int) $member['status'] !== 1
+            || (int) $member['is_del'] !== 0
+            || (int) $member['delete_time'] > 0) return ['member_required', '请先绑定本站启用中的会员，商户才可独立接单'];
         if ((int) $merchant['status'] !== 1 || (int) ($merchant['blocked_at'] ?? 0) > 0) return ['paused', '商户已停止合作，不参与门店推荐；历史记录仍保留'];
         if (empty($merchant['can_accept'])) return ['membership_required', empty($merchant['membership_active']) ? '门店会员未开通或已到期，暂不能接收新的客户线索；已有工单仍可处理' : '当前门店会员未包含接收客户线索权益，请在会员页核对权益'];
         if (!empty($merchant['all_models'])) return ['ready', '按平台授予的等级承接全部型号；不代表有现货，交付前需核对'];

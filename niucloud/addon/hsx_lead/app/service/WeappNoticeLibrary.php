@@ -31,7 +31,14 @@ final class WeappNoticeLibrary
                 $rule = $this->text($row['rule'] ?? null, 30);
                 if (!$id || !$name) continue;
                 $supported = (bool) preg_match('/^(thing|character_string|time|date|phrase|number)$/D', $rule) && $id <= 999;
-                $rows[] = ['kid' => $id, 'name' => $name, 'rule' => $rule, 'keyword' => $supported ? $rule.$id : '', 'supported' => $supported, 'example' => $this->text($row['example'] ?? '', 100)];
+                $rows[] = [
+                    'kid' => $id,
+                    'name' => $name,
+                    'rule' => $rule,
+                    'keyword' => $supported ? $rule.$id : '',
+                    'supported' => $supported,
+                    'example' => $this->text($row['example'] ?? '', 100)
+                ];
             }
             return ['operation' => 'keywords', 'tid' => (string) $tid, 'items' => $rows, 'read_only' => true];
         }
@@ -51,7 +58,14 @@ final class WeappNoticeLibrary
             $rows[] = ['tid' => (string) $tid, 'title' => $title, 'type' => (int) ($row['type'] ?? 0)];
         }
         $total = $response['count'] ?? count($rows);
-        return ['operation' => 'titles', 'items' => $rows, 'start' => $start, 'limit' => $limit, 'total' => is_numeric($total) ? max(0, (int) $total) : count($rows), 'read_only' => true];
+        return [
+            'operation' => 'titles',
+            'items' => $rows,
+            'start' => $start,
+            'limit' => $limit,
+            'total' => is_numeric($total) ? max(0, (int) $total) : count($rows),
+            'read_only' => true
+        ];
     }
 
     private function categories(int $site): array
@@ -87,7 +101,10 @@ final class WeappNoticeLibrary
     }
     private function integer($value, int $min, int $max): int
     {
-        if ((!is_int($value) && !is_string($value)) || !preg_match('/^[0-9]+$/D', (string) $value) || (int) $value < $min || (int) $value > $max) throw new CommonException('模板库分页参数无效');
+        if ((!is_int($value) && !is_string($value))
+            || !preg_match('/^[0-9]+$/D', (string) $value)
+            || (int) $value < $min
+            || (int) $value > $max) throw new CommonException('模板库分页参数无效');
         return (int) $value;
     }
     private function text($value, int $length): string

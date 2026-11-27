@@ -46,7 +46,15 @@ final class RegionSearchService
                 'city_id' => $level >= 2 ? (int) $chain[1]['id'] : 0, 'district_id' => $level === 3 ? (int) $row['id'] : 0, 'region_text' => $text];
             $matches[] = ['rank' => $name === $needle ? 0 : (str_starts_with($name, $needle) ? 1 : 2), 'item' => $result];
         }
-        usort($matches, static fn (array $a, array $b): int => [$a['rank'], $a['item']['level'], $a['item']['id']] <=> [$b['rank'], $b['item']['level'], $b['item']['id']]);
+        usort($matches, static fn (array $a, array $b): int => [
+                $a['rank'],
+                $a['item']['level'],
+                $a['item']['id']
+            ] <=> [
+                $b['rank'],
+                $b['item']['level'],
+                $b['item']['id']
+            ]);
         return ['data' => array_column(array_slice($matches, 0, 30), 'item'), 'total' => count($matches)];
     }
 

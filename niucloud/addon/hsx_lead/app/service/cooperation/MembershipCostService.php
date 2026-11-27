@@ -12,7 +12,21 @@ final class MembershipCostService
 {
     public const SCHEMA = 'hsx_lead.membership_cost.v1';
     public const PRICE_OVERRIDE_SCHEMA = 'hsx_lead.membership_service_price_override.v1';
-    public const FIELDS = ['cost_schema', 'deposit_required', 'deposit_balance', 'deposit_amount', 'service_full_amount', 'service_credit_amount', 'service_amount', 'experience_purchase_enabled', 'experience_unit_price', 'buy_experience', 'experience_quantity', 'experience_amount', 'promotion_base_amount'];
+    public const FIELDS = [
+        'cost_schema',
+        'deposit_required',
+        'deposit_balance',
+        'deposit_amount',
+        'service_full_amount',
+        'service_credit_amount',
+        'service_amount',
+        'experience_purchase_enabled',
+        'experience_unit_price',
+        'buy_experience',
+        'experience_quantity',
+        'experience_amount',
+        'promotion_base_amount'
+    ];
     public static function flag($value, string $label): bool
     {
         if (!in_array($value, [true, false, 0, 1, '0', '1'], true)) throw new CommonException($label.'请明确选择开启或关闭');
@@ -53,21 +67,81 @@ final class MembershipCostService
     public static function assertSnapshot(array $order, array $rule): void
     {
         if (($rule['cost_schema'] ?? '') !== self::SCHEMA)throw new CommonException('会员三项费用快照不完整');
-        foreach (['deposit_required', 'deposit_balance', 'deposit_amount', 'service_full_amount', 'service_credit_amount', 'service_amount', 'experience_unit_price', 'experience_quantity', 'experience_amount', 'promotion_base_amount'] as $key)if (!is_string($rule[$key] ?? null))throw new CommonException('会员费用明细缺失：'.$key);
-        $tier = ['deposit_amount' => $rule['deposit_required'], 'experience_purchase_enabled' => $rule['experience_purchase_enabled'] ?? null, 'experience_unit_price' => $rule['experience_unit_price'], 'experience_required' => $rule['experience_required']];
+        foreach ([
+                'deposit_required',
+                'deposit_balance',
+                'deposit_amount',
+                'service_full_amount',
+                'service_credit_amount',
+                'service_amount',
+                'experience_unit_price',
+                'experience_quantity',
+                'experience_amount',
+                'promotion_base_amount'
+            ] as $key)if (!is_string($rule[$key] ?? null))throw new CommonException('会员费用明细缺失：'.$key);
+        $tier = [
+            'deposit_amount' => $rule['deposit_required'],
+            'experience_purchase_enabled' => $rule['experience_purchase_enabled'] ?? null,
+            'experience_unit_price' => $rule['experience_unit_price'],
+            'experience_required' => $rule['experience_required']
+        ];
         if (array_key_exists('experience_gate_enabled', $rule))$tier['experience_gate_enabled'] = $rule['experience_gate_enabled'];
         $expected = self::calculate($tier, ['price' => $rule['service_full_amount']], ['value' => $rule['experience_value'] ?? '0.00'], ['balance' => $rule['deposit_balance']], self::flag($rule['buy_experience'] ?? null, '购买经验'), Rules::cents($rule['service_credit_amount']));
         foreach (self::FIELDS as $key)if (($rule[$key] ?? null) !== $expected[$key])throw new CommonException('会员分项费用与原报价不一致：'.$key);
-        if (Rules::cents($rule['full_amount']) !== Rules::cents($rule['service_full_amount']) || Rules::cents($rule['credit_amount']) !== Rules::cents($rule['service_credit_amount']) || Rules::cents((string) $order['amount']) !== Rules::cents($expected['payable_amount']) || ($rule['payable_amount'] ?? null) !== $expected['payable_amount'])throw new CommonException('会员三项费用合计与原实付不一致');
+        if (Rules::cents($rule['full_amount']) !== Rules::cents($rule['service_full_amount'])
+            || Rules::cents($rule['credit_amount']) !== Rules::cents($rule['service_credit_amount'])
+            || Rules::cents((string) $order['amount']) !== Rules::cents($expected['payable_amount'])
+            || ($rule['payable_amount'] ?? null) !== $expected['payable_amount'])throw new CommonException('会员三项费用合计与原实付不一致');
         self::assertPriceOverride($rule);
     }
     /** A stable source proof excludes closure/retry/promotion processing metadata. */
     public static function pricingFingerprint(array $order, array $rule): string
     {
-        $fields = array_merge(self::FIELDS, ['schema_version', 'purpose', 'level_code', 'level_id', 'rank', 'display_rank', 'level_name', 'cycle', 'cycle_name', 'months', 'entitlement_months', 'account_limit', 'unlimited', 'is_entry', 'experience_gate_enabled', 'experience_required', 'experience_value', 'experience_remaining', 'capabilities', 'benefits', 'period_start_at', 'period_end_at', 'quoted_at', 'full_amount', 'credit_amount', 'payable_amount', 'credit_sources', 'base_fingerprint', 'catalog_fingerprint', 'cost_fingerprint', 'membership_deposit_epoch', 'price_override']);
+        $fields = array_merge(self::FIELDS, [
+                'schema_version',
+                'purpose',
+                'level_code',
+                'level_id',
+                'rank',
+                'display_rank',
+                'level_name',
+                'cycle',
+                'cycle_name',
+                'months',
+                'entitlement_months',
+                'account_limit',
+                'unlimited',
+                'is_entry',
+                'experience_gate_enabled',
+                'experience_required',
+                'experience_value',
+                'experience_remaining',
+                'capabilities',
+                'benefits',
+                'period_start_at',
+                'period_end_at',
+                'quoted_at',
+                'full_amount',
+                'credit_amount',
+                'payable_amount',
+                'credit_sources',
+                'base_fingerprint',
+                'catalog_fingerprint',
+                'cost_fingerprint',
+                'membership_deposit_epoch',
+                'price_override'
+            ]);
         $facts = [];
         foreach ($fields as $key)if (array_key_exists($key, $rule))$facts[$key] = $rule[$key];
-        return hash('sha256', Data::json([(int) $order['site_id'], (int) $order['id'], (int) $order['merchant_id'], (int) $order['member_id'], (string) $order['purpose'], (string) $order['amount'], $facts]));
+        return hash('sha256', Data::json([
+                    (int) $order['site_id'],
+                    (int) $order['id'],
+                    (int) $order['merchant_id'],
+                    (int) $order['member_id'],
+                    (string) $order['purpose'],
+                    (string) $order['amount'],
+                    $facts
+                ]));
     }
     /** Only service revenue changes. Deposit, points, credit and quote expiry stay frozen. */
     public static function repriceService(array $order, array $rule, string $serviceAmount, array $provenance): array
@@ -82,9 +156,31 @@ final class MembershipCostService
         $uid = $provenance['operator_uid'] ?? 0;
         $reason = trim((string) ($provenance['reason'] ?? ''));
         $at = $provenance['at'] ?? time();
-        if (!is_int($uid) || $uid <= 0 || $reason === '' || mb_strlen($reason) > 500 || !is_int($at) || $at <= 0 || $at > time() + 60)throw new CommonException('请完整记录改价操作人、原因和时间');
+        if (!is_int($uid)
+            || $uid <= 0
+            || $reason === ''
+            || mb_strlen($reason) > 500
+            || !is_int($at)
+            || $at <= 0
+            || $at > time() + 60)throw new CommonException('请完整记录改价操作人、原因和时间');
         $next = $rule;
-        foreach (['promotion_snapshot', 'promotion_review_required', 'promotion_review_message', 'requires_manual_review', 'review_message', 'closure', 'close_check', 'pricing_intent', 'reprices_order_id', 'replacement_order_id', 'replacement_order_no', 'pricing_request_id', 'refund_receipts', 'membership_refund_allocations', 'membership_refund_status'] as $key)unset($next[$key]);
+        foreach ([
+                'promotion_snapshot',
+                'promotion_review_required',
+                'promotion_review_message',
+                'requires_manual_review',
+                'review_message',
+                'closure',
+                'close_check',
+                'pricing_intent',
+                'reprices_order_id',
+                'replacement_order_id',
+                'replacement_order_no',
+                'pricing_request_id',
+                'refund_receipts',
+                'membership_refund_allocations',
+                'membership_refund_status'
+            ] as $key)unset($next[$key]);
         $next['price_override'] = ['schema_version' => self::PRICE_OVERRIDE_SCHEMA, 'source_order_id' => (int) $order['id'], 'operator_uid' => $uid, 'reason' => $reason, 'at' => $at,
             'source_amount' => (string) $order['amount'], 'source_service_amount' => $rule['service_amount'], 'service_amount' => Rules::amount($service),
             'catalog_full_amount' => $rule['price_override']['catalog_full_amount'] ?? $rule['service_full_amount'], 'source_snapshot_fingerprint' => self::pricingFingerprint($order, $rule)];
@@ -100,9 +196,29 @@ final class MembershipCostService
     {
         if (!array_key_exists('price_override', $rule))return;
         $override = $rule['price_override'];
-        if (!is_array($override) || ($override['schema_version'] ?? '') !== self::PRICE_OVERRIDE_SCHEMA || !is_int($override['source_order_id'] ?? null) || $override['source_order_id'] <= 0 || !is_int($override['operator_uid'] ?? null) || $override['operator_uid'] <= 0 || !is_string($override['reason'] ?? null) || trim($override['reason']) === '' || mb_strlen($override['reason']) > 500 || !is_int($override['at'] ?? null) || $override['at'] <= 0 || !is_string($override['source_snapshot_fingerprint'] ?? null) || !preg_match('/^[a-f0-9]{64}$/D', $override['source_snapshot_fingerprint']))throw new CommonException('会员服务费调整凭据不完整');
-        foreach (['source_amount', 'source_service_amount', 'service_amount', 'catalog_full_amount'] as $key)if (!is_string($override[$key] ?? null))throw new CommonException('会员服务费调整金额凭据缺失');
-        if (Rules::cents($override['source_amount']) <= 0 || Rules::cents($override['catalog_full_amount']) <= 0 || Rules::cents($override['service_amount']) !== Rules::cents($rule['service_amount']) || Rules::cents($override['source_service_amount']) === Rules::cents($override['service_amount']))throw new CommonException('会员服务费调整与实付明细不一致');
+        if (!is_array($override)
+            || ($override['schema_version'] ?? '') !== self::PRICE_OVERRIDE_SCHEMA
+            || !is_int($override['source_order_id'] ?? null)
+            || $override['source_order_id'] <= 0
+            || !is_int($override['operator_uid'] ?? null)
+            || $override['operator_uid'] <= 0
+            || !is_string($override['reason'] ?? null)
+            || trim($override['reason']) === ''
+            || mb_strlen($override['reason']) > 500
+            || !is_int($override['at'] ?? null)
+            || $override['at'] <= 0
+            || !is_string($override['source_snapshot_fingerprint'] ?? null)
+            || !preg_match('/^[a-f0-9]{64}$/D', $override['source_snapshot_fingerprint']))throw new CommonException('会员服务费调整凭据不完整');
+        foreach ([
+                'source_amount',
+                'source_service_amount',
+                'service_amount',
+                'catalog_full_amount'
+            ] as $key)if (!is_string($override[$key] ?? null))throw new CommonException('会员服务费调整金额凭据缺失');
+        if (Rules::cents($override['source_amount']) <= 0
+            || Rules::cents($override['catalog_full_amount']) <= 0
+            || Rules::cents($override['service_amount']) !== Rules::cents($rule['service_amount'])
+            || Rules::cents($override['source_service_amount']) === Rules::cents($override['service_amount']))throw new CommonException('会员服务费调整与实付明细不一致');
     }
     /** Refund allocation must be explicit, or a genuine full refund. Never guess deposit first. */
     public static function refundedComponents(array $order, array $rule, array $refunds): array
@@ -127,7 +243,13 @@ final class MembershipCostService
         }
         $out['total'] = $total;
         if ($total > Rules::cents((string) $order['amount']))throw new CommonException('会员累计退款超过原实付');
-        if ($total === Rules::cents((string) $order['amount']) && $total > 0)return array_replace($out, ['deposit' => Rules::cents($rule['deposit_amount']), 'service' => Rules::cents($rule['service_amount']), 'experience' => Rules::cents($rule['experience_amount']), 'quantity' => Rules::cents($rule['experience_quantity'])]);
+        if ($total === Rules::cents((string) $order['amount'])
+            && $total > 0)return array_replace($out, [
+                'deposit' => Rules::cents($rule['deposit_amount']),
+                'service' => Rules::cents($rule['service_amount']),
+                'experience' => Rules::cents($rule['experience_amount']),
+                'quantity' => Rules::cents($rule['experience_quantity'])
+            ]);
         foreach ($success as $refund) {
             $part = $rule['membership_refund_allocations'][(string) $refund['refund_no']] ?? null;
             if (!is_array($part)) {
@@ -138,16 +260,29 @@ final class MembershipCostService
             foreach (['deposit', 'service', 'experience', 'quantity'] as $key)$values[$key] = Rules::cents($part[$key] ?? '');
             if ($values['deposit'] + $values['service'] + $values['experience'] !== Rules::cents((string) $refund['money']))throw new CommonException('会员分项退款与真实退款金额不一致');
             // Purchased experience is revoked as a whole lot; partial point refunds need explicit review.
-            if (($values['experience'] > 0 || $values['quantity'] > 0) && ($values['experience'] !== Rules::cents($rule['experience_amount']) || $values['quantity'] !== Rules::cents($rule['experience_quantity'])))throw new CommonException('经验费用退款需核对原整笔经验');
+            if (($values['experience'] > 0 || $values['quantity'] > 0)
+                && ($values['experience'] !== Rules::cents($rule['experience_amount']) || $values['quantity'] !== Rules::cents($rule['experience_quantity'])))throw new CommonException('经验费用退款需核对原整笔经验');
             foreach ($values as $key => $value)$out[$key] += $value;
         }
-        foreach (['deposit' => 'deposit_amount', 'service' => 'service_amount', 'experience' => 'experience_amount', 'quantity' => 'experience_quantity'] as $key => $field)if ($out[$key] > Rules::cents($rule[$field]))throw new CommonException('分项累计退款超过原实付');
+        foreach ([
+                'deposit' => 'deposit_amount',
+                'service' => 'service_amount',
+                'experience' => 'experience_amount',
+                'quantity' => 'experience_quantity'
+            ] as $key => $field)if ($out[$key] > Rules::cents($rule[$field]))throw new CommonException('分项累计退款超过原实付');
         return $out;
     }
     /** A closed trade is financially settled only by verified, complete original refunds. */
     public static function receiptRefund(int $site, array $order, array $receipt, bool $lock = false): array
     {
-        if ((int) ($receipt['site_id'] ?? 0) !== $site || ($receipt['trade_type'] ?? '') !== PaymentService::TRADE_TYPE || (int) ($receipt['trade_id'] ?? 0) !== (int) $order['id'] || ($receipt['main_type'] ?? '') !== PayDict::MEMBER || (int) ($receipt['main_id'] ?? 0) !== (int) $order['member_id'] || (int) ($receipt['status'] ?? 0) !== (int) PayDict::STATUS_FINISH || Rules::cents((string) $receipt['money']) !== Rules::cents((string) $order['amount']) || ($receipt['out_trade_no'] ?? '') === '')throw new CommonException('原成功付款凭据不属于此会员订单');
+        if ((int) ($receipt['site_id'] ?? 0) !== $site
+            || ($receipt['trade_type'] ?? '') !== PaymentService::TRADE_TYPE
+            || (int) ($receipt['trade_id'] ?? 0) !== (int) $order['id']
+            || ($receipt['main_type'] ?? '') !== PayDict::MEMBER
+            || (int) ($receipt['main_id'] ?? 0) !== (int) $order['member_id']
+            || (int) ($receipt['status'] ?? 0) !== (int) PayDict::STATUS_FINISH
+            || Rules::cents((string) $receipt['money']) !== Rules::cents((string) $order['amount'])
+            || ($receipt['out_trade_no'] ?? '') === '')throw new CommonException('原成功付款凭据不属于此会员订单');
         $q = Db::name('pay_refund')->where('site_id', $site)->where('out_trade_no', $receipt['out_trade_no'])->order('id');
         if ($lock)$q->lock(true);
         $sum = 0;
@@ -178,7 +313,11 @@ final class MembershipCostService
     /** Immutable verified receipts, independent of membership expiry or current catalog edits. */
     public static function balances(int $site, int $merchant, bool $lock = false, int $excludeOrder = 0): array
     {
-        $q = Store::query('coop_order', $site)->where('merchant_id', $merchant)->where('purpose', 'membership')->whereIn('status', ['paid', 'unpaid', 'closed'])->order('id');
+        $q = Store::query('coop_order', $site)->where('merchant_id', $merchant)->where('purpose', 'membership')->whereIn('status', [
+                'paid',
+                'unpaid',
+                'closed'
+            ])->order('id');
         if ($excludeOrder > 0)$q->where('id', '<>', $excludeOrder);
         if ($lock)$q->lock(true);
         $deposit = 0;
@@ -201,7 +340,11 @@ final class MembershipCostService
                         $settlement = self::receiptRefund($site, $order, $receipt, $lock);
                     } catch (CommonException$ignored) {
                         $settlement = ['full' => false];
-                    }if (!$settlement['full'])$unsettled[] = ['id' => (int) $receipt['id'], 'out_trade_no' => $receipt['out_trade_no'], 'pay_time' => (int) $receipt['pay_time']];
+                    }if (!$settlement['full'])$unsettled[] = [
+                        'id' => (int) $receipt['id'],
+                        'out_trade_no' => $receipt['out_trade_no'],
+                        'pay_time' => (int) $receipt['pay_time']
+                    ];
                 }
                 if ($unsettled) {
                     $review = true;
@@ -217,21 +360,40 @@ final class MembershipCostService
                 $pay = Db::name('pay')->where('site_id', $site)->where('trade_type', PaymentService::TRADE_TYPE)->where('trade_id', $order['id'])->where('out_trade_no', $order['out_trade_no'])->where('status', PayDict::STATUS_FINISH);
                 if ($lock)$pay->lock(true);
                 $receipt = $pay->find();
-                if (!$receipt || $receipt['main_type'] !== PayDict::MEMBER || (int) $receipt['main_id'] !== (int) $order['member_id'] || Rules::cents((string) $receipt['money']) !== Rules::cents((string) $order['amount']))throw new CommonException('会员费用缺少匹配的已付款凭据');
+                if (!$receipt
+                    || $receipt['main_type'] !== PayDict::MEMBER
+                    || (int) $receipt['main_id'] !== (int) $order['member_id']
+                    || Rules::cents((string) $receipt['money']) !== Rules::cents((string) $order['amount']))throw new CommonException('会员费用缺少匹配的已付款凭据');
                 $rq = Db::name('pay_refund')->where('site_id', $site)->where('out_trade_no', $order['out_trade_no'])->order('id');
                 if ($lock)$rq->lock(true);
                 $refunded = self::refundedComponents($order, $rule, $rq->select()->toArray());
                 $review = $review || $refunded['review'] || $refunded['pending'] || !empty($rule['requires_manual_review']);
                 $deposit += Rules::cents($rule['deposit_amount']) - $refunded['deposit'];
-                if (!$refunded['review'] && empty($rule['requires_manual_review']))$points += Rules::cents($rule['experience_quantity']) - $refunded['quantity'];
+                if (!$refunded['review']
+                    && empty($rule['requires_manual_review']))$points += Rules::cents($rule['experience_quantity']) - $refunded['quantity'];
                 $updated = max($updated, (int) $order['update_time']);
-                $facts[] = [(int) $order['id'], (string) $order['out_trade_no'], $rule['deposit_amount'], $rule['experience_quantity'], $refunded, !empty($rule['requires_manual_review'])];
+                $facts[] = [
+                    (int) $order['id'],
+                    (string) $order['out_trade_no'],
+                    $rule['deposit_amount'],
+                    $rule['experience_quantity'],
+                    $refunded,
+                    !empty($rule['requires_manual_review'])
+                ];
             } catch (CommonException $error) {
                 $review = true;
                 $facts[] = [(int) $order['id'], 'review'];
             }
         }
-        return ['balance' => Rules::amount($deposit), 'purchased_value' => Rules::amount($points), 'review_required' => $review, 'review_message' => $unreconciled ? '存在已收款但会员业务尚未核对的付款单，请联系平台处理原单，暂不重复收费或退押金' : '', 'review_order_ids' => $unreconciled, 'updated_at' => $updated, 'fingerprint' => hash('sha256', Data::json($facts))];
+        return [
+            'balance' => Rules::amount($deposit),
+            'purchased_value' => Rules::amount($points),
+            'review_required' => $review,
+            'review_message' => $unreconciled ? '存在已收款但会员业务尚未核对的付款单，请联系平台处理原单，暂不重复收费或退押金' : '',
+            'review_order_ids' => $unreconciled,
+            'updated_at' => $updated,
+            'fingerprint' => hash('sha256', Data::json($facts))
+        ];
     }
     public static function promotionBase(array $order): int
     {

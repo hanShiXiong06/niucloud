@@ -13,7 +13,24 @@ final class CooperationNoticeReadService
     private Context $context;
     private ?\Closure $dispatcher;
     private const CHANNELS = ['queue', 'weapp', 'wechat', 'sms'];
-    private const STATUSES = ['pending', 'processing', 'processed', 'obsolete', 'expired', 'deferred', 'failed', 'disabled', 'pending_configuration', 'pending_recipient', 'dispatching', 'submitted', 'accepted', 'rejected', 'not_submitted', 'uncertain'];
+    private const STATUSES = [
+        'pending',
+        'processing',
+        'processed',
+        'obsolete',
+        'expired',
+        'deferred',
+        'failed',
+        'disabled',
+        'pending_configuration',
+        'pending_recipient',
+        'dispatching',
+        'submitted',
+        'accepted',
+        'rejected',
+        'not_submitted',
+        'uncertain'
+    ];
     public function __construct(Context $context, ?callable $dispatcher = null)
     {
         $this->context = $context;
@@ -46,7 +63,12 @@ final class CooperationNoticeReadService
             $field = self::jsonField('member_id');
             $query->where('entity_type', 'collaboration_notice')->whereRaw(
                 "EXISTS (SELECT 1 FROM `".str_replace('`', '``', $table)."` notice_recipient WHERE notice_recipient.site_id = :recipient_site AND notice_recipient.member_id = CAST(".$field." AS UNSIGNED) AND (notice_recipient.nickname LIKE :recipient_name OR notice_recipient.member_no LIKE :recipient_no OR notice_recipient.member_id = :recipient_id))",
-                ['recipient_site' => $context->site, 'recipient_name' => '%'.$recipient.'%', 'recipient_no' => '%'.$recipient.'%', 'recipient_id' => ctype_digit($recipient) ? (int) $recipient : 0]);
+                [
+                    'recipient_site' => $context->site,
+                    'recipient_name' => '%'.$recipient.'%',
+                    'recipient_no' => '%'.$recipient.'%',
+                    'recipient_id' => ctype_digit($recipient) ? (int) $recipient : 0
+                ]);
         }
         $total = (int) (clone $query)->count();
         $rows = $query->order('id desc')->page($page, $limit)->select()->toArray();

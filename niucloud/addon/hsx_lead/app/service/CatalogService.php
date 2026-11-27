@@ -22,7 +22,12 @@ final class CatalogService
         $this->context->manager();
         if (!empty($params['business_type'])) {
             $business = (new BusinessService($this->context))->definition(Data::text($params, 'business_type', 16, true), false);
-            return ['items' => (new BusinessService($this->context))->options($business), 'business_type' => $business['key'], 'source' => 'business_config', 'supports_preview' => true];
+            return [
+                'items' => (new BusinessService($this->context))->options($business),
+                'business_type' => $business['key'],
+                'source' => 'business_config',
+                'supports_preview' => true
+            ];
         }
         return $this->directory() + ['supports_preview' => true];
     }
@@ -37,7 +42,14 @@ final class CatalogService
         $revision = $this->revision($items);
         $keyword = mb_strtolower(Data::text($params, 'keyword', 200));
         if ($keyword !== '') $items = array_values(array_filter($items, static function (array $row) use ($keyword): bool {
-            return mb_strpos(mb_strtolower(implode(' ', [$row['id'], $row['title'], $row['brand'], $row['category_name'], ...($row['path'] ?? []), ...($row['aliases'] ?? [])])), $keyword) !== false;
+            return mb_strpos(mb_strtolower(implode(' ', [
+                            $row['id'],
+                            $row['title'],
+                            $row['brand'],
+                            $row['category_name'],
+                            ...($row['path'] ?? []),
+                            ...($row['aliases'] ?? [])
+                        ])), $keyword) !== false;
         }));
         $page = max(1, (int) ($params['page'] ?? 1));
         $limit = max(1, min(100, (int) ($params['limit'] ?? 20)));
@@ -61,7 +73,11 @@ final class CatalogService
 
     private function mutate(string $id, array $input, string $action): array
     {
-        $this->context->permission(['created' => 'hsx_lead_catalog_add', 'updated' => 'hsx_lead_catalog_edit', 'deleted' => 'hsx_lead_catalog_delete'][$action]);
+        $this->context->permission([
+                'created' => 'hsx_lead_catalog_add',
+                'updated' => 'hsx_lead_catalog_edit',
+                'deleted' => 'hsx_lead_catalog_delete'
+            ][$action]);
         $businessKey = $this->businessKey($input);
         $revision = $this->expectedRevision($input, true);
         if ($id !== '' && !preg_match('/^[A-Za-z0-9_-]{1,100}$/D', $id)) throw new CommonException('目录ID格式错误');
@@ -109,7 +125,8 @@ final class CatalogService
             $current = $this->auditItem($row);
             break;
         }
-        if (($action === 'deleted' && $current !== null) || ($action !== 'deleted' && $current !== $result['item'])) throw new CommonException('目录已提交，但回读内容已变化，请刷新核对，不要重复提交');
+        if (($action === 'deleted' && $current !== null)
+            || ($action !== 'deleted' && $current !== $result['item'])) throw new CommonException('目录已提交，但回读内容已变化，请刷新核对，不要重复提交');
         return $result + ['revision' => $this->revision($saved['items']), 'message' => '目录已保存；已有线索和商户能力记录未改动'];
     }
 
@@ -135,7 +152,17 @@ final class CatalogService
         $labels = ['created' => '新增目录项', 'updated' => '修改目录项', 'deleted' => '删除目录项', 'replaced' => '批量导入替换'];
         $page['data'] = array_map(function (array $row) use ($names, $labels): array {
             $detail = Data::decode($row['detail_json'] ?? '');
-            $safe = array_intersect_key($detail, array_flip(['business_type', 'business_name', 'item_id', 'before', 'after', 'items_count', 'changes', 'change_counts', 'changes_truncated']));
+            $safe = array_intersect_key($detail, array_flip([
+                        'business_type',
+                        'business_name',
+                        'item_id',
+                        'before',
+                        'after',
+                        'items_count',
+                        'changes',
+                        'change_counts',
+                        'changes_truncated'
+                    ]));
             return ['id' => (int) $row['id'], 'action' => $row['action'], 'action_label' => $labels[$row['action']] ?? '目录维护',
                 'operator_uid' => (int) $row['operator_uid'], 'operator_name' => $names[(int) $row['operator_uid']] ?? '原工作人员',
                 'create_time' => (int) $row['create_time'], 'detail' => $safe];
@@ -171,7 +198,11 @@ final class CatalogService
         $found = false;
         $businessName = '';
         foreach ($config['businesses'] as &$entry) {
-            if ($businessKey === 'purchase' && $entry['key'] !== 'purchase' && $entry['dimension'] === 'model' && !$entry['options'] && empty($entry['catalog_configured'])) {
+            if ($businessKey === 'purchase'
+                && $entry['key'] !== 'purchase'
+                && $entry['dimension'] === 'model'
+                && !$entry['options']
+                && empty($entry['catalog_configured'])) {
                 $entry['options'] = $service->options($entry);
                 $entry['catalog_configured'] = true;
             }
@@ -187,7 +218,11 @@ final class CatalogService
         unset($config['membership_levels'],$config['membership_configuration_source']);
         CatalogConfigStorage::write($this->context->site, ConfigService::KEY, $config);
         if ($businessKey === 'purchase') CatalogConfigStorage::write($this->context->site, self::KEY, ['items' => array_map(fn (array $row): array => $this->auditItem($row), $items), 'updated_at' => time()]);
-        $this->context->audit('catalog', 0, $action, ['business_type' => $businessKey, 'business_name' => $businessName, 'items_count' => count($items)] + $detail);
+        $this->context->audit('catalog', 0, $action, [
+                'business_type' => $businessKey,
+                'business_name' => $businessName,
+                'items_count' => count($items)
+            ] + $detail);
     }
 
     /** Only backend-maintained labels may enter a business directory, never ERP stock. */
@@ -199,7 +234,8 @@ final class CatalogService
         // An explicitly emptied directory must stay empty until the administrator
         // imports it again. Do not silently restore defaults or scan inventory.
         if (is_array($value) && array_key_exists('items', $value)) {
-            if (!is_array($value['items']) || !\addon\hsx_lead\app\support\PhpRuntime::isList($value['items'])) throw new CommonException('后台业务目录格式异常，请管理员重新导入');
+            if (!is_array($value['items'])
+                || !\addon\hsx_lead\app\support\PhpRuntime::isList($value['items'])) throw new CommonException('后台业务目录格式异常，请管理员重新导入');
             return ['items' => $value['items'], 'source' => 'configured', 'updated_at' => (int) ($value['updated_at'] ?? 0)];
         }
         $items = [];
@@ -252,7 +288,8 @@ final class CatalogService
             } catch (CommonException $error) {
                 throw new CommonException('第'.($index + 2).'行：'.$error->getMessage());
             }
-            if ($business['dimension'] !== 'model' && (!isset($row['id']) || (is_string($row['id']) && trim($row['id']) === ''))) $item['id'] = 'opt_'.substr(hash('sha256', $businessKey.'|'.implode('|', $item['path']).'|'.$item['title']), 0, 24);
+            if ($business['dimension'] !== 'model'
+                && (!isset($row['id']) || (is_string($row['id']) && trim($row['id']) === ''))) $item['id'] = 'opt_'.substr(hash('sha256', $businessKey.'|'.implode('|', $item['path']).'|'.$item['title']), 0, 24);
             if (isset($items[$item['id']])) throw new CommonException('目录存在重复选项ID或重复路径，请核对后重新导入');
             $items[$item['id']] = $item;
         }
@@ -262,7 +299,17 @@ final class CatalogService
         BusinessService::validate([$candidate]);
         $preview = $input['preview'] ?? false;
         if (!in_array($preview, [true, false, 0, 1, '0', '1'], true)) throw new CommonException('预览参数无效');
-        if (in_array($preview, [true, 1, '1'], true)) return ['items' => $items, 'count' => count($items), 'preview' => true, 'business_type' => $businessKey, 'source' => 'preview'];
+        if (in_array($preview, [
+                    true,
+                    1,
+                    '1'
+                ], true)) return [
+            'items' => $items,
+            'count' => count($items),
+            'preview' => true,
+            'business_type' => $businessKey,
+            'source' => 'preview'
+        ];
         $revision = $this->expectedRevision($input);
         Db::transaction(function () use ($items, $businessKey, $revision) {
             Db::name('site')->where('site_id', $this->context->site)->lock(true)->field('site_id')->find();
@@ -277,13 +324,21 @@ final class CatalogService
                 $action = !isset($before[$id]) ? 'created' : ($this->auditItem($before[$id]) !== $this->auditItem($row) ? 'updated' : '');
                 if ($action === '') continue;
                 $counts[$action]++;
-                if (count($changes) < 20) $changes[] = ['action' => $action, 'before' => isset($before[$id]) ? $this->auditItem($before[$id]) : null, 'after' => $this->auditItem($row)];
+                if (count($changes) < 20) $changes[] = [
+                    'action' => $action,
+                    'before' => isset($before[$id]) ? $this->auditItem($before[$id]) : null,
+                    'after' => $this->auditItem($row)
+                ];
             }
             foreach ($before as $id => $row) if (!isset($after[$id])) {
                 $counts['deleted']++;
                 if (count($changes) < 20)$changes[] = ['action' => 'deleted', 'before' => $this->auditItem($row), 'after' => null];
             }
-            $this->persistItems($items, $businessKey, 'replaced', ['change_counts' => $counts, 'changes' => $changes, 'changes_truncated' => array_sum($counts) > count($changes)]);
+            $this->persistItems($items, $businessKey, 'replaced', [
+                    'change_counts' => $counts,
+                    'changes' => $changes,
+                    'changes_truncated' => array_sum($counts) > count($changes)
+                ]);
         });
         CatalogConfigStorage::evict($this->context->site, ConfigService::KEY);
         CatalogConfigStorage::evict($this->context->site, self::KEY);
@@ -315,7 +370,8 @@ final class CatalogService
         if (is_int($id)) $id = (string) $id;
         if (!is_string($id)) throw new CommonException('目录ID须为文本或整数');
         $id = trim($id);
-        if ($id === '') $id = 'cat_'.substr(hash('sha256', $brand.'|'.$title.'|'.$category.(isset($row['一级分类']) || isset($row['path']) ? '|'.implode('|', $path) : '')), 0, 24);
+        if ($id === '') $id = 'cat_'.substr(hash('sha256', $brand.'|'.$title.'|'.$category.(isset($row['一级分类'])
+                    || isset($row['path']) ? '|'.implode('|', $path) : '')), 0, 24);
         if (!is_string($id) || !preg_match('/^[A-Za-z0-9_-]{1,100}$/D', $id)) throw new CommonException('目录ID格式错误');
         return ['id' => $id, 'title' => $title, 'brand' => $brand,
             'category_name' => $category, 'path' => $path, 'aliases' => array_values(array_unique($clean))];
@@ -353,7 +409,8 @@ final class CatalogService
                 if (preg_match('/vbaProject|activeX|embeddings|externalLinks/i', $stat['name'])) throw new CommonException('目录XLSX不得包含宏、嵌入对象或外部工作簿');
                 if (preg_match('/\.(?:xml|rels)$/i', $stat['name'])) {
                     $xml = $zip->getFromIndex($i);
-                    if ($xml === false || preg_match('/<!DOCTYPE|<!ENTITY|TargetMode\s*=\s*["\x27]External/i', $xml)) throw new CommonException('目录XLSX不得包含外部链接或XML实体');
+                    if ($xml === false
+                        || preg_match('/<!DOCTYPE|<!ENTITY|TargetMode\s*=\s*["\x27]External/i', $xml)) throw new CommonException('目录XLSX不得包含外部链接或XML实体');
                 }
             }
             $zip->close();
@@ -362,7 +419,9 @@ final class CatalogService
             $reader->setReadDataOnly(true);
             $reader->setIncludeCharts(false);
             $info = $reader->listWorksheetInfo($file);
-            if (count($info) !== 1 || (int) $info[0]['totalRows'] > 5001 || (int) $info[0]['totalColumns'] > 12) throw new CommonException('请使用单工作表，最多5000条目录及12列');
+            if (count($info) !== 1
+                || (int) $info[0]['totalRows'] > 5001
+                || (int) $info[0]['totalColumns'] > 12) throw new CommonException('请使用单工作表，最多5000条目录及12列');
             $book = $reader->load($file);
             $sheet = $book->getSheet(0);
             $header = [];
@@ -435,7 +494,9 @@ final class CatalogService
                     // omitted alias columns may be restored; never guess an
                     // omitted ID/brand or mix delimiters within a CSV file.
                     $missing = array_slice($header, count($values));
-                    if ($delimiter !== "\t" || count($values) > count($header) || array_diff($missing, ['aliases', '别名'])) throw new CommonException('文件列数与表头不一致，请统一分隔符；空白单元格也需保留分隔符');
+                    if ($delimiter !== "\t"
+                        || count($values) > count($header)
+                        || array_diff($missing, ['aliases', '别名'])) throw new CommonException('文件列数与表头不一致，请统一分隔符；空白单元格也需保留分隔符');
                     $values = array_pad($values, count($header), '');
                 }
                 $rows[] = array_combine($header, $values);
@@ -465,7 +526,8 @@ final class CatalogService
             if (isset($seen[$id])) throw new CommonException('同一型号请修改数量，不要重复勾选');
             $seen[$id] = true;
             $quantity = $entry['quantity'] ?? 1;
-            if ((!is_int($quantity) && !is_string($quantity)) || !preg_match('/^[1-9]\d{0,2}$/D', (string) $quantity)) throw new CommonException('每项设备数量请填写1—999的整数');
+            if ((!is_int($quantity) && !is_string($quantity))
+                || !preg_match('/^[1-9]\d{0,2}$/D', (string) $quantity)) throw new CommonException('每项设备数量请填写1—999的整数');
             $min = Data::amount($entry['budget_min'] ?? null, true);
             $max = Data::amount($entry['budget_max'] ?? null, true);
             if ($min !== null && $max !== null && bccomp($min, $max, 2) > 0) throw new CommonException('每项设备预算下限不能高于上限');

@@ -81,15 +81,29 @@ final class OnboardingInviterService
                     $newPid = (int) $candidate['member_id'];
                     $changed = Db::name('member')->where('site_id', $site)->where('member_id', $id)->where('pid', 0)->update(['pid' => $newPid]);
                     if ($changed !== 1)throw new CommonException('邀请关系刚刚发生变化，请重新保存门店资料');
-                    $this->write(PromotionService::RELATION_PREFIX.$id, array_replace($value, ['pid' => $newPid, 'bound_at' => time(), 'source' => 'onboarding_manual']));
+                    $this->write(PromotionService::RELATION_PREFIX.$id, array_replace($value, [
+                                'pid' => $newPid,
+                                'bound_at' => time(),
+                                'source' => 'onboarding_manual'
+                            ]));
                     $outcome = 'bound';
                 }
             }
         }
         // Always consume on a successful FIRST profile, including blank/unavailable input.
         // A later upload, capability validation or transaction failure rolls this back too.
-        $this->write(self::MARKER_PREFIX.$id, ['schema_version' => 'hsx_lead.onboarding_inviter.v1', 'locked_at' => time(), 'merchant_id' => $merchantId, 'outcome' => $outcome]);
-        $this->context->audit('promotion_relation', $id, 'onboarding_inviter_consumed', ['merchant_id' => $merchantId, 'old_inviter_member_id' => $oldPid, 'inviter_member_id' => $newPid, 'outcome' => $outcome]);
+        $this->write(self::MARKER_PREFIX.$id, [
+                'schema_version' => 'hsx_lead.onboarding_inviter.v1',
+                'locked_at' => time(),
+                'merchant_id' => $merchantId,
+                'outcome' => $outcome
+            ]);
+        $this->context->audit('promotion_relation', $id, 'onboarding_inviter_consumed', [
+                'merchant_id' => $merchantId,
+                'old_inviter_member_id' => $oldPid,
+                'inviter_member_id' => $newPid,
+                'outcome' => $outcome
+            ]);
         $message = match ($outcome) {
             'bound' => '门店资料已保存，邀请人已设置',
             'unchanged' => '门店资料已保存，已保留原邀请人',
@@ -174,6 +188,7 @@ final class OnboardingInviterService
             if ((int) $pay['status'] !== (int) PayDict::STATUS_CANCEL)return true;
             if ((string) $pay['out_trade_no'] !== '')$numbers[] = $pay['out_trade_no'];
         }
-        return $numbers && Db::name('member_account_log')->where('site_id', $site)->where('member_id', $memberId)->where('account_type', 'balance')->where('from_type', 'order')->where('account_data', '<', 0)->whereIn('related_id', $numbers)->value('id') !== null;
+        return $numbers
+            && Db::name('member_account_log')->where('site_id', $site)->where('member_id', $memberId)->where('account_type', 'balance')->where('from_type', 'order')->where('account_data', '<', 0)->whereIn('related_id', $numbers)->value('id') !== null;
     }
 }

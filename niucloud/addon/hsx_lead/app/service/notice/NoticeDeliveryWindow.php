@@ -16,7 +16,8 @@ final class NoticeDeliveryWindow
         if (!is_array($input) || array_diff(array_keys($input), array_keys(self::defaults())))throw new CommonException('通知时段配置格式不正确');
         $out = array_replace(self::defaults(), $input);
         if (!is_bool($out['enabled']) || $out['timezone'] !== 'Asia/Shanghai')throw new CommonException('通知时段使用北京时间，请核对开关与时区');
-        foreach (['start', 'end'] as $key)if (!is_string($out[$key]) || !preg_match('/^(?:[01][0-9]|2[0-3]):[0-5][0-9]$/D', $out[$key]))throw new CommonException('通知时段请使用有效的小时与分钟');
+        foreach (['start', 'end'] as $key)if (!is_string($out[$key])
+            || !preg_match('/^(?:[01][0-9]|2[0-3]):[0-5][0-9]$/D', $out[$key]))throw new CommonException('通知时段请使用有效的小时与分钟');
         if ($out['start'] === $out['end'])throw new CommonException('免打扰开始与结束时间不能相同');
         return $out;
     }

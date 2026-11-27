@@ -768,7 +768,21 @@ $menus = [
                 'is_show' => '1',
                 'children' => [
                     ...array_map(static function (array $item): array {
-                        return ['menu_name' => $item[0], 'menu_key' => $item[1], 'menu_short_name' => $item[0], 'parent_select_key' => '', 'menu_type' => '2', 'icon' => '', 'api_url' => $item[2], 'router_path' => '', 'view_path' => '', 'methods' => $item[3], 'sort' => '100', 'status' => '1', 'is_show' => '0'];
+                        return [
+                            'menu_name' => $item[0],
+                            'menu_key' => $item[1],
+                            'menu_short_name' => $item[0],
+                            'parent_select_key' => '',
+                            'menu_type' => '2',
+                            'icon' => '',
+                            'api_url' => $item[2],
+                            'router_path' => '',
+                            'view_path' => '',
+                            'methods' => $item[3],
+                            'sort' => '100',
+                            'status' => '1',
+                            'is_show' => '0'
+                        ];
                     }, [
                         ['查看门店资料表单', 'hsx_lead_cooperation_profile_form', 'hsx_lead/cooperation/profile-form', 'get'],
                         ['保存门店资料表单', 'hsx_lead_cooperation_profile_form_save', 'hsx_lead/cooperation/profile-form', 'put'],
