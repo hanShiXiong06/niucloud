@@ -3,8 +3,8 @@
         <el-form :model="formData" label-width="150px" ref="formRef" class="page-form" v-loading="loading">
             <el-form-item :label="t('exportOrderType')">
                 <el-radio-group v-model="formData.type">
-                    <el-radio label="shop_order">{{ t('shopOrder') }}</el-radio>
-                    <el-radio label="shop_order_goods">{{ t('shopOrderGoods') }}</el-radio>
+                    <el-radio label="phone_shop_order">{{ t('shopOrder') }}</el-radio>
+                    <el-radio label="phone_shop_order_goods">{{ t('shopOrderGoods') }}</el-radio>
                 </el-radio-group>
             </el-form-item>
         </el-form>
@@ -25,13 +25,13 @@ import type { FormInstance } from 'element-plus'
 
 const showDialog = ref(false)
 const loading = ref(false)
-let popTitle: string = ''
+const popTitle: string = ''
 
 /**
  * 表单数据
  */
 const initialFormData = {
-    type: 'shop_order',
+    type: 'phone_shop_order'
 }
 const formData: Record<string, any> = reactive({ ...initialFormData })
 

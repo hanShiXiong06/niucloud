@@ -280,7 +280,7 @@ class CorePayService extends BaseCoreService
                 ]
             );
             if (env('queue.state', true)) {
-                PayReturnTo::dispatch([ 'site_id' => $site_id, 'out_trade_no' => $out_trade_no ], secs: 60);
+                PayReturnTo::dispatch([ 'site_id' => $site_id, 'out_trade_no' => $out_trade_no ], secs: 300);
             }
         }
         return $pay_result;
@@ -301,6 +301,13 @@ class CorePayService extends BaseCoreService
             $pay = $this->createByTrade($site_id, $trade_type, $trade_id);
         }
         if ($pay[ 'status' ] == PayDict::STATUS_FINISH) throw new PayException('PAY_SUCCESS');
+        // Some provider contracts reuse an uncompleted payment instead of
+        // cancelling it. Their driver must revalidate its own frozen attempt;
+        // this option creates no receipt, grants no rights and never closes it.
+        if ($pay['status'] == PayDict::STATUS_ING) {
+            $definition = PayDict::getPayType([(string)$pay['type']])[(string)$pay['type']] ?? [];
+            if (($definition['reuse_pending'] ?? false) === true) return $pay;
+        }
 //        if ($pay['status'] == PayDict::STATUS_CANCEL) throw new PayException('PAY_IS_REMOVE');
         if ($pay[ 'status' ] == PayDict::STATUS_ING || $pay[ 'status' ] == PayDict::STATUS_CANCEL) {
             if ($pay[ 'status' ] == PayDict::STATUS_ING) {
@@ -323,7 +330,17 @@ class CorePayService extends BaseCoreService
     public function createByTrade($site_id, $trade_type, $trade_id)
     {
         //创建新的支付单据
-        $data = array_values(array_filter(event('PayCreate', [ 'site_id' => $site_id, 'trade_type' => $trade_type, 'trade_id' => $trade_id ])))[ 0 ] ?? [];
+        $event_result = event('PayCreate', [ 'site_id' => $site_id, 'trade_type' => $trade_type, 'trade_id' => $trade_id ]);
+
+        // PHP 8.0+ 兼容性处理：确保 event 返回值是数组
+        if (!is_array($event_result)) {
+            $event_result = [];
+        }
+        // 过滤掉 false/null 等无效值，只保留有效的数组元素
+        $filtered = array_values(array_filter($event_result, function($item) {
+            return is_array($item) && !empty($item);
+        }));
+        $data = !empty($filtered) ? $filtered[0] : [];
         if (empty($data)) throw new PayException('PAY_NOT_FOUND_TRADE');//找不到可支付的交易
 
         if (isset($data[ 'status' ]) && $data[ 'money' ] == 0) {
@@ -383,6 +400,15 @@ class CorePayService extends BaseCoreService
         ])) throw new PayException('TREAT_PAYMENT_IS_OPEN');
         if ($pay[ 'status' ] == PayDict::STATUS_ING) {
             if (!empty($pay->type)) {
+                // An opt-in driver owns authoritative receipt reconciliation.
+                // Never apply an ambiguous close fallback to that contract or
+                // overwrite a receipt it has already committed while querying.
+                $definition = PayDict::getPayType([(string)$pay->type])[(string)$pay->type] ?? [];
+                if (($definition['manages_receipt'] ?? false) === true) {
+                    $closed = $this->pay_event->init($site_id, $pay->channel, $pay->type)->close($out_trade_no);
+                    if ($closed !== true) return false;
+                    return $this->payClose($site_id, ['out_trade_no' => $out_trade_no, 'type' => $pay->type]);
+                }
                 //尝试取消或关闭第三方支付
                 $close = $this->pay_event->init($site_id, $pay->channel, $pay->type)->close($out_trade_no);
                 if (!$close) {//有问题查询第三方订单详情
@@ -520,6 +546,13 @@ class CorePayService extends BaseCoreService
         if (empty($pay_info))
             return false;
         $status = $pay_info[ 'status' ];
+        $definition = PayDict::getPayType([(string)$type])[(string)$type] ?? [];
+        if (($definition['manages_receipt'] ?? false) === true) {
+            // The driver already reconciled the exact receipt. Do not replay
+            // success without its provider ID, and do not recursively poll an
+            // unpaid trade. Scheduled retries belong to the driver contract.
+            return $status === OnlinePayDict::SUCCESS;
+        }
         switch ($status) {
             case OnlinePayDict::SUCCESS://支付成功
                 $this->paySuccess($site_id, [
@@ -558,8 +591,36 @@ class CorePayService extends BaseCoreService
         $trade_type = $pay->trade_type;
         $trade_id = $pay->trade_id;
         $main_id = $pay->main_id;
+        $paid_at = time();
+        $definition = PayDict::getPayType([(string)$type])[(string)$type] ?? [];
+        if (($definition['provider_receipt_time'] ?? false) === true) {
+            // This optional driver capability accepts only a server-verified
+            // receipt time. API payment requests must never forward pay_time.
+            // Using reconciliation time here would invalidate an originally
+            // timely payment just because delivery was delayed.
+            $receipt_time = $params['pay_time'] ?? null;
+            $created_at = (int)$pay->getData('create_time');
+            $provider_number = $params['trade_no'] ?? null;
+            if (!is_int($receipt_time) || $receipt_time <= 0 || $receipt_time > $paid_at
+                || $created_at <= 0 || $receipt_time < $created_at
+                || !is_string($provider_number) || $provider_number === '' || strlen($provider_number) > 128
+                || preg_match('/[\x00-\x1f\x7f]/', $provider_number)
+                || (string)$pay->type !== (string)$type) {
+                throw new PayException('渠道已核实的原收款时间或凭据不完整，未改写付款记录');
+            }
+            if ((int)$pay->status === (int)PayDict::STATUS_FINISH) {
+                // Replaying an identical receipt must not renew its clock or
+                // dispatch business listeners for a second time.
+                if ((int)$pay->getData('pay_time') !== $receipt_time
+                    || !hash_equals((string)$pay->trade_no, $provider_number)) {
+                    throw new PayException('重复收款凭据与原交易不一致，未修改已确认付款');
+                }
+                return true;
+            }
+            $paid_at = $receipt_time;
+        }
         $data = array(
-            'pay_time' => time(),
+            'pay_time' => $paid_at,
             'status' => PayDict::STATUS_FINISH,
             'type' => $type,
             'trade_no' => $params[ 'trade_no' ] ?? '',

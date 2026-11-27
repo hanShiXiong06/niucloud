@@ -1,4 +1,5 @@
-import { redirect, isWeixinBrowser, urlDeconstruction, currRoute } from '@/utils/common'
+import { redirect, isWeixinBrowser, urlDeconstruction, currRoute, getToken } from '@/utils/common'
+import { getAppPages, getSubPackagesPages, getNeedLoginPages, getTabbarPages, getFirstPage } from '@/utils/pages'
 import {
     weappLogin,
     updateWeappOpenid,
@@ -12,14 +13,59 @@ import { getWechatAuthCode } from '@/app/api/system'
 import useMemberStore from '@/stores/member'
 import useConfigStore from '@/stores/config'
 import useSystemStore from '@/stores/system'
+import { ref } from 'vue'
+
+// All hook instances share one navigation flow, not another user's business data.
+let loginNavigationEpoch = 0
+let loginNavigationCancelled = false
+let loginRedirectTimer: ReturnType<typeof setTimeout> | undefined
+const loginRoutePath = (value: unknown) => typeof value === 'string' ? '/' + value.replace(/^\/+/, '').split(/[?#]/)[0] : ''
+const isAuthenticationRoute = (value: string) => /^\/app\/pages\/auth(?:\/|$)/.test(value)
 
 export function useLogin() {
+    let flowEpoch = loginNavigationEpoch
+    const isCurrentLogin = (expectedEpoch = flowEpoch) => !loginNavigationCancelled && expectedEpoch === loginNavigationEpoch
+    const beginLogin = () => {
+        flowEpoch = ++loginNavigationEpoch
+        loginNavigationCancelled = false
+        if (loginRedirectTimer) clearTimeout(loginRedirectTimer)
+        loginRedirectTimer = undefined
+        return flowEpoch
+    }
+    /** Cancellation is not a successful login and must never reopen a protected page. */
+    const cancelLogin = () => {
+        loginNavigationEpoch++
+        loginNavigationCancelled = true
+        if (loginRedirectTimer) clearTimeout(loginRedirectTimer)
+        loginRedirectTimer = undefined
+        uni.removeStorageSync('loginBack')
+        const registered = new Set([...getAppPages(), ...getSubPackagesPages()].map(loginRoutePath))
+        const protectedPages = new Set(getNeedLoginPages().map(loginRoutePath))
+        const publicPage = (path: string) => registered.has(path) && !protectedPages.has(path) && !isAuthenticationRoute(path)
+        const fallback = () => {
+            const path = [getFirstPage(), ...getTabbarPages(), ...registered].map(loginRoutePath).find(publicPage)
+            if (path) redirect({ url: path, mode: 'reLaunch', fail: () => uni.showToast({ title: '页面未打开，请稍后重试', icon: 'none' }) })
+            else uni.showToast({ title: '暂无可浏览页面，请联系商家', icon: 'none' })
+        }
+        const stack = getCurrentPages()
+        for (let index = stack.length - 2; index >= 0; index--) {
+            const page = stack[index] as any
+            if (!publicPage(loginRoutePath(page?.route || page?.$page?.route || page?.$page?.fullPath))) continue
+            uni.navigateBack({ delta: stack.length - 1 - index, fail: fallback })
+            return
+        }
+        fallback()
+    }
     /**
      * 设置登录返回页
      */
     const setLoginBack = (data: redirectOptions) => {
-        uni.setStorage({ key: 'loginBack', data })
-        setTimeout(() => {
+        beginLogin()
+        const scheduledEpoch = flowEpoch
+        uni.setStorageSync('loginBack', data)
+        loginRedirectTimer = setTimeout(() => {
+            loginRedirectTimer = undefined
+            if (loginNavigationCancelled || scheduledEpoch !== loginNavigationEpoch || getToken() || isAuthenticationRoute(loginRoutePath(currRoute()))) return
             const config = useConfigStore()
             const systemStore = useSystemStore()
 
@@ -84,20 +130,48 @@ export function useLogin() {
     /**
      * 执行登录后跳转
      */
-    const handleLoginBack = () => {
+    const ler = ref(0)
+    const handleLoginBack = (e) => {
+        if (loginNavigationCancelled || flowEpoch !== loginNavigationEpoch) return
+        const navigationEpoch = flowEpoch
+          ler.value = e
         uni.removeStorageSync('autoLoginLock')
         uni.getStorage({
             key: 'loginBack',
             success: (res: any) => {
-                res ? redirect(
+                if (loginNavigationCancelled || navigationEpoch !== loginNavigationEpoch) return
+                if(ler.value == 1){
+                    redirect({
+                        url:'/addon/home_service/technician/pages/member/index',
+                        mode: 'redirectTo'
+                    })
+                }else if(ler.value == 2){
+                    redirect({
+                        url:'/addon/home_service/store/pages/member/index',
+                        mode: 'redirectTo'
+                    })
+                }else{
+                      res ? redirect(
                     {
                         ...res.data,
                         mode: 'redirectTo'
                     }
                 ) : redirect({ url: '/app/pages/index/index', mode: 'switchTab' })
+                }
+              
             },
             fail: (res) => {
-                redirect({ url: '/app/pages/index/index', mode: 'switchTab' })
+                if (loginNavigationCancelled || navigationEpoch !== loginNavigationEpoch) return
+                  console.log(ler.value)
+                if(ler.value==1){
+                    redirect({ url:'/addon/home_service/technician/pages/member/index', mode: 'switchTab' })
+
+                }else  if(ler.value==2){
+                    redirect({ url:'/addon/home_service/store/pages/member/index', mode: 'switchTab' })
+                }else{
+                    redirect({ url:'/app/pages/index/index', mode: 'switchTab' })
+
+                }
             }
         })
     }
@@ -107,6 +181,8 @@ export function useLogin() {
      * @param params { code, backFlag, successCallback }
      */
     const authLogin = (params: any) => {
+        const requestEpoch = flowEpoch
+        const requestCurrent = () => !loginNavigationCancelled && requestEpoch === loginNavigationEpoch
         let obj: any = {
             code: params.code,
             nickname: params.nickname,
@@ -118,8 +194,10 @@ export function useLogin() {
 
         // #ifdef MP-WEIXIN
         weappLogin(obj).then((res: any) => {
+            if (!requestCurrent()) return
             if (res.data.token) {
                 useMemberStore().setToken(res.data.token, () => {
+                    if (!requestCurrent()) return
                     const config = useConfigStore()
                     const memberInfo: any = useMemberStore().info
 
@@ -157,6 +235,7 @@ export function useLogin() {
                 uni.setStorageSync('unionid', res.data.unionid)
             }
         }).catch((err) => {
+            if (!requestCurrent()) return
             uni.showToast({ title: err.msg, icon: 'none' })
             if (params.successCallback) params.successCallback()
         })
@@ -164,12 +243,15 @@ export function useLogin() {
 
         // #ifdef H5
         wechatUser(obj).then((user_res: any) => {
+            if (!requestCurrent()) return
             if (user_res.data) {
                 wechatUserLogin(user_res.data).then((res: any) => {
+                    if (!requestCurrent()) return
                     const config = useConfigStore()
                     if (res.data.token) {
                         uni.removeStorageSync('member_lock')
                         useMemberStore().setToken(res.data.token, () => {
+                            if (!requestCurrent()) return
                             const memberInfo = useMemberStore().info
                             memberInfo && memberInfo.wx_openid && uni.setStorageSync('openid', memberInfo.wx_openid)
                             // todo 已注册的会员不受影响
@@ -220,10 +302,12 @@ export function useLogin() {
                         }
                     }
                 }).catch((err) => {
+                    if (!requestCurrent()) return
                     uni.setStorageSync('member_lock', true)
                 })
             }
         }).catch((err) => {
+            if (!requestCurrent()) return
             if (err.code == -1) {
                 getAuthCode({ scopes: 'snsapi_userinfo' })
             } else {
@@ -234,6 +318,7 @@ export function useLogin() {
         
         // #ifdef APP-PLUS
         wxappLogin(obj).then((res) => {
+            if (!requestCurrent()) return
             if (res.data.token) {
                 useMemberStore().setToken(res.data.token, () => {
                     handleLoginBack();
@@ -247,6 +332,7 @@ export function useLogin() {
             
             if (params.successCallback) params.successCallback(res.data)
         }).catch((err) => {
+            if (!requestCurrent()) return
             uni.showToast({ title: err.msg, icon: 'none' })
         })
         // #endif
@@ -286,6 +372,8 @@ export function useLogin() {
      * @param params { scopes, updateFlag, backFlag, successCallback }
      */
     const getAuthCode = (params: any = {}) => {
+        const requestEpoch = flowEpoch
+        const requestCurrent = () => !loginNavigationCancelled && requestEpoch === loginNavigationEpoch
         params.scopes = params.scopes || 'snsapi_base'; // 公众号用
 
         // 微信小程序用
@@ -300,6 +388,7 @@ export function useLogin() {
         // #ifdef MP-WEIXIN
         wx.login({
             success(res: any) {
+                if (!requestCurrent()) return
                 if (res.code) {
                     params.updateFlag ? updateOpenid(res.code) : authLogin({
                         code: res.code,
@@ -360,6 +449,7 @@ export function useLogin() {
             url,
             scopes: params.scopes
         }).then((res: any) => {
+            if (!requestCurrent()) return
             uni.setStorageSync('wechat_login_back', true) // 微信公众号手动授权登录回调标识
             // uni.setStorageSync('mandatory_Mobile', true) // 微信授权登录+强制绑定手机号标识 
             // location.replace(res.data.url);
@@ -373,6 +463,7 @@ export function useLogin() {
         	"provider": "weixin",
         	"onlyAuthorize": true, // 微信登录仅请求授权认证
         	success: function(event){
+                if (!requestCurrent()) return
         		const { code } = event
                 authLogin({ code })
         	},
@@ -392,6 +483,11 @@ export function useLogin() {
     }
 
     return {
+        beginLogin,
+        cancelLogin,
+        isCurrentLogin,
+        getLoginEpoch: () => flowEpoch,
+        isLoginCancelled: () => loginNavigationCancelled,
         setLoginBack,
         handleLoginBack,
         authLogin,

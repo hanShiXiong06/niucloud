@@ -12,6 +12,7 @@
 namespace addon\phone_shop\app\service\api\order;
 
 use addon\phone_shop\app\dict\order\OrderLogDict;
+use addon\phone_shop\app\model\local_delivery\Local;
 use addon\phone_shop\app\model\order\Order;
 use addon\phone_shop\app\service\core\delivery\CoreStoreService;
 use addon\phone_shop\app\service\core\order\CoreOrderCreateService;
@@ -102,5 +103,10 @@ class OrderCreateService extends BaseApiService
     public function getStore(array $data)
     {
         return (new CoreStoreService())->getStoreList($this->site_id, $data);
+    }
+
+    public function getLocalDeliveryConfig()
+    {
+        return  (new Local())->where([['site_id', '=', $this->site_id]])->findOrEmpty()->toArray();
     }
 }

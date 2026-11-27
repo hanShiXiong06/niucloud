@@ -1,0 +1,26 @@
+{
+  "note": "Fictitious, independently supplied normalized records for this isolated test only. Not an official Boyuan endpoint, request or response.",
+  "expected": {
+    "site_id": 90101, "mode": "test", "connection_key": "fixture-connection", "account_id": "fixture-book", "company_id": "fixture-company",
+    "source_document_id": "purchase:20", "source_document_no": "LOCAL-P20",
+    "external_purchase_id": "BY-P-20-A", "external_purchase_no": "PUR-20-A", "currency": "CNY", "purchase_amount": "100.00",
+    "lines": [
+      {"source_line_id":"purchase_line:101","device_ref":"asset:1011","external_line_id":"BY-L1","payable_id":201,"amount":"60.00"},
+      {"source_line_id":"purchase_line:102","device_ref":"asset:1012","external_line_id":"BY-L2","payable_id":202,"amount":"40.00"}
+    ],
+    "payments": [
+      {"settlement_id":301,"settlement_no":"LOCAL-S301","external_payment_id":"BY-V1","external_payment_no":"PAY-1","voucher_amount":"80.00","applications":[{"payable_id":201,"amount":"60.00"},{"payable_id":202,"amount":"10.00"}]},
+      {"settlement_id":302,"settlement_no":"LOCAL-S302","external_payment_id":"BY-V2","external_payment_no":"PAY-2","voucher_amount":"30.00","applications":[{"payable_id":202,"amount":"30.00"}]}
+    ]
+  },
+  "evidence": {
+    "site_id": 90101, "mode": "test", "connection_key": "fixture-connection", "account_id": "fixture-book", "company_id": "fixture-company",
+    "source_document_id": "purchase:20", "source_document_no": "LOCAL-P20", "external_purchase_id": "BY-P-20-A", "external_purchase_no": "PUR-20-A",
+    "currency": "CNY", "purchase_amount": "100.00", "applied_amount": "100.00", "remaining_amount": "0.00", "effective": true, "complete": true,
+    "allocations": [
+      {"external_allocation_id":"A-1","external_line_id":"BY-L1","external_purchase_id":"BY-P-20-A","external_purchase_no":"PUR-20-A","external_payment_id":"BY-V1","external_payment_no":"PAY-1","voucher_amount":"80.00","amount":"60.00","effective":true},
+      {"external_allocation_id":"A-2","external_line_id":"BY-L2","external_purchase_id":"BY-P-20-A","external_purchase_no":"PUR-20-A","external_payment_id":"BY-V1","external_payment_no":"PAY-1","voucher_amount":"80.00","amount":"10.00","effective":true},
+      {"external_allocation_id":"A-3","external_line_id":"BY-L2","external_purchase_id":"BY-P-20-A","external_purchase_no":"PUR-20-A","external_payment_id":"BY-V2","external_payment_no":"PAY-2","voucher_amount":"30.00","amount":"30.00","effective":true}
+    ]
+  }
+}

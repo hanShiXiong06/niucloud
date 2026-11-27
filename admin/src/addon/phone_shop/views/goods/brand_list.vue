@@ -12,8 +12,7 @@
             <el-card class="box-card !border-none my-[10px] table-search-wrap" shadow="never">
                 <el-form :inline="true" :model="brandTable.searchParam" ref="searchFormRef">
                     <el-form-item :label="t('brandName')" prop="brand_name">
-                        <el-input v-model.trim="brandTable.searchParam.brand_name"
-                            :placeholder="t('brandNamePlaceholder')" />
+                        <el-input v-model.trim="brandTable.searchParam.brand_name" :placeholder="t('brandNamePlaceholder')" />
                     </el-form-item>
 
                     <el-form-item>
@@ -28,15 +27,21 @@
                     <template #empty>
                         <span>{{ !brandTable.loading ? t('emptyData') : '' }}</span>
                     </template>
-                    <el-table-column prop="brand_name" :label="t('brandName')" min-width="120" />
+                    <el-table-column prop="brand_name" :label="t('brandName')" min-width="120">
+                        <template #default="{ row }">
+                            <div v-if="row.color_json"  class="inline-block px-[10px] text-[12px] rounded-[4px] box-border whitespace-nowrap h-[28px] leading-[28px]" :style="{ color : row.color_json.text_color, backgroundColor : row.color_json.bg_color, border : row.color_json.border_color ? '1px solid ' + row.color_json.border_color : 'none' }">
+                                <span>{{ row.brand_name }}</span>
+                            </div>
+                            <div v-else>{{ row.brand_name }}</div>
+                        </template>
+                    </el-table-column>
                     <el-table-column :label="t('logo')" min-width="120">
                         <template #default="{ row }">
                             <div class="h-[30px]">
                                 <el-image class="w-[30px] h-[30px] " :src="img(row.logo)" fit="contain">
                                     <template #error>
                                         <div class="image-slot">
-                                            <img class="w-[30px] h-[30px]"
-                                                src="@/addon/phone_shop/assets/brand_default.png" />
+                                            <img class="w-[30px] h-[30px]" src="@/addon/phone_shop/assets/brand_default.png" />
                                         </div>
                                     </template>
                                 </el-image>
@@ -45,18 +50,15 @@
                     </el-table-column>
                     <el-table-column prop="sort" :label="t('sort')" min-width="120" sortable="custom">
                         <template #default="{ row }">
-                            <el-input v-model="row.sort" class="!w-[100px]" maxlength="8"
-                                @blur="sortInputListener(row.sort, row)" />
+                            <el-input v-model.trim="row.sort" class="!w-[100px]" maxlength="8" @blur="sortInputListener(row.sort, row)" />
                         </template>
                     </el-table-column>
 
                     <el-table-column :label="t('operation')" fixed="right" align="right" min-width="120">
                         <template #default="{ row }">
-                            <div v-if="userStore().siteInfo.site_id == row.site_id">
-                                <el-button type="primary" link @click="editEvent(row)">{{ t('edit') }}</el-button>
-                                <el-button type="primary" link @click="deleteEvent(row.brand_id)">{{ t('delete') }}
-                                </el-button>
-                            </div>
+                            <el-button type="primary" link @click="editEvent(row)">{{ t('edit') }}</el-button>
+                            <el-button type="primary" link @click="deleteEvent(row.brand_id)">{{ t('delete') }}
+                            </el-button>
                         </template>
                     </el-table-column>
 
@@ -68,7 +70,7 @@
                 </div>
             </div>
 
-            <brand-edit ref="editBrandDialog" @complete="loadBrandList" />
+            <brand-edit ref="editBrandDialog" @complete="loadBrandList(getTablePageStorage(brandTable.searchParam).page)" />
         </el-card>
     </div>
 </template>
@@ -77,11 +79,10 @@
 import { reactive, ref } from 'vue'
 import { t } from '@/lang'
 import { getBrandPageList, deleteBrand, modifyBrandSort } from '@/addon/phone_shop/api/goods'
-import { img, debounce } from '@/utils/common'
+import { img, debounce, setTablePageStorage, getTablePageStorage } from '@/utils/common'
 import { ElMessageBox, FormInstance, ElMessage } from 'element-plus'
 import BrandEdit from '@/addon/phone_shop/views/goods/components/brand-edit.vue'
 import { useRoute } from 'vue-router'
-import userStore from '@/stores/modules/user'
 
 const route = useRoute()
 const pageName = route.meta.title
@@ -131,11 +132,12 @@ const loadBrandList = (page: number = 1) => {
         brandTable.loading = false
         brandTable.data = res.data.data
         brandTable.total = res.data.total
+        setTablePageStorage(brandTable.page, brandTable.limit, brandTable.searchParam)
     }).catch(() => {
         brandTable.loading = false
     })
 }
-loadBrandList()
+loadBrandList(getTablePageStorage(brandTable.searchParam).page)
 
 const editBrandDialog: Record<string, any> | null = ref(null)
 
@@ -168,7 +170,7 @@ const deleteEvent = (id: number) => {
         }
     ).then(() => {
         deleteBrand(id).then(() => {
-            loadBrandList()
+            loadBrandList(getTablePageStorage(brandTable.searchParam).page)
         }).catch(() => {
         })
     })
@@ -199,4 +201,5 @@ const resetForm = (formEl: FormInstance | undefined) => {
 }
 </script>
 
-<style lang="scss" scoped></style>
+<style lang="scss" scoped>
+</style>

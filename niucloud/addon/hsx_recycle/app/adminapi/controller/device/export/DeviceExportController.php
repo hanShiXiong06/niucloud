@@ -1,0 +1,122 @@
+<?php
+declare(strict_types=1);
+
+namespace addon\hsx_recycle\app\adminapi\controller\device\export;
+
+use addon\hsx_recycle\app\service\admin\device_export\DeviceExportService;
+use addon\hsx_recycle\app\service\admin\order\RecycleDeviceErpSyncService;
+use addon\hsx_recycle\app\service\core\recycle_order\RecycleErpCapabilityService;
+use core\base\BaseAdminController;
+use core\exception\CommonException;
+use think\facade\Log;
+use think\Response;
+
+/**
+ * 设备导出控制器
+ */
+class DeviceExportController extends BaseAdminController
+{
+    /**
+     * 获取已回收设备列表
+     * @return Response
+     */
+    public function list()
+    {
+        $data = $this->request->params([
+            ['imei', ''],
+            ['model', ''],
+            ['category_id', ''],
+            ['update_at', []],
+            ['status', ''], // 默认导出已回收和已转代卖设备
+            ['warehouse_type', ''],
+            ['export_status', ''],
+        ]);
+
+        return success('SUCCESS', (new DeviceExportService())->getPage($data));
+    }
+
+    /**
+     * 导出已回收设备
+     * @return Response
+     */
+    public function export()
+    {
+        $data = $this->request->params([
+            ['imei', ''],
+            ['model', ''],
+            ['category_id', ''],
+            ['update_at', []],
+            ['status', ''],
+            ['warehouse_type', ''],
+            ['export_status', ''],
+             ['device_ids', []],
+             ['include_barcode', 0],
+        ]);
+
+        (new DeviceExportService())->export($data);
+        return success('EXPORT_SUCCESS');
+    }
+
+    /**
+     * 批量同步已回收/已代卖设备到 ERP。
+     * @return Response
+     */
+    public function syncErp()
+    {
+        $data = $this->request->params([
+            ['device_ids', []],
+            ['targets', ['self_erp']],
+            ['placement', []],
+        ]);
+
+        $placement = (array)$data['placement'];
+        if (empty($placement)) {
+            $placement = (new RecycleErpCapabilityService())->defaultInboundPlacement((int)$this->request->siteId());
+        }
+        return success((new RecycleDeviceErpSyncService())->dispatch(
+            (array)$data['device_ids'],
+            (array)$data['targets'],
+            $placement
+        ));
+    }
+
+    /**
+     * 批量查询设备下游同步健康度（前端据此只在"卡住"的设备上显示「重新同步」）。
+     * @return Response
+     */
+    public function syncHealth()
+    {
+        $data = $this->request->params([
+            ['device_ids', []],
+        ]);
+
+        return success((new RecycleDeviceErpSyncService())->syncHealth((array)$data['device_ids']));
+    }
+
+    /**
+     * 重新同步单台设备（兜底：事件失效时手动补齐下游步骤，如中台待拍照）。
+     * @param int $id
+     * @return Response
+     */
+    public function resync(int $id)
+    {
+        $data = $this->request->params([
+            ['placement', []],
+        ]);
+        $placement = (array)$data['placement'];
+        if (empty($placement)) {
+            $placement = (new RecycleErpCapabilityService())->defaultInboundPlacement((int)$this->request->siteId());
+        }
+        $siteId = (int)$this->request->siteId();
+        try {
+            $result = (new RecycleDeviceErpSyncService())->resync($id, $placement);
+            if (empty($result['has_asset']) || !empty($result['still_failed'])) {
+                Log::warning("回收入库待核对 site_id={$siteId} device_id={$id} still_failed=" . (int)($result['still_failed'] ?? 0));
+            }
+            return success($result);
+        } catch (\Throwable $e) {
+            Log::error("回收入库核对失败 site_id={$siteId} device_id={$id} " . ($e instanceof CommonException ? $e->getMessage() : get_class($e)));
+            throw $e;
+        }
+    }
+}

@@ -3,7 +3,7 @@
   "tabPrinterTemplate": "打印模板",
   "printerName": "打印机名称",
   "printerNamePlaceholder": "请输入打印机名称",
-  "brand": "设备品牌",
+  "brand": "设备等级",
   "printWidth": "纸张宽度",
   "status": "状态",
   "statusOn": "启用",

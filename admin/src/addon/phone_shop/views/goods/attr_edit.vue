@@ -3,7 +3,7 @@
         <el-card class="card !border-none mb-[15px]" shadow="never">
             <el-page-header :content="pageName" :icon="ArrowLeft" @back="router.push(`/phone_shop/goods/attr`)" />
         </el-card>
-
+        
         <el-card class="box-card !border-none" shadow="never">
 
             <!-- 商品参数基础信息 -->
@@ -21,16 +21,14 @@
                 </el-col>
             </el-row>
 
-            <el-button type="primary" @click="openAttrValueEvent" class="my-[15px]">{{ t('addShopGoodsAttr')
-                }}</el-button>
+            <el-button type="primary" @click="openAttrValueEvent" class="my-[15px]">{{ t('addShopGoodsAttr') }}</el-button>
 
             <el-table :data="goodsAttrTable.data" size="large" v-loading="goodsAttrTable.loading">
                 <template #empty>
                     <span>{{ !goodsAttrTable.loading ? t('emptyData') : '' }}</span>
                 </template>
 
-                <el-table-column prop="attr_value_name" :label="t('attrValueName')" min-width="200"
-                    :show-overflow-tooltip="true" />
+                <el-table-column prop="attr_value_name" :label="t('attrValueName')" min-width="200" :show-overflow-tooltip="true"/>
 
                 <el-table-column prop="type" :label="t('attrValueType')" min-width="100" :show-overflow-tooltip="true">
                     <template #default="{ row }">
@@ -46,12 +44,11 @@
                     </template>
                 </el-table-column>
 
-                <el-table-column prop="child" :label="t('attrValueChild')" min-width="320"
-                    :show-overflow-tooltip="true">
+                <el-table-column prop="child" :label="t('attrValueChild')" min-width="320" :show-overflow-tooltip="true">
                     <template #default="{ row }">
                         <template v-if="row.type != 'text'">
-                            <template v-for="(item, index) in row.child">
-                                <span :class="{ 'mr-[5px]': (index + 1) != row.child.length }">{{ item.name }}</span>
+                            <template v-for="(item,index) in row.child">
+                                <span :class="{ 'mr-[5px]' : (index+1) != row.child.length }">{{ item.name }}</span>
                             </template>
                         </template>
                         <template v-else>
@@ -61,18 +58,16 @@
                 </el-table-column>
 
                 <el-table-column prop="sort" :label="t('sort')" min-width="120" sortable="custom">
-                    <template #default="{ row, $index }">
-                        <el-input v-model.trim="row.sort" class="w-[70px]" maxlength="10"
-                            @input="sortInputListener($event, row)" />
+                    <template #default="{ row,$index }">
+                        <el-input v-model.trim="row.sort" class="w-[70px]" maxlength="8" @input="sortInputListener($event, row)" />
                     </template>
                 </el-table-column>
 
                 <el-table-column :label="t('operation')" fixed="right" align="right" min-width="120">
-                    <template #default="{ row, $index }">
-                        <el-button type="primary" link @click="editAttrValueEvent(row, $index)">{{ t('edit')
-                            }}</el-button>
-                        <el-button type="primary" link @click="deleteEvent($index)">{{ t('delete') }}</el-button>
-                    </template>
+                   <template #default="{ row,$index }">
+                       <el-button type="primary" link @click="editAttrValueEvent(row,$index)">{{ t('edit') }}</el-button>
+                       <el-button type="primary" link @click="deleteEvent($index)">{{ t('delete') }}</el-button>
+                   </template>
                 </el-table-column>
 
             </el-table>
@@ -80,50 +75,42 @@
         </el-card>
 
         <!-- 编辑商品参数信息 -->
-        <el-dialog v-model="showDialogByAttr" :title="t('updateShopGoodsAttr')" width="500px" :destroy-on-close="true">
-            <el-form :model="formData" label-width="120px" ref="formRef" :rules="formRulesByAttr" class="page-form"
-                v-loading="loadingByAttr">
+        <el-dialog v-model="showDialogByAttr" :title="t('updateAttr')" width="500px" :close-on-click-modal="false" :destroy-on-close="true">
+            <el-form :model="formData" label-width="120px" ref="formRef" :rules="formRulesByAttr" class="page-form" v-loading="loadingByAttr">
                 <el-form-item :label="t('attrName')" prop="attr_name">
-                    <el-input v-model.trim="formData.attr_name" clearable :placeholder="t('attrNamePlaceholder')"
-                        class="input-width" maxlength="20" />
+                    <el-input v-model.trim="formData.attr_name" clearable :placeholder="t('attrNamePlaceholder')" class="input-width"  maxlength="20" />
                 </el-form-item>
 
-                <el-form-item :label="t('sort')">
-                    <el-input v-model.trim="formData.sort" maxlength="6" show-word-limit clearable
-                        :placeholder="t('sortPlaceholder')" class="input-width" @keyup="filterNumber($event)" />
+                <el-form-item :label="t('sort')" >
+                    <el-input v-model.trim="formData.sort"  maxlength="8" show-word-limit clearable :placeholder="t('sortPlaceholder')" class="input-width" @keyup="filterNumber($event)"/>
                 </el-form-item>
 
             </el-form>
 
             <template #footer>
-                <span class="dialog-footer">
-                    <el-button @click="showDialogByAttr = false">{{ t('cancel') }}</el-button>
-                    <el-button type="primary" :loading="loadingByAttr" @click="confirmAttr(formRef)">{{ t('confirm')
-                        }}</el-button>
-                </span>
+            <span class="dialog-footer">
+                <el-button @click="showDialogByAttr = false">{{ t('cancel') }}</el-button>
+                <el-button type="primary" :loading="loadingByAttr" @click="confirmAttr(formRef)">{{ t('confirm') }}</el-button>
+            </span>
             </template>
         </el-dialog>
 
         <!-- 编辑商品参数值信息 -->
-        <el-dialog v-model="showDialogByAttrValue" :title="attrValueTitleDialog" width="700px" :destroy-on-close="true">
-            <el-form :model="formAttrValueData" label-width="120px" ref="formAttrValueRef" :rules="formRulesByAttrValue"
-                class="page-form" v-loading="loadingByAttrValue">
+        <el-dialog v-model="showDialogByAttrValue" :title="attrValueTitleDialog" width="700px" :close-on-click-modal="false" :destroy-on-close="true">
+            <el-form :model="formAttrValueData" label-width="120px" ref="formAttrValueRef" :rules="formRulesByAttrValue" class="page-form" v-loading="loadingByAttrValue">
                 <el-form-item :label="t('attrValueName')" prop="attr_value_name">
-                    <el-input v-model.trim="formAttrValueData.attr_value_name" clearable
-                        :placeholder="t('attrValueNamePlaceholder')" class="input-width" maxlength="20"
-                        show-word-limit />
+                    <el-input v-model.trim="formAttrValueData.attr_value_name" clearable :placeholder="t('attrValueNamePlaceholder')" class="input-width" maxlength="20" show-word-limit />
                 </el-form-item>
-
                 <el-form-item :label="t('attrValueType')">
-                    <el-select v-model="formAttrValueData.type" class="!w-[150px]"
-                        :disabled="actionAttrValueIndex > -1">
-                        <el-option v-for="item in attrValueTypeOptions" :label="item.label" :value="item.value" />
-                    </el-select>
+                    <div class="flex flex-col">
+                        <el-select v-model="formAttrValueData.type" class="!w-[150px]" :disabled="actionAttrValueId > -1">
+                            <el-option v-for="item in attrValueTypeOptions" :label="item.label" :value="item.value" />
+                        </el-select>
+                        <div class="mt-[10px] text-[12px] text-[#999] leading-[1]">注意：编辑时参数类型不可更改</div>
+                    </div>
                 </el-form-item>
-
-                <el-form-item :label="t('sort')">
-                    <el-input v-model.trim="formAttrValueData.sort" maxlength="6" show-word-limit clearable
-                        :placeholder="t('sortPlaceholder')" class="!w-[150px]" @keyup="filterNumber($event)" />
+                <el-form-item :label="t('sort')" >
+                    <el-input v-model.trim="formAttrValueData.sort" maxlength="8" show-word-limit clearable :placeholder="t('sortPlaceholder')" class="!w-[150px]" @keyup="filterNumber($event)"/>
                 </el-form-item>
 
                 <template v-if="formAttrValueData.type != 'text'">
@@ -134,35 +121,25 @@
 
                         <el-table-column prop="name" :label="t('attrValueName')" min-width="200">
                             <template #default="{ row }">
-                                <el-input v-model.trim="row.name" class="input-width" maxlength="20"
-                                    :placeholder="t('attrValueNamePlaceholder')" clearable show-word-limit />
+                                <el-input v-model.trim="row.name" class="input-width" maxlength="20" :placeholder="t('attrValueNamePlaceholder')" clearable show-word-limit />
                             </template>
                         </el-table-column>
 
                         <el-table-column prop="name" :label="t('sort')" min-width="120">
                             <template #default="{ row }">
-                                <el-input v-model.trim="row.sort" class="!w-[150px]" maxlength="6"
-                                    :placeholder="t('sortPlaceholder')" clearable show-word-limit
-                                    @keyup="filterNumber($event)" />
-                            </template>
-                        </el-table-column>
-                        <el-table-column prop="name" :label="t('字体颜色')" min-width="120">
-                            <template #default="{ row }">
-                                <el-color-picker v-model="row.color" />
+                                <el-input v-model.trim="row.sort" class="!w-[150px]" maxlength="8" :placeholder="t('sortPlaceholder')" clearable show-word-limit @keyup="filterNumber($event)" />
                             </template>
                         </el-table-column>
 
                         <el-table-column :label="t('operation')" fixed="right" align="right" min-width="60">
-                            <template #default="{ row, $index }">
-                                <el-button type="primary" link @click="deleteAttrValueEvent(row, $index)">{{ t('delete')
-                                    }}</el-button>
+                            <template #default="{ row,$index }">
+                                <el-button type="primary" link @click="deleteAttrValueEvent(row,$index)">{{ t('delete') }}</el-button>
                             </template>
                         </el-table-column>
 
                     </el-table>
 
-                    <el-button type="primary" plain @click="addAttrValueEvent" class="my-[10px]"
-                        v-show="formAttrValueData.child.length < maxLength">{{ t('addAttrValue') }}</el-button>
+                    <el-button type="primary" plain @click="addAttrValueEvent" class="my-[10px]" v-show="formAttrValueData.child.length < maxLength">{{ t('addAttrValue') }}</el-button>
                 </template>
 
             </el-form>
@@ -170,8 +147,7 @@
             <template #footer>
                 <span class="dialog-footer">
                     <el-button @click="showDialogByAttrValue = false">{{ t('cancel') }}</el-button>
-                    <el-button type="primary" :loading="loadingByAttrValue"
-                        @click="confirmAttrValue(formAttrValueRef)">{{ t('confirm') }}</el-button>
+                    <el-button type="primary" :loading="loadingByAttrValue" @click="confirmAttrValue(formAttrValueRef)">{{ t('confirm') }}</el-button>
                 </span>
             </template>
         </el-dialog>
@@ -180,12 +156,13 @@
 </template>
 
 <script lang="ts" setup>
-import { reactive, ref, computed } from 'vue'
+import { reactive, ref,computed } from 'vue'
 import { t } from '@/lang'
-import { ElMessage, ElMessageBox, FormInstance } from 'element-plus'
+import { ArrowLeft } from "@element-plus/icons-vue"
+import { ElMessage,ElMessageBox,FormInstance } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'
-import { debounce, filterNumber } from '@/utils/common'
-import { getAttrInfo, editAttr, modifyAttrValue } from '@/addon/phone_shop/api/goods'
+import { debounce,filterNumber } from '@/utils/common'
+import { getAttrInfo,editAttr, modifyAttrValue } from '@/addon/phone_shop/api/goods'
 import { cloneDeep } from 'lodash-es'
 
 const route = useRoute()
@@ -195,8 +172,8 @@ const pageName = route.meta.title;
 
 route.query.attr_id = route.query.attr_id || 0
 
-const attrId: any = ref(route.query.attr_id)
-const attrInfo: any = reactive({})
+const attrId:any = ref(route.query.attr_id)
+const attrInfo:any = reactive({})
 
 const maxLength = ref(30) // 参数值最大数量控制
 
@@ -205,7 +182,7 @@ const goodsAttrTable = reactive({
     data: []
 })
 
-const loadAttrInfo = () => {
+const loadAttrInfo = ()=> {
     // 查询商品参数信息
     getAttrInfo(attrId.value).then((res: any) => {
         Object.assign(attrInfo, res.data)
@@ -245,11 +222,10 @@ const formRulesByAttr = computed(() => {
 })
 
 // 编辑商品参数
-const editEvent = (data: any) => {
+const editEvent = ()=>{
     formData.attr_id = attrInfo.attr_id;
     formData.attr_name = attrInfo.attr_name;
-    formData.sort = attrInfo.sort;
-    formData.color = attrInfo.color;
+    formData.sort = attrInfo.sort
     showDialogByAttr.value = true
 }
 
@@ -302,7 +278,7 @@ const showDialogByAttrValue = ref(false)
 const loadingByAttrValue = ref(false)
 const formAttrValueRef = ref<FormInstance>()
 const attrValueTitleDialog = ref('')
-const formAttrValueData: any = reactive({
+const formAttrValueData:any = reactive({
     attr_value_id: 0,
     attr_value_name: '',
     type: 'radio',
@@ -313,16 +289,16 @@ const formAttrValueData: any = reactive({
 // 参数类型下拉框
 const attrValueTypeOptions = reactive([
     {
-        label: '单选',
-        value: 'radio'
+        label:'单选',
+        value:'radio'
     },
     {
-        label: '多选',
-        value: 'checkbox'
+        label:'多选',
+        value:'checkbox'
     },
     {
-        label: '输入',
-        value: 'text'
+        label:'输入',
+        value:'text'
     }
 ])
 
@@ -332,12 +308,11 @@ const generateRandom = () => {
 }
 
 // 打开商品参数弹出框
-const openAttrValueEvent = () => {
+const openAttrValueEvent = ()=> {
     formAttrValueData.attr_value_id = attrInfo.attr_value_format.length + generateRandom();
     formAttrValueData.attr_value_name = '';
     formAttrValueData.type = 'radio';
     formAttrValueData.sort = 0;
-    formAttrValueData.color = '#000000';
     formAttrValueData.child = [];
 
     showDialogByAttrValue.value = true;
@@ -346,7 +321,7 @@ const openAttrValueEvent = () => {
 }
 
 // 修改参数的排序号
-const sortInputListener = debounce((sort: any, row: any) => {
+const sortInputListener = debounce((sort:any, row:any) => {
     if (isNaN(sort) || !/^\d{0,10}$/.test(sort)) {
         ElMessage({
             type: 'warning',
@@ -357,7 +332,7 @@ const sortInputListener = debounce((sort: any, row: any) => {
 
     for (let i = 0; i < attrInfo.attr_value_format.length; i++) {
         if (attrInfo.attr_value_format[i].attr_value_id == row.attr_value_id) {
-            attrInfo.attr_value_format[i].sort = sort;
+            attrInfo.attr_value_format[i].sort = sort ? sort : 0;
             break;
         }
     }
@@ -373,20 +348,19 @@ const sortInputListener = debounce((sort: any, row: any) => {
 })
 
 // 添加参数值
-const addAttrValueEvent = () => {
+const addAttrValueEvent = ()=>{
     formAttrValueData.child.push({
         id: formAttrValueData.child.length + generateRandom(),
         name: '',
-        color: '#000000',
         sort: 0
     });
 }
 
 // 编辑商品参数值
-const editAttrValueEvent = (data: any, index: any) => {
+const editAttrValueEvent = (data:any,index:any)=> {
     attrValueTitleDialog.value = t('updateShopGoodsAttr');
     actionAttrValueId.value = data.attr_value_id
-    Object.assign(formAttrValueData, cloneDeep(data))
+    Object.assign(formAttrValueData,cloneDeep(data))
     showDialogByAttrValue.value = true;
 }
 
@@ -406,14 +380,14 @@ const confirmAttrValue = async (formEl: FormInstance | undefined) => {
 
     await formEl.validate(async (valid) => {
         if (valid) {
-            if (formAttrValueData.type != 'text') {
-                if (formAttrValueData.child.length == 0) {
-                    ElMessage({ type: 'warning', message: `${t('attrValueNamePlaceholder')}` })
+            if(formAttrValueData.type != 'text'){
+                if(formAttrValueData.child.length == 0){
+                    ElMessage({type: 'warning', message: `${t('attrValueNamePlaceholder')}`})
                     return;
                 }
-                for (let i = 0; i < formAttrValueData.child.length; i++) {
-                    if (formAttrValueData.child[i].name == '') {
-                        ElMessage({ type: 'warning', message: `${t('attrValueNamePlaceholder')}` })
+                for(let i=0;i<formAttrValueData.child.length;i++){
+                    if(formAttrValueData.child[i].name == ''){
+                        ElMessage({type: 'warning', message: `${t('attrValueNamePlaceholder')}`})
                         break;
                     }
                 }
@@ -422,14 +396,18 @@ const confirmAttrValue = async (formEl: FormInstance | undefined) => {
             if (repeatAttrValue.value) return
             repeatAttrValue.value = true
 
+            formAttrValueData.child.forEach((item:any)=>{
+                item.sort = item.sort ? item.sort : 0
+            })
+
             formAttrValueData.child.sort((a: any, b: any) => {
                 return b.sort - a.sort
             });
 
             loadingByAttrValue.value = true
-            if (actionAttrValueId.value == -1) {
+            if(actionAttrValueId.value == -1) {
                 attrInfo.attr_value_format.push(formAttrValueData)
-            } else {
+            }else{
                 for (let i = 0; i < attrInfo.attr_value_format.length; i++) {
                     if (attrInfo.attr_value_format[i].attr_value_id == actionAttrValueId.value) {
                         attrInfo.attr_value_format[i] = cloneDeep(formAttrValueData)
@@ -438,8 +416,8 @@ const confirmAttrValue = async (formEl: FormInstance | undefined) => {
                 }
             }
             let data = {
-                attr_id: attrId.value,
-                attr_value_format: JSON.stringify(attrInfo.attr_value_format)
+                attr_id : attrId.value,
+                attr_value_format : JSON.stringify(attrInfo.attr_value_format)
             };
             modifyAttrValue(data).then(res => {
                 loadingByAttrValue.value = false
@@ -455,9 +433,10 @@ const confirmAttrValue = async (formEl: FormInstance | undefined) => {
 }
 
 // 删除参数值
-const deleteAttrValueEvent = (item: any, index: any) => {
-    formAttrValueData.child.splice(index, 1);
+const deleteAttrValueEvent = (item:any,index:any)=> {
+    formAttrValueData.child.splice(index,1);
 }
 </script>
 
-<style lang="scss" scoped></style>
+<style lang="scss" scoped>
+</style>

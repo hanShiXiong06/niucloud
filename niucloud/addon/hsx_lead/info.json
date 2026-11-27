@@ -1,0 +1,12 @@
+{
+  "title": "商户客资协作",
+  "key": "hsx_lead",
+  "version": "0.0.1",
+  "author": "hsx",
+  "desc": "商户发单与同城选店、ERP只读货盘、等级认证、框架收银台与会员佣金提现、客服抽检",
+  "type": "app",
+  "support_app": "",
+  "support_version": "1.2.4",
+  "compile": []
+}
+

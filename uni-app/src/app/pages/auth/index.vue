@@ -3,7 +3,7 @@
         <view class="w-screen h-screen" :style="warpStyle">
             <!-- #ifdef MP-WEIXIN || APP-PLUS -->
             <view :style="{'height':headerHeight}">
-                <top-tabbar :data="param" :scrollBool="topTabarObj.getScrollBool()" class="top-header" />
+                <top-tabbar :data="param" :scrollBool="topTabarObj.getScrollBool()" :customBack="cancelLogin" class="top-header" />
             </view>
             <!-- #endif -->
             <view class="mx-[var(--sidebar-m)] px-[var(--pad-sidebar-m)]">
@@ -32,7 +32,10 @@
                     <view class="w-full flex items-center justify-center mb-[40rpx]" v-if="loginConfig.is_auth_register">
 
                         <!-- 开启强制绑定手机号或者手机号登录的情况，排除强制获取用户信息的情况（is_force_access_user_info为0） -->
-                        <button v-if="!wapMemberMobile && loginConfig.is_bind_mobile && !loginConfig.is_force_access_user_info" class="w-[630rpx] h-[88rpx] !bg-[var(--primary-color)] !mx-[0] text-[26rpx] rounded-[44rpx] leading-[88rpx] font-500 !text-[#fff]" :open-type="openType" @getphonenumber="mobileAuth" @click="checkWxPrivacy">{{ t('quickLoginOrLogout') }}</button>
+                        <template v-if="!wapMemberMobile && loginConfig.is_bind_mobile && !loginConfig.is_force_access_user_info">
+                            <button v-if="!privacyAgreed" class="w-[630rpx] h-[88rpx] !bg-[var(--primary-color)] !mx-[0] text-[26rpx] rounded-[44rpx] leading-[88rpx] font-500 !text-[#fff]" @click="callProtocolFn">{{ t('quickLoginOrLogout') }}</button>
+                            <button v-else class="w-[630rpx] h-[88rpx] !bg-[var(--primary-color)] !mx-[0] text-[26rpx] rounded-[44rpx] leading-[88rpx] font-500 !text-[#fff]" :open-type="openType" @getphonenumber="mobileAuth" @click="checkWxPrivacy">{{ t('quickLoginOrLogout') }}</button>
+                        </template>
 
                         <!-- 授权登录/注册 -->
                         <button v-else class="w-[630rpx] h-[88rpx] !mx-[0] !bg-[var(--primary-color)] text-[26rpx] rounded-[44rpx] leading-[88rpx] font-500 !text-[#fff]" @click="oneClickLogin()">{{ t('quickLoginOrLogout') }}</button>
@@ -41,12 +44,15 @@
 
                     <!-- 未开启第三方登录/注册，但是开启了手机号登录，则一键手机号登录/注册 -->
                     <view class="w-full flex items-center justify-center mb-[40rpx]" v-else-if="!loginConfig.is_auth_register && loginConfig.is_mobile">
-                        <button v-if="!wapMemberMobile" class="w-[630rpx] h-[88rpx] !bg-[var(--primary-color)] !mx-[0] text-[26rpx] rounded-[44rpx] leading-[88rpx] font-500 !text-[#fff]" :open-type="openType" @getphonenumber="mobileAuth" @click="checkWxPrivacy('mobileAuth')">{{ t('quickLoginOrLogout') }}</button>
+                        <template v-if="!wapMemberMobile">
+                            <button v-if="!privacyAgreed" class="w-[630rpx] h-[88rpx] !bg-[var(--primary-color)] !mx-[0] text-[26rpx] rounded-[44rpx] leading-[88rpx] font-500 !text-[#fff]" @click="callProtocolFn">{{ t('quickLoginOrLogout') }}</button>
+                            <button v-else class="w-[630rpx] h-[88rpx] !bg-[var(--primary-color)] !mx-[0] text-[26rpx] rounded-[44rpx] leading-[88rpx] font-500 !text-[#fff]" :open-type="openType" @getphonenumber="mobileAuth" @click="checkWxPrivacy('mobileAuth')">{{ t('quickLoginOrLogout') }}</button>
+                        </template>
                         <button v-else class="w-[630rpx] h-[88rpx] !bg-[var(--primary-color)] !mx-[0] text-[26rpx] rounded-[44rpx] leading-[88rpx] font-500 !text-[#fff]" @click="oneClickLogin()">{{ t('quickLoginOrLogout') }}</button>
                     </view>
 
                     <!-- 小程序隐私协议 -->
-                    <wx-privacy-popup ref="wxPrivacyPopupRef"></wx-privacy-popup>
+                    <wx-privacy-popup ref="wxPrivacyPopupRef" @disagree="checkPrivacyStatus" @agree="checkPrivacyStatus"></wx-privacy-popup>
 
                     <!-- #endif -->
 
@@ -87,6 +93,7 @@
                         </view>
                     </view>
 
+                    <view class="login-cancel-entry"><button class="login-cancel-button" @click="cancelLogin">暂不登录</button></view>
                     <view class="footer w-full" v-if="loginConfig.is_mobile && loginConfig.is_username">
                         <view class="text-[26rpx] leading-[36rpx] text-[#666] text-center mb-[30rpx] font-400">其他登录方式</view>
                         <view class="flex justify-center">
@@ -128,7 +135,7 @@
 
 <script setup lang="ts">
 import { ref, computed, nextTick } from 'vue'
-import { img, isWeixinBrowser, getToken, redirect, pxToRpx } from '@/utils/common'
+import { img, isWeixinBrowser, getToken, redirect, pxToRpx, currRoute } from '@/utils/common'
 import { t } from '@/locale'
 import { useLogin } from '@/hooks/useLogin'
 import useConfigStore from '@/stores/config'
@@ -153,6 +160,7 @@ const loginConfig = computed(() => {
     return configStore.login
 })
 const login = useLogin()
+const cancelLogin = () => login.cancelLogin()
 
 const memberStore = useMemberStore()
 const memberInfo: any = computed(() => {
@@ -190,9 +198,14 @@ const bindMobileFn = () => {
 }
 
 onLoad(async() => {
+    const loadEpoch = login.beginLogin()
+    try {
     await systemStore.getSiteInfoFn()
+    if (!login.isCurrentLogin(loadEpoch)) return
 	await systemStore.getMemberMobileExistFn()
+    if (!login.isCurrentLogin(loadEpoch)) return
     await configStore.getLoginConfig()
+    if (!login.isCurrentLogin(loadEpoch)) return
     let normalLogin = !configStore.login.is_username && !configStore.login.is_mobile && !configStore.login.is_bind_mobile; // 未开启普通登录
 
     // #ifdef H5
@@ -201,6 +214,7 @@ onLoad(async() => {
         if (!getToken() && normalLogin && authRegisterLogin.value) {
             uni.showToast({ title: '商家未开启登录注册', icon: 'none' })
             setTimeout(() => {
+                if (!login.isCurrentLogin(loadEpoch)) return
                 redirect({ url: '/app/pages/index/index', mode: 'reLaunch' })
             }, 100)
         }
@@ -209,6 +223,7 @@ onLoad(async() => {
         if (!getToken() && normalLogin) {
             uni.showToast({ title: '商家未开启登录注册', icon: 'none' })
             setTimeout(() => {
+                if (!login.isCurrentLogin(loadEpoch)) return
                 redirect({ url: '/app/pages/index/index', mode: 'reLaunch' })
             }, 100)
         }
@@ -219,6 +234,7 @@ onLoad(async() => {
     if (!getToken() && normalLogin && authRegisterLogin.value) {
         uni.showToast({ title: '商家未开启登录注册', icon: 'none' })
         setTimeout(() => {
+            if (!login.isCurrentLogin(loadEpoch)) return
             redirect({ url: '/app/pages/index/index', mode: 'reLaunch' })
         }, 100)
         return;
@@ -227,15 +243,34 @@ onLoad(async() => {
     wapMemberMobile.value = uni.getStorageSync('member_mobile_exist');
 
     nextTick(() => {
+        if (!login.isCurrentLogin(loadEpoch)) return
         if (wxPrivacyPopupRef.value) wxPrivacyPopupRef.value.proactive();
     })
 
     // #endif
+    } catch (_) {
+        if (login.isCurrentLogin(loadEpoch)) uni.showToast({ title: '登录方式暂未读取，可稍后重试或暂不登录', icon: 'none' })
+    }
 })
 
 onShow(() => {
+    if (currRoute() === 'app/pages/auth/index' && !getToken() && !login.isCurrentLogin()) login.beginLogin()
     loginLoading.value = false;
 })
+
+// 是否同意隐私协议
+const privacyAgreed = ref(true)
+const checkPrivacyStatus = () => {
+    // 微信小程序隐私协议校验（uniapp 兼容写法）
+    wx.getPrivacySetting({
+        success(res) {
+            privacyAgreed.value = !res.needAuthorization;
+        },
+        fail(err) {
+            console.error('检查隐私协议失败：', err);
+        }
+    });
+}
 
 const warpStyle = computed(() => {
     let style = '';
@@ -249,6 +284,7 @@ const warpStyle = computed(() => {
 })
 
 // 检测是否同意小程序隐私协议和登录政策协议
+
 const checkWxPrivacy = (status: any = '') => {
     if (!isAgree.value && configStore.login.agreement_show) {
         // 针对微信小程序获取手机号特殊处理
@@ -262,8 +298,18 @@ const checkWxPrivacy = (status: any = '') => {
     return false;
 }
 
+const callProtocolFn = ()=>{
+    // #ifdef MP
+    if (wxPrivacyPopupRef.value) {
+        wxPrivacyPopupRef.value.proactive();
+        return true
+    }
+    // #endif
+}
+
 // 一键登录
 const oneClickLogin = (callback: any = null, data: any = null) => {
+    if (!login.isCurrentLogin()) return
     if (checkWxPrivacy()) return;
 
     if (loginLoading.value) return
@@ -390,6 +436,9 @@ const mobileAuth = (e: any) => {
 </script>
 
 <style lang="scss" scoped>
+.login-cancel-entry { display: flex; justify-content: center; margin: 24rpx auto; }
+.login-cancel-button { margin: 0; padding: 0 32rpx; min-height: 88rpx; line-height: 88rpx; color: #777; background: transparent; font-size: 26rpx; border: 0; }
+.login-cancel-button::after { border: 0; }
 .footer {
     position: fixed;
     bottom: 0;

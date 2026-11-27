@@ -1,10 +1,10 @@
 <template>
     <div class="main-container">
-        <el-card class="card !border-none mb-[15px]" shadow="never">
+        <el-card class="card !border-none" shadow="never">
             <el-page-header :content="pageName" :icon="ArrowLeft" @back="back" />
         </el-card>
-        
-        <el-card class="box-card !border-none" shadow="never">
+
+        <el-card class="box-card mt-[15px] !border-none" shadow="never">
             <el-form :model="formData" label-width="120px" ref="formRef" :rules="formRules" class="page-form" v-loading="loading">
                 <el-form-item :label="t('templateName')" prop="template_name">
                     <el-input v-model.trim="formData.template_name" clearable :placeholder="t('templateNamePlaceholder')" class="input-width" maxlength="60" />
@@ -28,22 +28,22 @@
                         </el-table-column>
                         <el-table-column :label="feeLabel.first">
                             <template #default="{ $index }">
-                                <el-input v-model="feeData[$index].snum"  maxlength="8"  @keyup="filterDigit($event)" @blur="feeData[$index].snum = $event.target.value"/>
+                                <el-input v-model.trim="feeData[$index].snum"  maxlength="8"  @keyup="filterDigit($event)" @blur="feeData[$index].snum = $event.target.value"/>
                             </template>
                         </el-table-column>
                         <el-table-column :label="t('fee')">
                             <template #default="{ $index }">
-                                <el-input v-model="feeData[$index].sprice"  maxlength="8" @keyup="filterDigit($event)" @blur="feeData[$index].sprice = $event.target.value"/>
+                                <el-input v-model.trim="feeData[$index].sprice"  maxlength="8" @keyup="filterDigit($event)" @blur="feeData[$index].sprice = $event.target.value"/>
                             </template>
                         </el-table-column>
                         <el-table-column :label="feeLabel.continue">
                             <template #default="{ $index }">
-                                <el-input v-model="feeData[$index].xnum" maxlength="8" @keyup="filterDigit($event)" @blur="feeData[$index].xnum = $event.target.value"/>
+                                <el-input v-model.trim="feeData[$index].xnum" maxlength="8" @keyup="filterDigit($event)" @blur="feeData[$index].xnum = $event.target.value"/>
                             </template>
                         </el-table-column>
                         <el-table-column :label="t('continueFee')">
                             <template #default="{ $index }">
-                                <el-input v-model="feeData[$index].xprice" @keyup="filterDigit($event)"  maxlength="8"  @blur="feeData[$index].xprice = $event.target.value"/>
+                                <el-input v-model.trim="feeData[$index].xprice" @keyup="filterDigit($event)"  maxlength="8"  @blur="feeData[$index].xprice = $event.target.value"/>
                             </template>
                         </el-table-column>
                         <el-table-column :label="t('operation')" align="right" width="150">
@@ -65,18 +65,18 @@
                         <el-table-column :label="t('freeShippingArea')">
                             <template #default="{ row, $index }">
                                 <div class="area-input">
-                                    <el-input v-model="row.free_shipping_area_names" :placeholder="t('areaPlaceholder')" readonly @click="selectArea('free_shipping', $index)" />
+                                    <el-input v-model.trim="row.free_shipping_area_names" :placeholder="t('areaPlaceholder')" readonly @click="selectArea('free_shipping', $index)" />
                                 </div>
                             </template>
                         </el-table-column>
                         <el-table-column :label="freeShippingLabel">
                             <template #default="{ $index }">
-                                <el-input v-model="freeShippingData[$index].free_shipping_num" @keyup="filterDigit($event)"  maxlength="8" @blur="freeShippingData[$index].free_shipping_num = $event.target.value"/>
+                                <el-input v-model.trim="freeShippingData[$index].free_shipping_num" @keyup="filterDigit($event)"  maxlength="8" @blur="freeShippingData[$index].free_shipping_num = $event.target.value"/>
                             </template>
                         </el-table-column>
                         <el-table-column :label="t('freeShippingPrice')">
                             <template #default="{ $index }">
-                                <el-input v-model="freeShippingData[$index].free_shipping_price"  @keyup="filterDigit($event)"  maxlength="8"  @blur="freeShippingData[$index].free_shipping_price = $event.target.value"/>
+                                <el-input v-model.trim="freeShippingData[$index].free_shipping_price"  @keyup="filterDigit($event)"  maxlength="8"  @blur="freeShippingData[$index].free_shipping_price = $event.target.value"/>
                             </template>
                         </el-table-column>
                         <el-table-column :label="t('operation')" align="right" width="150">
@@ -99,7 +99,7 @@
                         <el-table-column :label="t('noDelivery')">
                             <template #default="{ row, $index }">
                                 <div class="area-input">
-                                    <el-input v-model="row.no_delivery_area_names" readonly @click="selectArea('no_delivery', $index)" :placeholder="t('areaPlaceholder')" />
+                                    <el-input v-model.trim="row.no_delivery_area_names" readonly @click="selectArea('no_delivery', $index)" :placeholder="t('areaPlaceholder')" />
                                 </div>
                             </template>
                         </el-table-column>
@@ -142,7 +142,8 @@
 <script lang="ts" setup>
 import { ref, reactive, computed } from 'vue'
 import { t } from '@/lang'
-import type { ElTree, FormInstance } from 'element-plus'
+import { ElTree, FormInstance, ElMessage } from 'element-plus'
+import { ArrowLeft } from '@element-plus/icons-vue'
 import { addShippingTemplate, editShippingTemplate, getShippingTemplateInfo } from '@/addon/phone_shop/api/delivery'
 import { AnyObject } from '@/types/global'
 import { useRoute, useRouter } from 'vue-router'
@@ -373,10 +374,14 @@ const selectArea = (type: string, index: number) => {
 
 const areaTreeData = computed(() => {
     areaTree.value.forEach(province => {
-        province.child.forEach((city:any) => {
-            city.disabled = disabledArea.value.includes(city.id)
-        })
+        // 确保 province 存在且有 child 数组，避免 undefined.child 报错
+        if (province && Array.isArray(province.child)) {
+            province.child.forEach((city: any) => {
+                city.disabled = disabledArea.value?.includes(city.id) || false;
+            });
+        }
     })
+    
     return areaTree.value
 })
 
@@ -424,6 +429,14 @@ const onSave = async (formEl: FormInstance | undefined) => {
 
     await formEl.validate(async (valid) => {
         if (valid) {
+            if (formData.is_free_shipping && freeShippingData.value.length == 0) {
+                ElMessage.error(t('freeShippingPlaceholder'))
+                return
+            }
+            if (formData.no_delivery && noDeliveryData.value.length == 0) {
+                ElMessage.error('noDeliveryPlaceholder')
+                return
+            }
             loading.value = true
 
             const data:AnyObject = {
@@ -459,10 +472,9 @@ const onSave = async (formEl: FormInstance | undefined) => {
                 })
             })
             data.area = Object.values(area)
-
             save(data).then(() => {
                 loading.value = false
-                router.push({ path: '/phone_shop/order/shipping/template' })
+                router.push({ path: '/phone_shop/shipping/template' })
             }).catch(() => {
                 loading.value = false
             })
@@ -471,7 +483,7 @@ const onSave = async (formEl: FormInstance | undefined) => {
 }
 
 const back = () => {
-    router.push({ path: '/phone_shop/order/shipping/template' })
+    router.push({ path: '/phone_shop/shipping/template' })
 }
 </script>
 

@@ -32,7 +32,7 @@ use addon\phone_shop\app\dict\active\ExchangeDict;
  */
 class CoreOrderCreateService extends BaseCoreService
 {
-    use \addon\shop\app\service\core\order\CoreOrderCreateTrait;
+    use \addon\phone_shop\app\service\core\order\CoreOrderCreateTrait;
 
     public function __construct()
     {
@@ -57,6 +57,7 @@ class CoreOrderCreateService extends BaseCoreService
         $this->checkError();
         //基础校验库存/活动信息
         $this->checkExchangeGoods($this->goods_data);
+        $local_delivery_type = $data[ 'delivery' ]['local_delivery_type'] ?? '';
         $order_data = [
             //订单整体
             'site_id' => $data[ 'site_id' ],
@@ -71,8 +72,8 @@ class CoreOrderCreateService extends BaseCoreService
             'has_goods_types' => $this->basic[ 'has_goods_types' ],//包含的商品形式
             //收发货相关
             'delivery_type' => $this->delivery[ 'delivery_type' ] ?? '',
-            'taker_name' => $this->delivery[ 'take_address' ][ 'name' ] ?? '',
-            'taker_mobile' => $this->delivery[ 'take_address' ][ 'mobile' ] ?? '',
+            'taker_name' => $this->delivery[ 'take_address' ][ 'name' ] ??  $data[ 'delivery' ]['taker_name']??'',
+            'taker_mobile' => $this->delivery[ 'take_address' ][ 'mobile' ] ?? $data[ 'delivery' ]['taker_mobile']?? '',
             'taker_province' => $this->delivery[ 'take_address' ][ 'province_id' ] ?? 0,
             'taker_city' => $this->delivery[ 'take_address' ][ 'city_id' ] ?? 0,
             'taker_district' => $this->delivery[ 'take_address' ][ 'district_id' ] ?? 0,
@@ -81,6 +82,9 @@ class CoreOrderCreateService extends BaseCoreService
             'taker_longitude' => $this->delivery[ 'take_address' ][ 'lng' ] ?? '',
             'taker_latitude' => $this->delivery[ 'take_address' ][ 'lat' ] ?? '',
             'take_store_id' => $this->delivery[ 'take_store' ][ 'store_id' ] ?? 0,
+
+            'buyer_ask_delivery_time' =>$local_delivery_type == 'now' ? "" :  $data[ 'delivery' ][ 'buyer_ask_delivery_time' ] ?? '', // 购买者期望的时间
+
             //附属信息
             'member_remark' => $this->param[ 'member_remark' ] ?? '',//买家留言
             'point' => $this->basic[ 'point_sum' ] ?? 0,//买家留言
@@ -203,7 +207,7 @@ class CoreOrderCreateService extends BaseCoreService
         $sku_where[] = [ 'site_id', '=', $this->site_id ];
         $field = 'names,total_exchange_num,stock,id,site_id,type,names,title,image,status,product_detail,point,price,limit_num,content,sort,total_point_num,total_price_num,total_order_num,total_member_num,update_time,create_time';
         $exchange_goods_info = ( new  Exchange() )->where(array_merge($sku_where, [ [ 'product_detail', 'like', '%' . '"sku_id":' . $sku_ids[ 0 ] . ',' . '%' ] ]))->append([ 'type_name', 'status_name' ])->field($field)->findOrEmpty()->toArray();
-        if (empty($exchange_goods_info)) throw new CommonException('EXCHANGE_DETA_NOT_FOUND');//无效的商品
+        if (empty($exchange_goods_info)) throw new CommonException('EXCHANGE_DATA_NOT_FOUND');//无效的商品
         $sku_key = array_search($sku_id, array_column($exchange_goods_info[ 'product_detail' ], 'sku_id'));
         //todo 限制兑换 业务
         $sku_info = $exchange_goods_info[ 'product_detail' ][ $sku_key ];
@@ -285,13 +289,14 @@ class CoreOrderCreateService extends BaseCoreService
             $sku_where[] = [ 'site_id', '=', $this->site_id ];
             $field = 'names,total_exchange_num,stock,id,site_id,type,names,title,image,status,product_detail,point,price,limit_num,content,sort,total_point_num,total_price_num,total_order_num,total_member_num,update_time,create_time';
             $exchange_goods_info = ( new  Exchange() )->where(array_merge($sku_where, [ [ 'product_detail', 'like', '%' . '"sku_id":' . $v[ 'sku_id' ] . ',' . '%' ] ]))->append([ 'type_name', 'status_name' ])->field($field)->findOrEmpty()->toArray();
-            if (empty($exchange_goods_info)) throw new CommonException('EXCHANGE_DETA_NOT_FOUND');//无效的商品
+            if (empty($exchange_goods_info)) throw new CommonException('EXCHANGE_DATA_NOT_FOUND');//无效的商品
             if ($exchange_goods_info[ 'status' ] != 1) throw new CommonException('EXCHANGE_ACTIVITY_REMOVE');//下架判断
             $sku_key = array_search($v[ 'sku_id' ], array_column($exchange_goods_info[ 'product_detail' ], 'sku_id'));
             //todo 限制兑换 业务
             $sku_info = $exchange_goods_info[ 'product_detail' ][ $sku_key ];
-            if ($sku_info[ 'limit_num' ] < $order_goods_data_column[ $v[ 'sku_id' ] ]) throw new CommonException('SHOP_ORDER_EXCHANGE_EXCEEDING_LIMIT');//限够判断
+            if ($sku_info[ 'limit_num' ] < $order_goods_data_column[ $v[ 'sku_id' ] ]) throw new CommonException('SHOP_ORDER_EXCHANGE_EXCEEDING_LIMIT');// 限购判断
             if ($v[ 'stock' ] < $order_goods_data_column[ $v[ 'sku_id' ] ]) throw new CommonException('SHOP_ORDER_GOODS_INSUFFICIENT');
+            if ($sku_info[ 'stock' ] < $order_goods_data_column[ $v[ 'sku_id' ] ]) throw new CommonException('SHOP_ORDER_EXCHANGE_INSUFFICIENT_EXCHANGE_QUANTITY');//兑换数判断
         }
     }
 

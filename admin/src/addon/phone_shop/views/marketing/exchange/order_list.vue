@@ -20,7 +20,7 @@
                             <el-option v-for="(item, index) in payTypeData" :key="index" :label="item.name" :value="item.key"></el-option>
                         </el-select>
                     </el-form-item>
-                    <el-form-item :label="t('fromType')" prop='from_type'>
+                    <el-form-item :label="t('fromType')" prop='order_from'>
                         <el-select v-model="orderTable.searchParam.order_from" clearable class="input-item">
                             <el-option v-for="(item, index) in orderFromData" :key="index" :label="item" :value="index"></el-option>
                         </el-select>
@@ -126,7 +126,7 @@
 import { reactive, ref } from 'vue'
 import { t } from '@/lang'
 import { getOrderList, getOrderStatus, getOrderPayType, getOrderFrom } from '@/addon/phone_shop/api/order'
-import { img } from '@/utils/common'
+import { img, setTablePageStorage, getTablePageStorage } from '@/utils/common'
 import { FormInstance } from 'element-plus'
 import { useRouter, useRoute } from 'vue-router'
 
@@ -168,7 +168,7 @@ const orderTable = reactive<OrderTable>({
         status: '',
         create_time: [],
         pay_time: [],
-        activity_type:'exchange'
+        activity_type: 'exchange'
     }
 })
 
@@ -194,11 +194,12 @@ const loadOrderList = (page: number = 1) => {
             return el
         })
         orderTable.total = res.data.total
+        setTablePageStorage(orderTable.page, orderTable.limit, orderTable.searchParam)
     }).catch(() => {
         orderTable.loading = false
     })
 }
-loadOrderList()
+loadOrderList(getTablePageStorage(orderTable.searchParam).page)
 
 const handleClick = (event: any) => {
     orderTable.searchParam.status = event
@@ -218,7 +219,7 @@ const resetForm = (formEl: FormInstance | undefined) => {
 </script>
 
 <style lang="scss" scoped>
-    .input-item {
-    	width: 150px !important;
-    }
+.input-item {
+    width: 150px !important;
+}
 </style>

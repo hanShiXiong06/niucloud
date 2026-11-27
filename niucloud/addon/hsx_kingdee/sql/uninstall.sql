@@ -1,0 +1,1 @@
+-- Preserve reconciliation evidence and mappings on uninstall. Disable the schedule only.

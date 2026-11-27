@@ -218,14 +218,18 @@ class CoreOrderBatchDeliveryService extends BaseCoreService
                             if ($item_order_id > 0) {
                                 if ($type == 'order') {//整单发货
                                     $item_express_company_name = $item_data[ 1 ];
+                                    $express_number = $item_data[ 2 ] ?? '';
                                     if ($item_express_company_name != '无需物流') {
+                                        $delivery_type = OrderDeliveryDict::EXPRESS;
                                         $item_express_company_id = $express_company_column[ $item_express_company_name ] ?? 0;
                                         if ($item_express_company_id == 0) {
 //                                            $error = '物流公司不存在';
                                             throw new CommonException('物流公司不存在');
                                         }
                                     } else {
+                                        $delivery_type = OrderDeliveryDict::NONE_EXPRESS;
                                         $item_express_company_id = 0;
+                                        $express_number = '';
                                     }
 
 
@@ -236,23 +240,28 @@ class CoreOrderBatchDeliveryService extends BaseCoreService
                                         'site_id' => $site_id,
                                         'order_id' => $item_order_id,//订单编号
                                         'order_goods_ids' => $item_order_goods_ids,//订单项ids
-                                        'delivery_type' => OrderDeliveryDict::EXPRESS,//发货方式
+                                        'delivery_type' => $delivery_type,//配送方式
+                                        'delivery_way' => 'manual_write',//发货方式，manual_write：手动填写，electronic_sheet：电子面单
                                         'express_company_id' => $item_express_company_id,//物流公司
-                                        'express_number' => $item_data[ 2 ] ?? '',//物流单号
-                                        'remark' => ''
+                                        'express_number' => $express_number,//物流单号
+                                        'remark' => '',
+                                        'electronic_sheet_id' => ''//电子面单模板
                                     ]);
 
                                 } else {
                                     $item_express_company_name = $item_data[ 2 ];
-
+                                    $express_number = $item_data[ 3 ] ?? '';
                                     if ($item_express_company_name != '无需物流') {
+                                        $delivery_type = OrderDeliveryDict::EXPRESS;
                                         $item_express_company_id = $express_company_column[ $item_express_company_name ] ?? 0;
                                         if ($item_express_company_id == 0) {
 //                                            $error = '物流公司不存在';
                                             throw new CommonException('物流公司不存在');
                                         }
                                     } else {
+                                        $delivery_type = OrderDeliveryDict::NONE_EXPRESS;
                                         $item_express_company_id = 0;
+                                        $express_number = '';
                                     }
 
                                     $core_order_delivery_service->delivery([
@@ -261,10 +270,12 @@ class CoreOrderBatchDeliveryService extends BaseCoreService
                                         'site_id' => $site_id,
                                         'order_id' => $item_order_id,//订单编号
                                         'order_goods_ids' => [ $item_data[ 1 ] ],//订单项ids
-                                        'delivery_type' => OrderDeliveryDict::EXPRESS,//发货方式
+                                        'delivery_type' => $delivery_type,//配送方式
+                                        'delivery_way' => 'manual_write',//发货方式，manual_write：手动填写，electronic_sheet：电子面单
                                         'express_company_id' => $item_express_company_id,//物流公司
-                                        'express_number' => $item_data[ 3 ],//物流单号
-                                        'remark' => ''
+                                        'express_number' => $express_number,//物流单号
+                                        'remark' => '',
+                                        'electronic_sheet_id' => ''//电子面单模板
                                     ]);
 
                                 }

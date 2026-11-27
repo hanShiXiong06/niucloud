@@ -32,8 +32,7 @@ class ActiveEnd extends BaseJob
 
             $ids = ( new Active() )->where([
                 [ 'active_status', '=', ActiveDict::ACTIVE ],
-                [ 'end_time', '<', time() ]
-            ])->column('active_id');
+            ])->whereBetweenTime('end_time', 1, time())->column('active_id');//过滤end_time=0的情况，0表示活动永久有效
 
             foreach ($ids as $k => $v) {
                 ( new CoreActiveService() )->end($v);

@@ -28,7 +28,7 @@
             <view class="layout-one-content" @click="openCalendar">
                 <view class="nc-iconfont nc-icon-a-riliV6xx-36 !text-[32rpx] text-[#999] mr-[16rpx]"></view>
                 <view class="flex-1 text-overflow-ellipsis flex"
-                      :class="{'!text-[#999]' : !diyComponent.field.value.date && !diyComponent.defaultControl}"
+                      :class="{'default-control' : !diyComponent.field.value.date && !diyComponent.defaultControl}"
                       :style="{'color': diyComponent.textColor,'font-size': (diyComponent.fontSize * 2) + 'rpx' }">{{ startDate }}</view>
             </view>
             <view class="layout-one-attribute-wrap" v-if="inputAttribute().length">
@@ -45,7 +45,7 @@
                 </view>
                 <view class="layout-two-content" @click="openCalendar">
                     <view class="flex-1 text-overflow-ellipsis flex justify-end"
-                          :class="{'!text-[#999]' : !diyComponent.field.value.date && !diyComponent.defaultControl}"
+                          :class="{'default-control' : !diyComponent.field.value.date && !diyComponent.defaultControl}"
                           :style="{'color': diyComponent.textColor,'font-size': (diyComponent.fontSize * 2) + 'rpx'}">{{ startDate }}</view>
                     <text class="nc-iconfont !text-[#666] !text-[36rpx] nc-icon-youV6xx -mr-[8rpx]"></text>
                 </view>
@@ -61,8 +61,8 @@
         </view>
         <view class="calendar-wrap">
             <u-calendar :show="calendarShow" mode="single" @confirm="confirm" @close="calendarShow=false"
-                        closeOnClickOverlay="true"
-                        :formatter="formatter" confirmDisabledText="禁止选择" color="var(--primary-color)"
+                        closeOnClickOverlay="true" :min-date="calendarMinDate"
+                        :formatter="formatter" confirmDisabledText="禁止选择" color="var(--primary-color)" monthNum="12" 
                         ref="calendar" :maxDate="maxDate"></u-calendar>
             <u-datetime-picker :show="show" v-model="diyComponent.field.value.date" mode="datetime" @cancel="show=false"
                                closeOnClickOverlay="true" @confirm="calendarConfirm" @close="show=false"
@@ -86,6 +86,7 @@ const maxDate = ref(currentDate.getTime());
 
 let currentDateTime = new Date();
 const minDate = ref(currentDateTime.getTime());
+const calendarMinDate = ref(new Date(currentDateTime.getFullYear(), currentDateTime.getMonth() - 9, currentDateTime.getDate()));
 
 const props = defineProps(['component', 'index', 'global']);
 const diyStore = useDiyStore();
@@ -268,6 +269,9 @@ defineExpose({
 
 <style lang="scss" scoped>
 @import '@/styles/diy_form.scss';
+.default-control {
+    color: #999 !important;
+}
 </style>
 
 <style lang="scss">

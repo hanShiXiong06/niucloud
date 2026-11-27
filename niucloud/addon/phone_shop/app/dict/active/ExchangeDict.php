@@ -15,13 +15,12 @@ class ExchangeDict
 {
     //活动商品类型
     const GOODS = 'goods';//商品
-    const COUPON = 'coupon';//优惠卷
+    const COUPON = 'coupon';//优惠券
     const BALANCE = 'balance';//余额
 
     //活动状态
     const UP = 1;  ///上架
     const DOWN = 0;  //下架
-    const DELETE = -1;  //删除
 
     //活动类别
     const DISCOUNT = 'exchange';//积分商城
@@ -52,7 +51,6 @@ class ExchangeDict
         $list = [
             self::UP => '已上架',
             self::DOWN => "已下架",
-            self::DELETE => "已删除"
         ];
         if ($status == '') return $list;
         return $list[ $status ] ?? '';

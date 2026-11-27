@@ -16,7 +16,7 @@ use core\base\BaseValidate;
 /**
  * 购物车验证器
  * Class Cart
- * @package addon\shop\app\validate\cart
+ * @package addon\phone_shop\app\validate\cart
  */
 class Cart extends BaseValidate
 {
@@ -35,8 +35,8 @@ class Cart extends BaseValidate
     ];
 
     protected $scene = [
-        "add" => [ 'member_id', 'goods_id', 'sku_id', 'num', 'market_type', 'market_type_id', 'status', 'invalid_remark' ],
-        "edit" => [ 'member_id', 'sku_id', 'num', 'market_type', 'market_type_id', 'status', 'invalid_remark' ]
+        "add" => [ 'member_id', 'goods_id', 'sku_id', 'num', 'status', 'invalid_remark' ],
+        "edit" => [ 'member_id', 'sku_id', 'num', 'status', 'invalid_remark' ]
     ];
 
 }

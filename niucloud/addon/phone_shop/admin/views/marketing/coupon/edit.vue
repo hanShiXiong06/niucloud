@@ -2,7 +2,7 @@
     <div class="main-container">
 
         <el-card class="card !border-none" shadow="never">
-            <el-page-header :content="pageName" :icon="ArrowLeft" @back="$router.back()" />
+            <el-page-header :content="pageName" :icon="ArrowLeft" @back="back()" />
         </el-card>
 
         <!-- 表单 -->
@@ -11,12 +11,12 @@
                 <!-- 优惠券信息 -->
                 <!-- 优惠券名称 -->
                 <el-form-item :label="t('title')" prop="title">
-                    <el-input v-model="formData.title" clearable :placeholder="t('titlePlaceholder')" class="input-width" :maxlength="20" />
+                    <el-input v-model.trim="formData.title" clearable :placeholder="t('titlePlaceholder')" class="input-width" :maxlength="20" />
                 </el-form-item>
 
                 <!-- 优惠券面额 -->
                 <el-form-item :label="t('price')" prop="price">
-                    <el-input v-model="formData.price" @keyup="filterDigit($event)"  clearable :placeholder="t('pricePlaceholder')" class="input-width" maxlength="5" />
+                    <el-input v-model.trim="formData.price" @keyup="filterDigit($event)"  clearable :placeholder="t('pricePlaceholder')" class="input-width" maxlength="5" />
                 </el-form-item>
 
                 <!-- 优惠券类型 -->
@@ -37,9 +37,49 @@
                 <el-form-item v-if="formData.type == 3" prop="goods_ids">
                     <div>
                         <el-form-item>
-                            <goods-select-popup ref="goodsSelectPopupRef" v-model="formData.goods_ids" :min="1" :max="99" />
+                            <goods-select-popup ref="goodsSelectPopupRef" v-model="formData.goods_ids" @goodsSelect="goodsSelect" :min="1" :max="99" />
                         </el-form-item>
                     </div>
+                </el-form-item>
+                <el-form-item v-if="formData.goods_list && formData.goods_list.length && formData.type == 3">
+                    <el-table :data="formData.goods_list" size="large" max-height="400">
+                        <el-table-column prop="goods_id" :label="t('goodsSelectPopupGoodsInfo')" min-width="300">
+                            <template #default="{ row }">
+                                <div class="flex items-center cursor-pointer">
+                                <div class="min-w-[60px] h-[60px] flex items-center justify-center">
+                                    <el-image v-if="row.goods_image" class="w-[60px] h-[60px]" :src="img(row.goods_image)" fit="contain">
+                                    <template #error>
+                                        <div class="image-slot">
+                                        <img class="w-[60px] h-[60px]" src="@/addon/phone_shop/assets/goods_default.png" />
+                                        </div>
+                                    </template>
+                                    </el-image>
+                                    <img v-else class="w-[70px] h-[60px]" src="@/addon/phone_shop/assets/goods_default.png" fit="contain" />
+                                </div>
+                                <div class="ml-2">
+                                    <span :title="row.sku_name" class="multi-hidden">{{row.sku_name ? row.goods_name + " " + row.sku_name: row.goods_name}}</span>
+                                    <span class="text-primary text-[12px]">{{row.goods_type_name}}</span>
+                                </div>
+                                </div>
+                            </template>
+                        </el-table-column>
+
+                        <el-table-column prop="price" :label="t('goodsSelectPopupPrice')" min-width="120">
+                            <template #default="{ row }">
+                                <div>￥{{ row.price }}</div>
+                            </template>
+                        </el-table-column>
+                        <el-table-column prop="stock" :label="t('goodsSelectPopupStock')" min-width="120">
+                            <template #default="{ row }">
+                                <div>{{ row.stock }}</div>
+                            </template>
+                        </el-table-column>
+                        <el-table-column :label="t('operation')" align="right" min-width="160">
+                            <template #default="{ row, $index }">
+                                <el-button type="primary" link @click="deleteGoodsEvent(row, $index)">{{ t("delete") }}</el-button>
+                            </template>
+                        </el-table-column>
+                    </el-table>
                 </el-form-item>
 
                 <!-- 使用门槛 -->
@@ -53,9 +93,18 @@
                 <el-form-item v-if="formData.threshold == 1" prop="min_condition_money">
                     最低满
                     <div class="flex items-center px-[5px]">
-                        <el-input v-model="formData.min_condition_money" @keyup="filterDigit($event)" clearable class="!w-[100px]" />
+                        <el-input v-model.trim="formData.min_condition_money" @keyup="filterDigit($event)" clearable class="!w-[100px]" />
                     </div>
                     元可用
+                </el-form-item>
+
+                <el-form-item label="适用用户">
+                    <div>
+                        <el-checkbox v-model="formData.is_non_vip_only" :true-value="1" :false-value="0">
+                            仅普通用户可领取和使用
+                        </el-checkbox>
+                        <div class="form-tip">默认开启。拥有任意会员等级的用户不可领取或使用；普通用户领券后升级为会员，该券也会立即失效。</div>
+                    </div>
                 </el-form-item>
 
                 <!-- 使用时间 -->
@@ -69,7 +118,7 @@
                 <el-form-item v-show="formData.valid_type == 1">
                     领劵后立即生效，有效期
                     <div class="flex items-center px-[5px]">
-                        <el-input v-model="formData.length" @keyup="filterNumber($event)" clearable class="!w-[100px]" />
+                        <el-input v-model.trim="formData.length" @keyup="filterNumber($event)" clearable class="!w-[100px]" />
                     </div>
                     天
                 </el-form-item>
@@ -118,7 +167,7 @@
                 <el-form-item v-show="formData.limit == 1 && formData.receive_type == 1" prop="remain_count">
                     <div>
                         <el-input onkeypress='return( /[\d]/.test(String.fromCharCode(event.keyCode) ) )'
-                            v-model="formData.remain_count" clearable :placeholder="t('remainCountPlaceholder')"
+                            v-model.trim="formData.remain_count" clearable :placeholder="t('remainCountPlaceholder')"
                             class="input-width" :min="formData.remain_count" :max="100000" :controls="false" maxlength="6">
                             <template #append>张</template>
                         </el-input>
@@ -128,7 +177,7 @@
                 <!-- 用户可领取数量 -->
                 <el-form-item :label="t('userLimitCount')" prop="limit_count" v-show="formData.receive_type == 1">
                     <el-input onkeypress='return( /[\d]/.test(String.fromCharCode(event.keyCode) ) )'
-                        v-model="formData.limit_count" clearable :placeholder="t('userLimitCountPlaceholder')"
+                        v-model.trim="formData.limit_count" clearable :placeholder="t('userLimitCountPlaceholder')"
                         class="input-width" :min="1" :max="100000" maxlength="6">
                         <template #append>张</template>
                     </el-input>
@@ -155,8 +204,9 @@ import { useRoute, useRouter } from 'vue-router'
 import { getGoodsCategoryList, editCoupon, getCouponInfo } from '@/addon/phone_shop/api/marketing'
 import type { FormInstance } from 'element-plus'
 import { ArrowLeft } from '@element-plus/icons-vue'
-import { filterNumber, filterDigit } from '@/utils/common'
+import { filterNumber, filterDigit,deepClone,img } from '@/utils/common'
 import goodsSelectPopup from '@/addon/phone_shop/views/goods/components/goods-select-popup.vue'
+import { cloneDeep } from 'lodash-es'
 
 const route = useRoute()
 const router = useRouter()
@@ -177,6 +227,7 @@ const initialFormData = {
     receive_type: 2, // 领取方式
     remain_count: 1000, // 剩余数量
     threshold: 2, // 门槛
+    is_non_vip_only: 1, // 仅普通用户可领取和使用
     limit_count: '', // 单个用户领取数量
     // status: 1,  //状态 1 正常 2 未开启 3 已无效
     min_condition_money: '', // 商品最低多少金额可用优惠券
@@ -186,7 +237,8 @@ const initialFormData = {
     receive_type_time: 2,
     valid_type: 1, // 有效方式，1=时长，2=范围
     receive_time: [start, end],
-    valid_time: end
+    valid_time: end,
+    goods_list: []
 }
 const formData: Record<string, any> = ref({ ...initialFormData })
 const formRef = ref<FormInstance>()
@@ -240,8 +292,10 @@ const validTime = (rule: any, value: any, callback: any) => {
     if (formData.value.valid_type == 2 && formData.value.valid_time <= Date.now()) {
         callback(new Error(t('有效期不能小于等于当前时间')))
     }
-    if (formData.value.valid_type == 2 && timestampFn(formData.value.valid_time) <= timestampFn(formData.value.receive_time[1])) {
-        callback(new Error(t('有效期不能小于等于领取结束时间')))
+    if (formData.value.valid_type == 2 && formData.value.receive_type_time == 1 && formData.value.receive_type == 1) {
+        if (timestampFn(formData.value.valid_time) <= timestampFn(formData.value.receive_time[1])) {
+            callback(new Error(t('有效期不能小于等于领取结束时间')))
+        }
     }
     callback()
 }
@@ -270,10 +324,10 @@ const priceRule = (rule: any, value: any, callback: any) => {
 }
 
 const limitCountRule = (rule: any, value: any, callback: any) => {
-    if (formData.value.limit_count != '' && formData.value.limit_count < 1) {
+    if (!formData.value.limit_count || formData.value.limit_count != '' && formData.value.limit_count < 1) {
         callback(new Error(t('userLimitCountPlaceholder')))
     }
-    if(formData.value.limit == 1 && formData.value.limit_count > formData.value.remain_count){
+    if (formData.value.limit == 1 && formData.value.limit_count != '' && formData.value.remain_count != '' && parseInt(formData.value.limit_count) > parseInt(formData.value.remain_count)) {
         callback(new Error(t('限领张数不能大于发放数量')))
     }
     callback()
@@ -292,7 +346,7 @@ const onSave = async (formEl: FormInstance | undefined) => {
     await formEl.validate(async (valid) => {
         if (valid) {
             loading.value = true
-            const data = JSON.parse(JSON.stringify(formData.value))
+            const data = cloneDeep(formData.value)
             if (data.type == 1) {
                 delete data.goods_category_ids
                 delete data.goods_ids
@@ -327,6 +381,10 @@ const getCouponInfoFn = (id: any) => {
     loading.value = true
     getCouponInfo(id).then(res => {
         formData.value = Object.assign(formData.value, res.data)
+        formData.value.goods_list.forEach((item: any, index: any) => {
+            item.goods_image = item.goods_cover
+        })
+
         if (parseInt(formData.value.start_time) != 0 && parseInt(formData.value.end_time) != 0) {
             const start_time = new Date(formData.value.start_time)
             const end_time = new Date(formData.value.end_time)
@@ -345,15 +403,15 @@ const getCouponInfoFn = (id: any) => {
     })
 }
 
-const goodsCategoryFormatting = (data) => {
-    const arr = []
-    data.forEach((item, index) => {
-        options.value.forEach((twoItem, twoIndex) => {
+const goodsCategoryFormatting = (data: any) => {
+    const arr: any = []
+    data.forEach((item: any, index: any) => {
+        options.value.forEach((twoItem: any, twoIndex) => {
             if (twoItem.value == item) {
                 arr[index] = []
                 arr[index].push(twoItem.value)
             } else {
-                twoItem.children.forEach((threeItem, threeIndex) => {
+                twoItem.children.forEach((threeItem: any, threeIndex: any) => {
                     if (threeItem.value == item) {
                         arr[index] = []
                         arr[index].push(twoItem.value)
@@ -365,9 +423,40 @@ const goodsCategoryFormatting = (data) => {
     })
     formData.value.goods_category_ids = arr
 }
+// 删除商品
+
+const deleteGoodsEvent = (row: any, index: any) => {
+    formData.value.goods_list.splice(index, 1);
+    formData.value.goods_ids.splice(formData.value.goods_ids.indexOf(row.goods_id), 1);
+}
+
+//选择商品
+const goodsSelect = (value: any) => {
+    let arr = [];
+    for (let key in value) {
+        let goods_sku: any = value[key];
+        let sku: any = {
+            goods_id: goods_sku.goods_id,
+            price: goods_sku.goodsSku.price,
+            goods_type_name: goods_sku.goods_type_name,
+            goods_image: goods_sku.goods_cover,
+            goods_name: goods_sku.goods_name,
+            stock: goods_sku.stock,
+        };
+        if (formData.value.goods_list.length) {
+            formData.value.goods_list.forEach((el: any) => {
+                if (el.goods_id == sku.goods_id) {
+                    sku = Object.assign(sku, el)
+                }
+            })
+        }
+        arr.push(deepClone(sku))
+    }
+    formData.value.goods_list = arr;
+}
 
 const back = () => {
-    history.back()
+    router.push('/phone_shop/marketing/coupon/list')
 }
 </script>
 

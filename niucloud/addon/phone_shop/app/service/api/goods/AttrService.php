@@ -38,7 +38,7 @@ class AttrService extends BaseApiService
         $field = 'attr_id,site_id,attr_name,sort';
         $order = '';
 
-        $search_model = $this->model->where([ [ 'site_id', "=", $this->site_id ] ])->withSearch([ "attr_id", "attr_name", "attr_value_format", "sort" ], $where)->field($field)->order($order);;
+        $search_model = $this->model->where([ [ 'site_id', "=", $this->site_id ] ])->withSearch([ "attr_id", "attr_name", "attr_value_format", "sort" ], $where)->field($field)->order($order);
         $list = $this->pageQuery($search_model);
         return $list;
     }
@@ -52,7 +52,7 @@ class AttrService extends BaseApiService
     {
         $field = 'attr_id,site_id,attr_name,attr_value_format,sort';
 
-        $info = $this->model->field($field)->where([ [ 'attr_id', "=", $id ] ])->findOrEmpty()->toArray();;
+        $info = $this->model->field($field)->where([ [ 'attr_id', "=", $id ] ])->findOrEmpty()->toArray();
         return $info;
     }
 

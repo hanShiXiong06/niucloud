@@ -74,14 +74,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, nextTick } from 'vue'
+import { ref, computed, nextTick, onMounted } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
-import { redirect } from '@/utils/common'
+import { deepClone, redirect,openMapSelector } from '@/utils/common'
 import { t } from '@/locale'
 import { addAddress, editAddress, getAddressInfo } from '@/app/api/member'
 import manifestJson from '@/manifest.json'
 import { getAddressByLatlng,getAreatree } from '@/app/api/system'
 import useSystemStore from '@/stores/system';
+import { useLocation } from '@/hooks/useLocation'
 
 const systemStore = useSystemStore();
 const formData: any = ref({
@@ -261,7 +262,7 @@ const save = () => {
 const chooseLocation = () => {
     let latitude = systemStore.diyAddressInfo ? systemStore.diyAddressInfo.latitude : '';
     let longitude = systemStore.diyAddressInfo ? systemStore.diyAddressInfo.longitude : '';
-    
+
     // #ifndef H5
     uni.chooseLocation({
         latitude,
@@ -296,12 +297,15 @@ const chooseLocation = () => {
 
     // #ifdef H5
     const urlencode = formData.value;
-    uni.setStorageSync('addressInfo', urlencode);
     let backurl = location.origin + location.pathname + '?source=' + source.value;
     if (isSelectMap.value) {
         backurl = backurl + '&isSelectMap=' + isSelectMap.value
     }
-    window.location.href = 'https://apis.map.qq.com/tools/locpicker?search=1&type=0&backurl=' + encodeURIComponent(backurl) + '&key=' + manifestJson.h5.sdkConfigs.maps.qqmap.key + '&referer=myapp';
+    let params = ''
+    if (latitude && longitude) {
+        params = `latng=${ latitude },${ longitude }`
+    }
+    openMapSelector(backurl, params);
     // #endif
 }
 
@@ -318,6 +322,7 @@ const getAddress = (latlng: any) => {
             formData.value.full_address += res.data.district != undefined ? '' + res.data.district : '';
 
             formData.value.address_name = formData.value.full_address.replace(/-/g, '');
+           
             formData.value.area = (res.data.province + res.data.city + res.data.district) || res.data.full_address;
             formData.value.province_id = res.data.province_id != undefined ? res.data.province_id : 0;
             formData.value.city_id = res.data.city_id != undefined ? res.data.city_id : 0;
@@ -362,6 +367,7 @@ const findIdByNameAndParentId = (list, name, parentId = 0) => {
   }
   return '';
 };
+
 const loadingchoosegAddress = ref(false)
 const choosegAddress = () =>{
     loadingchoosegAddress.value = true
@@ -386,6 +392,35 @@ const choosegAddress = () =>{
             }
         });
 }
+
+onMounted(()=>{
+    // #ifdef MP 
+    uni.authorize({
+        scope: 'scope.userLocation',
+        success: (res) => {},
+        fail: () => {
+            // 授权失败，引导到设置页
+            uni.showModal({
+                title: '位置授权',
+                content: '需要位置授权才能快速选地址，是否前往设置？',
+                confirmText: '去设置',
+                success: (res) => {
+                    if (res.confirm) {
+                        uni.openSetting({
+                            success: (settingRes) => {
+                                if (settingRes.authSetting['scope.userLocation']) {
+                                    const locationVal = useLocation(true);
+                                    locationVal.init();
+                                }
+                            }
+                        });
+                    }
+                }
+            });
+        }
+    })
+    // #endif
+})
 </script>
 
 <style lang="scss" scoped>

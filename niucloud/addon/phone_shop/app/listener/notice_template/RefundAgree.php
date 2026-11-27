@@ -5,17 +5,18 @@ namespace addon\phone_shop\app\listener\notice_template;
 
 use addon\phone_shop\app\service\core\refund\CoreRefundService;
 use app\listener\notice_template\BaseNoticeTemplate;
+use app\model\site\SiteMerchantBind;
 
 /**
  * 退款申请通过通知
  */
 class RefundAgree extends BaseNoticeTemplate
 {
-    private $key = 'phone_shop_refund_agree';
+    private $key = ['shop_refund_agree','admin_shop_refund_agree'];
 
     public function handle(array $params)
     {
-        if ($this->key == $params['key']) {
+        if (in_array($params['key'],$this->key)) {
             $refund = (new CoreRefundService())->getInfo($params['data']['order_refund_no']);
             if (!empty($refund)) {
                 return $this->toReturn(
@@ -26,7 +27,8 @@ class RefundAgree extends BaseNoticeTemplate
                         'result' => '已通过申请'
                     ],
                     [
-                        'member_id' => $refund['member_id']
+                        'member_id' => $refund['member_id'],
+                        'merchant_id' => (new SiteMerchantBind())->where('site_id',$refund['site_id'])->value('id') ?? 0,
                     ]
                 );
             }

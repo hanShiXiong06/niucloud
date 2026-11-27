@@ -88,7 +88,7 @@ class Cart extends BaseApiController
     public function lists()
     {
         $data = $this->request->params([]);
-        return success(( new CartService() )->getList($data));
+        return success('SUCCESS', ( new CartService() )->getList($data));
     }
 
     /**
@@ -98,7 +98,7 @@ class Cart extends BaseApiController
     public function goodsLists()
     {
         $data = $this->request->params([]);
-        return success(( new CartService() )->getGoodsList($data));
+        return success('SUCCESS',( new CartService() )->getGoodsList($data));
     }
 
     /**
@@ -111,6 +111,18 @@ class Cart extends BaseApiController
             [ 'goods_id', 0 ],
         ]);
         return success('SUCCESS', ( new CartService() )->getSum($data));
+    }
+
+    /**
+     * 购物车计算
+     */
+    public function calculate()
+    {
+        $data = $this->request->params([
+            [ 'sku_ids', [] ],
+        ]);
+
+        return success('SUCCESS',( new CartService() )->calculate($data));
     }
 
 }

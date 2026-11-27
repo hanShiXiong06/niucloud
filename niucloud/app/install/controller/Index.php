@@ -56,9 +56,6 @@ class Index extends BaseInstall
             //sodium
             $sodium = extension_loaded('sodium');
             $system_variables[] = [ "name" => "sodium", "need" => "开启", "status" => $sodium ];
-            //imagick
-            $imagick = extension_loaded('imagick');
-            $system_variables[] = [ "name" => "imagick", "need" => "开启", "status" => $imagick ];
 
             $root_path = str_replace("\\", DIRECTORY_SEPARATOR, dirname(__FILE__, 4));
             $root_path = str_replace("../", DIRECTORY_SEPARATOR, $root_path);
@@ -91,7 +88,7 @@ class Index extends BaseInstall
             $this->assign("name", $name);
             $this->assign("verison", $verison);
             $this->assign("dirs_list", $dirs_list);
-            if ($verison && $pdo && $curl && $openssl && $gd && $fileinfo && $is_dir && $imagick) {
+            if ($verison && $pdo && $curl && $openssl && $gd && $fileinfo && $is_dir) {
                 $continue = true;
             } else {
                 $continue = false;
@@ -146,12 +143,20 @@ class Index extends BaseInstall
 
             $conn = @mysqli_connect($dbhost, $dbuser, $dbpwd);
             if ($conn) {
+                $sql_mode_result = mysqli_query($conn, "SELECT @@global.sql_mode");
+                $sql_mode = strtolower($sql_mode_result->fetch_array()[0] ?? '');
+                if (strpos($sql_mode, 'only_full_group_by') !== false) {
+                    return fail([
+                        "status" => -2,
+                        "message" => "请将mysql配置sql_mode字段中的值“ONLY_FULL_GROUP_BY”去掉"
+                    ]);
+                }
+
                 if (empty($dbname)) {
                     $result = [
                         "status" => 1,
                         "message" => "数据库连接成功"
                     ];
-
                 } else {
                     try {
                         if (@mysqli_select_db($conn, $dbname)) {
@@ -411,7 +416,7 @@ class Index extends BaseInstall
         }
 
         //如果数据库不存在，我们就进行创建。
-        $dbsql = "CREATE DATABASE `$dbname`";
+        $dbsql = "CREATE DATABASE `$dbname` CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci";
         $db_create = mysqli_query($conn, $dbsql);
         if (!$db_create) {
             return fail('创建数据库失败，请确认是否有足够的权限!');

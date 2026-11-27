@@ -1,15 +1,11 @@
 <template>
     <el-dialog v-model="showDialog" :title="title" width="500px" class="diy-dialog-wrap" :destroy-on-close="true">
-        <el-form :model="formData" label-width="120px" ref="formRef" :rules="formRules" class="page-form"
-            v-loading="loading">
+        <el-form :model="formData" label-width="120px" ref="formRef" :rules="formRules" class="page-form" v-loading="loading">
             <el-form-item :label="t('groupName')" prop="group_name">
-                <el-input v-model.trim="formData.group_name" clearable :placeholder="t('groupNamePlaceholder')"
-                    class="input-width" maxlength="10" />
+                <el-input v-model.trim="formData.group_name" clearable :placeholder="t('groupNamePlaceholder')" class="input-width" maxlength="10" />
             </el-form-item>
-            <el-form-item :label="t('sort')">
-                <el-input v-model.trim="formData.sort" clearable :placeholder="t('sortPlaceholder')" class="input-width"
-                    @keyup="filterNumber($event)" maxlength="6" show-word-limit
-                    @blur="formData.sort = $event.target.value" />
+            <el-form-item :label="t('sort')" >
+                <el-input v-model.trim="formData.sort" clearable :placeholder="t('sortPlaceholder')" class="input-width" @keyup="filterNumber($event)" maxlength="8" show-word-limit @blur="formData.sort = $event.target.value"/>
             </el-form-item>
         </el-form>
 
@@ -27,7 +23,7 @@ import { ref, reactive, computed } from 'vue'
 import { t } from '@/lang'
 import type { FormInstance } from 'element-plus'
 import { filterNumber } from '@/utils/common'
-import { addLabelGroup, editLabelGroup, getLabelGroupInfo } from '@/addon/phone_shop//api/goods'
+import { addLabelGroup, editLabelGroup, getLabelGroupInfo } from '@/addon/phone_shop/api/goods'
 
 const showDialog = ref(false)
 const loading = ref(false)
@@ -107,7 +103,7 @@ defineExpose({
 
 <style lang="scss" scoped></style>
 <style lang="scss">
-.diy-dialog-wrap .el-form-item__label {
-    height: auto !important;
+.diy-dialog-wrap .el-form-item__label{
+    height: auto  !important;
 }
 </style>

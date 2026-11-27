@@ -11,7 +11,9 @@
 
 namespace addon\phone_shop\app\model\order;
 
+use addon\phone_shop\app\dict\delivery\DeliveryLocalDict;
 use addon\phone_shop\app\model\delivery\Company;
+use addon\phone_shop\app\model\local_delivery\LocalDeliveryOrder;
 use core\base\BaseModel;
 
 /**
@@ -42,8 +44,22 @@ class OrderDelivery extends BaseModel
         return $this->hasOne(Company::class, 'company_id', 'express_company_id');
     }
 
+    public function getExpressCompanyNameAttr($value, $data)
+    {
+        return (new Company())->find($data['express_company_id'])->company_name ?? '';
+    }
+
     public function orderGoods()
     {
         return $this->hasMany(OrderGoods::class, 'delivery_id', 'id');
+    }
+    public function getThirdDeliveryNameAttr($value, $data)
+    {
+        return DeliveryLocalDict::getType($data['third_delivery'])['name']  ?? "";
+    }
+
+    public function localDeliveryOrder()
+    {
+        return $this->hasOne(LocalDeliveryOrder::class, 'delivery_no', 'local_delivery_order_id')->append(['status_name','delivery_service_name'])->bind(['local_delivery_status' => 'status','local_delivery_status_name' => 'status_name','delivery_service','delivery_service_name','rider_name','rider_mobile']);
     }
 }

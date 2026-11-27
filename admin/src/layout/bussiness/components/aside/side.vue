@@ -33,7 +33,7 @@
                 </el-scrollbar>
             </div>
             <el-scrollbar v-if="twoMenuData.length" class="two-menu w-[190px]">
-                <div class="w-[190px] h-[64px] flex items-center justify-center text-[16px] border-0 border-b-[1px] border-solid border-[#eee]">{{ route.matched[1].meta.title }}</div>
+                <div class="w-[190px] h-[64px] flex items-center justify-center text-[16px] border-0 border-b-[1px] border-solid border-[#eee]">{{ route.matched[2].meta.title }}</div>
                 <el-menu :default-active="route.name" :router="true" class="aside-menu" :collapse="systemStore.menuIsCollapse">
                     <menu-item v-for="(route, index) in twoMenuData" :routes="route" :key="index" />
                 </el-menu>
@@ -77,7 +77,7 @@ routers.forEach(item => {
             }
             oneMenuData.value.push(item)
         }
-    } else if (item.meta.addon != '' && siteInfo?.apps.length <= 1 && siteInfo?.apps[0].key == item.meta.addon && item.meta.show) {
+    } else if (item.meta.addon != '' && siteInfo?.apps?.length === 1 && siteInfo.apps[0]?.key == item.meta.addon && item.meta.show) {
         if (item.children) {
             item.children.forEach((citem: Record<string, any>) => {
                 citem.original_name = citem.name
@@ -94,23 +94,23 @@ routers.forEach(item => {
     }
 
     // 排序, 功能正确，改了排序后需要把菜单排序的默认值重新调整一下【多应用一级菜单，单应用二级菜单】
-    // oneMenuData.value.sort((a, b) => {
-    //     if (a.meta.sort && b.meta.sort) {
-    //         return b.meta.sort - a.meta.sort
-    //     } else if (a.meta.sort) {
-    //         return -1
-    //     } else if (b.meta.sort) {
-    //         return 1
-    //     } else {
-    //         return 0
-    //     }
-    // })
+    oneMenuData.value.sort((a, b) => {
+        if (a.meta.sort && b.meta.sort) {
+            return b.meta.sort - a.meta.sort
+        } else if (a.meta.sort) {
+            return -1
+        } else if (b.meta.sort) {
+            return 1
+        } else {
+            return 0
+        }
+    })
 })
 
 // 多应用时将应用插入菜单
-if (siteInfo?.apps.length > 1) {
+if ((siteInfo?.apps?.length ?? 0) > 1) {
     const routers:Record<string, any>[] = []
-    siteInfo?.apps.forEach((item: Record<string, any>) => {
+    siteInfo?.apps?.forEach((item: Record<string, any>) => {
         if (addonRouters[item.key]) {
             addonRouters[item.key].name = addonIndexRoute[item.key]
             routers.push(addonRouters[item.key])
@@ -119,17 +119,17 @@ if (siteInfo?.apps.length > 1) {
     oneMenuData.value.unshift(...routers)
 
     // 排序, 功能正确，改了排序后需要把菜单排序的默认值重新调整一下【多应用一级菜单，单应用二级菜单】
-    // oneMenuData.value.sort((a, b) => {
-    //     if (a.meta.sort && b.meta.sort) {
-    //         return b.meta.sort - a.meta.sort
-    //     } else if (a.meta.sort) {
-    //         return -1
-    //     } else if (b.meta.sort) {
-    //         return 1
-    //     } else {
-    //         return 0
-    //     }
-    // })
+    oneMenuData.value.sort((a, b) => {
+        if (a.meta.sort && b.meta.sort) {
+            return b.meta.sort - a.meta.sort
+        } else if (a.meta.sort) {
+            return -1
+        } else if (b.meta.sort) {
+            return 1
+        } else {
+            return 0
+        }
+    })
 }
 
 const oneMenuActive = ref(route.matched[1].name)
@@ -306,22 +306,22 @@ watch(route, () => {
         twoMenuData.value = route.matched[1].children ?? []
     } else {
         // 多应用
-        if (siteInfo?.apps.length > 1) {
-            twoMenuData.value = route.matched[1].children
-            oneMenuActive.value = route.matched[1].name
+        if ((siteInfo?.apps?.length ?? 0) > 1) {
+            twoMenuData.value = route.matched[2].children
+            oneMenuActive.value = route.matched[2].name
         } else {
             // 单应用
-            const oneMenu = route.matched[1]
+            const oneMenu = route.matched[2]
             if (oneMenu.meta.addon == '') {
-                oneMenuActive.value = route.matched[1].name
-                twoMenuData.value = route.matched[1].children ?? []
+                oneMenuActive.value = route.matched[2].name
+                twoMenuData.value = route.matched[2].children ?? []
             } else {
-                if (oneMenu.meta.addon == siteInfo?.apps[0].key) {
+                if (oneMenu.meta.addon == siteInfo?.apps?.[0]?.key) {
+                    oneMenuActive.value = route.matched[3].name
+                    twoMenuData.value = route.matched[3].children ?? []
+                } else {
                     oneMenuActive.value = route.matched[2].name
                     twoMenuData.value = route.matched[2].children ?? []
-                } else {
-                    oneMenuActive.value = route.matched[1].name
-                    twoMenuData.value = route.matched[1].children ?? []
                 }
             }
         }

@@ -67,7 +67,7 @@ const specialMenuNames = ref<string[]>([])
 const specialMenuNamesLevel1 = ref<string[]>([])
 const addons = computed(() => {
     const addons: Record<string, any> = {}
-    userStore.siteInfo?.apps.forEach((item: any) => { addons[item.key] = item })
+    userStore.siteInfo?.apps?.forEach((item: any) => { addons[item.key] = item })
     userStore.siteInfo?.site_addons.forEach((item: any) => { addons[item.key] = item })
     return addons
 })
@@ -184,10 +184,10 @@ const handleJump = (routeName: string) => {
         routeName = 'addon_list'
     }
     // 跳转时添加随机查询参数（用于触发页面感知）
-    const query = route.name === routeName 
-      ? { refresh: Date.now() } // 相同路由时添加随机参数
-      : {};
-    
+    const query = route.name === routeName
+        ? { refresh: Date.now() } // 相同路由时添加随机参数
+        : {};
+
     // 执行跳转
     router.push({ name: routeName, query });
 }

@@ -16,12 +16,12 @@ class ActiveDict
     //活动类型(店铺活动，会员活动，商品活动)
     const MEMBER = 'member';//会员活动
     const GOODS = 'goods';//商品活动
-    const SHOP = 'shop';//店铺活动
+    const SHOP = 'phone_shop';//店铺活动
 
     //商品活动类型（单品，独立商品，店铺整体商品）
     const GOODS_SINGLE = 'single';//单品
     const GOODS_INDEPENDENT = 'independent';//独立商品
-    const GOODS_SHOP = 'shop';//店铺整体商品
+    const GOODS_SHOP = 'phone_shop';//店铺整体商品
 
     //活动状态
     const NOT_ACTIVE = 'not_active';//活动未开始
@@ -29,9 +29,14 @@ class ActiveDict
     const END = 'end';//活动已结束
     const CLOSE = 'close';//活动已关闭
 
-    //活动类别
-    const DISCOUNT = 'discount';//限时折扣
-    const EXCHANGE = 'exchange';//积分兑换
+    //活动类别（active_class）
+    const DISCOUNT = 'discount';// 限时折扣
+    const EXCHANGE = 'exchange';// 积分商城
+    const MANJIANSONG = 'manjiansong'; // 满减送
+    const NEWCOMER_DISCOUNT = 'newcomer_discount'; // 新人专享
+    const GIFTCARD = 'giftcard'; // 礼品卡
+    const PINTUAN = 'pintuan'; // 拼团
+    //const SECKILL = 'seckill'; // 秒杀
 
 
     /**
@@ -60,6 +65,11 @@ class ActiveDict
     {
         $list = [
             self::DISCOUNT => get_lang('dict_shop_active_class.discount'),
+            self::EXCHANGE => get_lang('dict_shop_active_class.exchange'),
+            self::MANJIANSONG => get_lang('dict_shop_active_class.manjiansong'),
+            self::NEWCOMER_DISCOUNT => get_lang('dict_shop_active_class.newcomer_discount'),
+            self::GIFTCARD => get_lang('dict_shop_active_class.newcomer_discount'),
+            self::PINTUAN => get_lang('dict_shop_active_class.newcomer_discount'),
         ];
         if ($type == '') return $list;
         return $list[ $type ] ?? '';

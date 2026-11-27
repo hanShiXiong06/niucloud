@@ -1,0 +1,44 @@
+@import './cooperation-shared';
+
+.hsx-cooperation { --coop-primary: var(--primary-color, #d93833); height: calc(100vh - var(--window-top, 0px) - var(--window-bottom, 0px)); min-height: 0; background: #f5f6f8; color: #202124; display: flex; flex-direction: column; box-sizing: border-box; font-size: 26rpx; }
+/* #ifdef H5 */
+.hsx-cooperation { height: calc(100dvh - var(--window-top, 0px) - var(--window-bottom, 0px)); }
+/* #endif */
+.coop-overlay-root { flex: none; height: 0; width: 100%; overflow: visible; }
+// Framework popup roots are flex items even while closed; keep the cashier out of page sizing.
+// Its native fixed overlay remains unchanged and can extend beyond this zero-height mount.
+.coop-cashier-mount { flex: none; height: 0; min-height: 0; width: 100%; overflow: visible; }
+.coop-overlay-root.is-task-page { flex: 1; height: 100%; min-height: 0; display: flex; flex-direction: column; }.coop-onboarding-entry { padding: 0 24rpx 36rpx; }
+.coop-main-scroll { height: 0; min-height: 0; flex: 1; }
+.coop-main-paging { height: 0; min-height: 0; flex: 1; width: 100%; }.coop-lead-empty { padding: 24rpx; }
+.coop-lead-pager { height: 100%; width: 100%; }
+// The header and filters are siblings of the native scroll-view: they remain
+// visible without relying on H5-only sticky behavior inside a native scroller.
+.coop-delivery-controls { flex: none; min-width: 0; background: #fff; border-bottom: 1rpx solid #e8edf4; }
+.coop-delivery-controls .coop-list-tools { padding-top: 14rpx; }
+.coop-delivery-controls.is-pending .coop-status-tabs { opacity: .55; pointer-events: none; }
+// The framework has two internal spacers. Reserve only the actual fixed bar plus safe area.
+// Keep native fixed positioning intact; do not depend on selectors inside framework components.
+.coop-framework-tabbar { flex: none; height: calc(51px + env(safe-area-inset-bottom)); }
+// Keep the framework's internal spacers out of document flow without clipping its fixed bar.
+.coop-framework-tabbar-mount { position: fixed; left: 0; right: 0; bottom: 0; height: 0; }
+.coop-list-tools { padding: 22rpx 30rpx 0; }
+.coop-status-tabs { margin-top: 10rpx; }
+.coop-status-tabs__inner { display: flex; align-items: center; gap: 32rpx; width: max-content; }
+.coop-status-tabs__inner>text { white-space: nowrap; min-height: 78rpx; line-height: 78rpx; color: #88929e; font-size: 24rpx; }
+.coop-status-tabs__inner>text.active { color: #202124; font-weight: 650; }
+.coop-lead-list { padding: 0 24rpx 20rpx; margin-top: 20rpx; }
+.coop-publish-dock { padding: 16rpx 30rpx 20rpx; background: #f5f6f8; flex: none; }
+.coop-warning,.coop-payment-status { margin: 20rpx 24rpx; padding: 19rpx 22rpx; border-radius: 10rpx; font-size: 23rpx; line-height: 1.7; background: #fff3e9; color: #9a6e48; }
+.coop-payment-status { background: #edf3fa; color: #617795; display: flex; flex-wrap: wrap; gap: 14rpx; justify-content: space-between; }
+.coop-payment-status>text:last-child { font-weight: 600; }
+.coop-login { padding: 0 60rpx; }
+.coop-profile-wrap { padding-top: 18rpx; }
+.coop-work-overview { display: flex; gap: 14rpx; padding: 25rpx 24rpx 20rpx; background: #fff; }
+.coop-work-overview>view { display: flex; align-items: center; gap: 12rpx; flex: 1; min-width: 0; }
+.coop-work-overview__icon { display: flex; align-items: center; justify-content: center; width: 65rpx; height: 65rpx; border-radius: 14rpx; flex: none; }
+.coop-work-overview__icon.is-select { background: #fff2df; }.coop-work-overview__icon.is-receive { background: #edf3fc; }.coop-work-overview__icon.is-follow { background: #eaf6ee; }
+.coop-work-overview>view>view:last-child { display: flex; flex-direction: column; gap: 5rpx; min-width: 0; font-size: 21rpx; color: #8994a4; line-height: 1.5; }
+.coop-work-overview>view>view:last-child>text:first-child { color: #303b4b; font-size: 31rpx; font-weight: 650; }
+.coop-subscribe-entry { display: flex; align-items: center; gap: 10rpx; padding: 17rpx 25rpx; background: #fff8ec; font-size: 22rpx; line-height: 1.6; color: #8c7756; }
+.coop-subscribe-entry>text:first-of-type { min-width: 0; flex: 1; }.coop-subscribe-entry>text:last-child { white-space: nowrap; flex: none; color: #a87e3d; }

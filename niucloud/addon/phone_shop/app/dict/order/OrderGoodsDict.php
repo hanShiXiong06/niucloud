@@ -28,6 +28,8 @@ class OrderGoodsDict
     const REFUND_FINISH = 3;
     // 退款失败
 //    const REFUND_FAIL = -1;
+    // 部分退款
+    const PARTIAL_REFUND = -2;
     /**
      * 获取退款状态
      * @param string $status

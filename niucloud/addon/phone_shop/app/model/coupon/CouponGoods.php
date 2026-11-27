@@ -11,6 +11,7 @@
 
 namespace addon\phone_shop\app\model\coupon;
 
+use addon\phone_shop\app\model\goods\Goods;
 use core\base\BaseModel;
 
 /**
@@ -31,5 +32,10 @@ class CouponGoods extends BaseModel
      * @var string
      */
     protected $name = 'phone_shop_coupon_goods';
+
+    public function goods()
+    {
+        return $this->hasOne(Goods::class , 'goods_id', 'goods_id');
+    }
 
 }

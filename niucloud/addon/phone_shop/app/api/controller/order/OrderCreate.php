@@ -39,14 +39,20 @@ class OrderCreate extends BaseApiController
     public function calculate()
     {
         $data = $this->request->params([
-            [ 'order_key', [] ],
-            [ 'cart_ids', [] ],
-            [ 'sku_data', [] ],
-            [ 'delivery', [] ],
+            ['order_key', []],
+            ['cart_ids', []],
+            ['sku_data', []],
+            ['delivery', []],
+            ['is_need_recalculate', 0],
 //            ['member_remark', ''],//买家留言
-            [ 'discount', [] ],//优惠
+            ['discount', []],//优惠
 //            ['invoice', []],//发票
+            ['extend_data', []],// 扩展数据
+            ['impulse_buy_goods', []], // 顺买商品信息
+            ['position', []],//用户位置信息
+            ['payment_mode', ''],//线上支付/线下待确认
         ]);
+
         return success('SUCCESS', ( new OrderCreateService() )->calculate($data));
     }
 
@@ -57,13 +63,16 @@ class OrderCreate extends BaseApiController
     public function create()
     {
         $data = $this->request->params([
-            [ 'order_key', [] ],
-            [ 'member_remark', '' ],//买家留言
-//            ['delivery', []],//配送参数
+            ['order_key', []],
+            ['member_remark', ''],//买家留言
+            ['delivery', []],//配送参数
 //            ['discount', []],//优惠
-            [ 'invoice', [] ],//发票
+            ['invoice', []],//发票
+            ['form_data', []], // 万能表单数据
+            ['payment_mode', ''],//用于校验最终提交方式与试算快照一致
+            ['expected_order_money', ''],//仅核对客户最后看到的金额，金额仍由服务端计算
         ]);
-        return success('SUCCESS', ( new OrderCreateService() )->create($data));
+        return success('SUCCESS', (new OrderCreateService())->create($data));
     }
 
     /**
@@ -73,9 +82,9 @@ class OrderCreate extends BaseApiController
     public function getCoupon()
     {
         $data = $this->request->params([
-            [ 'order_key', [] ],
+            ['order_key', []],
         ]);
-        return success('SUCCESS', ( new OrderCreateService() )->getCoupon($data));
+        return success('SUCCESS', (new OrderCreateService())->getCoupon($data));
     }
 
     /**
@@ -88,8 +97,17 @@ class OrderCreate extends BaseApiController
     public function getStore()
     {
         $data = $this->request->params([
-            [ 'latlng', [] ],
+            ['latlng', []],
         ]);
-        return success('SUCCESS', ( new OrderCreateService() )->getStore($data[ 'latlng' ]));
+        return success('SUCCESS', (new OrderCreateService())->getStore($data['latlng']));
+    }
+
+    /**
+     * 获取同城配送配置项
+     * @return Response
+     */
+    public function getLocalDeliveryConfig()
+    {
+        return success(((new OrderCreateService())->getLocalDeliveryConfig()));
     }
 }

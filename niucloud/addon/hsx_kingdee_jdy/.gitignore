@@ -1,0 +1,5 @@
+!tests/
+!tests/**
+tests/preview/dist/
+tests/preview/.vite/
+tests/acceptance/.vite/

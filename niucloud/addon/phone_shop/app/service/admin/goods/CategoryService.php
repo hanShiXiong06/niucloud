@@ -13,7 +13,6 @@ namespace addon\phone_shop\app\service\admin\goods;
 
 use addon\phone_shop\app\model\goods\Category;
 use addon\phone_shop\app\model\goods\Goods;
-use addon\phone_shop\app\model\site\Site;
 use addon\phone_shop\app\service\core\goods\CoreGoodsCategoryService;
 use core\base\BaseAdminService;
 use core\exception\AdminException;
@@ -27,7 +26,6 @@ use core\exception\CommonException;
  */
 class CategoryService extends BaseAdminService
 {
-    
     public function __construct()
     {
         parent::__construct();
@@ -41,19 +39,11 @@ class CategoryService extends BaseAdminService
      */
     public function getPage(array $where = [])
     {
-        $field = 'category_id,category_name,image,level,pid,category_full_name,memory_group,is_show,sort';
+        $field = 'category_id,category_name,image,level,pid,category_full_name,is_show,sort';
         $order = 'create_time desc';
-        
-        if($this->site_id !== 0 ){
-            $sites =  (new Site())-> field('category_status')->where([['site_id','=', $this->site_id]]) ->findOrEmpty()->toArray();
-            
-        }
-        
-        $site_id = empty($sites['category_status'] ) ? $this->site_id : $this->site_id.",0";
-        $search_model = $this->model->where([[ 'site_id', 'in', "{$site_id}" ]   ])->withSearch([ "category_name" ], $where)->field($field)->order($order);
-        $list = $this->pageQuery($search_model);
-       
 
+        $search_model = $this->model->where([ [ 'site_id', '=', $this->site_id ] ])->withSearch([ "category_name" ], $where)->field($field)->order($order);
+        $list = $this->pageQuery($search_model);
         return $list;
     }
 
@@ -63,14 +53,10 @@ class CategoryService extends BaseAdminService
      * @param string $field
      * @return array
      */
-    public function getList(array $where = [], $field = 'category_id,category_name,image,level,pid,memory_group,category_full_name,is_show,sort')
+    public function getList(array $where = [], $field = 'category_id,category_name,image,level,pid,category_full_name,is_show,sort')
     {
         $order = 'sort desc,create_time desc';
-        if($this->site_id !== 0 ){
-            $sites =  (new Site())-> field('category_status')->where([['site_id','=', $this->site_id]]) ->findOrEmpty()->toArray();   
-        }
-        $site_id = empty($sites['category_status'] ) ? $this->site_id : $this->site_id.",0";
-        return $this->model->where([ [ 'site_id', 'in', "{$site_id}" ]  ])->withSearch([ "category_name", 'level' ], $where)->field($field)->order($order)->select()->toArray();
+        return $this->model->where([ [ 'site_id', '=', $this->site_id ] ])->withSearch([ "category_name", 'level' ], $where)->field($field)->order($order)->select()->toArray();
     }
 
     /**
@@ -79,21 +65,10 @@ class CategoryService extends BaseAdminService
      * @param string $order
      * @return array
      */
- 
-    public function getTree(array $params = [])
+    public function getTree()
     {
-       
-        if($this->site_id !== 0 ){
-            $sites =  (new Site())-> field('category_status')->where([['site_id','=', $this->site_id]]) ->findOrEmpty()->toArray();
-           
-        }
-    
-        $site_id = empty($sites['category_status'] ) ? $this->site_id : $this->site_id.",0";
-        $params['site_id'] =$this->site_id;
-        return ( new CoreGoodsCategoryService() )->getTree([ [ 'site_id', 'in', "$site_id" ] ], $params  );
-        
+        return ( new CoreGoodsCategoryService() )->getTree([ [ 'site_id', '=', $this->site_id ] ]);
     }
-
 
     /**
      * 获取商品分类信息
@@ -102,21 +77,8 @@ class CategoryService extends BaseAdminService
      */
     public function getInfo(int $id)
     {
-        $field = 'category_id,site_id,category_name,image,level,pid,category_full_name,memory_group,is_show,sort';
-        
-
-        if($this->site_id !== 0 ){
-            $sites =  (new Site())-> field('category_status')->where([['site_id','=', $this->site_id]]) ->findOrEmpty()->toArray();
-            
-        }
-        
-        $site_id = empty($sites['category_status'] ) ? $this->site_id : $this->site_id.",0";
-        $info = $this->model->field($field)->where([ [ 'category_id', '=', $id ], [ 'site_id', 'in', "{$site_id }" ]  ])->findOrEmpty()->toArray();
-        // 如果id不属于当前站点 则提示 无权限
-        // if( $info['site_id'] !== $this->site_id) {
-        //     throw new AdminException('SHOP_GOODS_CATEGORY_NOT_POWER');
-        // } 
-
+        $field = 'category_id,category_name,image,level,pid,category_full_name,is_show,sort';
+        $info = $this->model->field($field)->where([ [ 'category_id', '=', $id ], [ 'site_id', '=', $this->site_id ] ])->findOrEmpty()->toArray();
         if (!empty($info)) {
             $info[ 'child_count' ] = 0;
             if ($info[ 'level' ] == 1) {
@@ -124,6 +86,15 @@ class CategoryService extends BaseAdminService
             }
         }
         return $info;
+    }
+    /**
+     * 获取商品分类信息
+     * @param int $id
+     * @return array
+     */
+    public function checkCategoryValid($ids)
+    {
+        return $this->model->where([ [ 'category_id', 'in', $ids ], [ 'site_id', '=', $this->site_id ] ])->column('category_id');
     }
 
     /**
@@ -138,8 +109,7 @@ class CategoryService extends BaseAdminService
 
         $condition = [
             [ 'site_id', '=', $this->site_id ],
-            [ 'category_name', '=', $data[ 'category_name' ] ],
-            [ 'memory_group', '=', $data[ 'memory_group' ] ]
+            [ 'category_name', '=', $data[ 'category_name' ] ]
         ];
         if ($data[ 'pid' ] > 0) {
             $condition[] = [ 'pid', '=', $data[ 'pid' ] ];
@@ -152,15 +122,19 @@ class CategoryService extends BaseAdminService
             throw new AdminException('分类已存在，请检查');
         }
         if ($data[ 'pid' ] > 0) {
-            $info = $this->model->field("category_id, category_name")->where([ [ 'category_id', '=', $data[ 'pid' ] ] ])->findOrEmpty();
+            $info = $this->model->field("category_id, category_name, level, category_full_name")->where([ [ 'category_id', '=', $data[ 'pid' ] ], [ 'site_id', '=', $this->site_id ] ])->findOrEmpty();
             if ($info->isEmpty()) throw new CommonException('SHOP_GOODS_CATEGORY_NOT_EXIST');
-            $data[ 'category_full_name' ] = $info->category_name . '/' . $data[ 'category_name' ];
-            $data[ 'level' ] = 2;
+            if ((int) $info->level >= 3) throw new AdminException('最多支持三级分类');
+            $parent_full = $info->category_full_name !== '' ? $info->category_full_name : $info->category_name;
+            $data[ 'category_full_name' ] = $parent_full . '/' . $data[ 'category_name' ];
+            $data[ 'level' ] = (int) $info->level + 1;
         }
 
         $data[ 'site_id' ] = $this->site_id;
         $data[ 'create_time' ] = time();
         $res = $this->model->create($data);
+        // 主站新建分类 -> 推送同步到代理子站
+        \addon\phone_shop\app\service\core\agent\RefDataSyncService::pushIfMaster('category', $this->site_id, (int) $res->category_id);
         return $res->category_id;
     }
 
@@ -173,6 +147,7 @@ class CategoryService extends BaseAdminService
     public function edit(int $id, array $data)
     {
         $category_info = $this->getInfo($id);
+        if (!$category_info) throw new AdminException('SHOP_GOODS_CATEGORY_NOT_EXIST');
         if ($category_info && $category_info[ 'category_id' ] != $id) {
             throw new AdminException('分类已存在，请检查');
         }
@@ -181,19 +156,43 @@ class CategoryService extends BaseAdminService
         }
 
         $data[ 'category_full_name' ] = $data[ 'category_name' ];
-        $data[ 'memory_group' ] = $data[ 'memory_group' ];
         $data[ 'level' ] = 1;
         if ($data[ 'pid' ] > 0) {
-            $info = $this->model->field("category_id, category_name")->where([ [ 'category_id', '=', $data[ 'pid' ] ] ])->findOrEmpty();
+            $info = $this->model->field("category_id, category_name, level, category_full_name")->where([ [ 'category_id', '=', $data[ 'pid' ] ], [ 'site_id', '=', $this->site_id ] ])->findOrEmpty();
             if ($info->isEmpty()) throw new CommonException('SHOP_GOODS_CATEGORY_NOT_EXIST');
-            $data[ 'category_full_name' ] = $info->category_name . '/' . $data[ 'category_name' ];
-            $data[ 'level' ] = 2;
+            if ((int) $info->level >= 3) throw new AdminException('最多支持三级分类');
+            $parent_full = $info->category_full_name !== '' ? $info->category_full_name : $info->category_name;
+            $data[ 'category_full_name' ] = $parent_full . '/' . $data[ 'category_name' ];
+            $data[ 'level' ] = (int) $info->level + 1;
+        }
+        $data[ 'update_time' ] = time();
+        try {
+            \think\facade\Db::transaction(function () use ($id, $category_info, $data) {
+                (new GoodsService())->batchUpdateCategory($id, $category_info['pid'], $data['pid']);
+                $this->model->where([['category_id', '=', $id], ['site_id', '=', $this->site_id]])->update($data);
+                $this->refreshChildPaths($id, $data['category_full_name'], (int)$data['level'], [$id]);
+            });
+            // 主站改名 -> 同步更新代理子站副本
+            \addon\phone_shop\app\service\core\agent\RefDataSyncService::pushIfMaster('category', $this->site_id, $id);
+            return true;
+        }catch (AdminException $e) {
+            throw new AdminException($e->getMessage());
         }
 
-        $data[ 'update_time' ] = time();
-        $data[ 'sort' ] = $category_info[ 'sort' ];
-        $this->model->where([ [ 'category_id', '=', $id ], [ 'site_id', '=', $this->site_id ] ])->update($data);
-        return true;
+    }
+
+    private function refreshChildPaths(int $parentId, string $path, int $level, array $visited): void
+    {
+        $children = $this->model->where([['site_id', '=', $this->site_id], ['pid', '=', $parentId]])
+            ->field('category_id,category_name')->select()->toArray();
+        foreach ($children as $child) {
+            $id = (int)$child['category_id'];
+            if (in_array($id, $visited, true) || $level >= 3) throw new AdminException('分类不能循环或超过三级');
+            $fullName = $path . '/' . $child['category_name'];
+            $this->model->where([['site_id', '=', $this->site_id], ['category_id', '=', $id]])
+                ->update(['category_full_name' => $fullName, 'level' => $level + 1, 'update_time' => time()]);
+            $this->refreshChildPaths($id, $fullName, $level + 1, array_merge($visited, [$id]));
+        }
     }
 
     /**
@@ -203,13 +202,12 @@ class CategoryService extends BaseAdminService
      */
     public function del(int $id)
     {
-        $goods = (new Goods())->where([ [ 'site_id', '=', $this->site_id ] ])->select()->toArray();
-        foreach ($goods as $v) {
-            if (in_array($id, $v[ 'goods_category' ])) {
-                throw new AdminException('SHOP_GOODS_CATEGORY_EXIST_GOODS');
-            }
+
+        $count = ( new Goods() )->where([ [ 'site_id', '=', $this->site_id ] ])->withSearch([ 'goods_category' ], [ 'goods_category' => $id ])->count();
+        if ($count) {
+            throw new AdminException('SHOP_GOODS_CATEGORY_EXIST_GOODS');
         }
-        
+
         $field = 'category_id,level,pid';
         $info = $this->model->field($field)->where([ [ 'category_id', '=', $id ], [ 'site_id', '=', $this->site_id ] ])->findOrEmpty()->toArray();
         if (!empty($info[ 'level' ] == 1)) {

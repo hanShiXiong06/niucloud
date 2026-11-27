@@ -11,13 +11,12 @@
 
 namespace app\service\api\member;
 
-use app\job\member\MemberGiftGrantJob;
+use app\model\member\Member;
 use app\model\member\MemberSign;
 use app\service\core\member\CoreMemberService;
 use app\service\core\sys\CoreConfigService;
 use core\base\BaseApiService;
 use core\exception\CommonException;
-use think\db\exception\DbException;
 use think\facade\Db;
 use DateInterval;
 use DateTime;
@@ -68,17 +67,53 @@ class MemberSignService extends BaseApiService
      */
     public function sign()
     {
+        // 在事务开始前串行化同一会员的签到，避免等待行锁时已建立旧的一致性读快照。
+        // MySQL 连接级锁跨进程有效，断开连接自动释放；无需新增表、字段或缓存服务。
+        $connection = Db::connect();
+        $connection->query('SELECT 1', [], true);
+        $pdo = $connection->getPdo();
+        if ($pdo->inTransaction()) throw new CommonException('签到正在处理中，请稍后重试');
+        $lockName = 'member_sign_' . sha1($connection->getConfig('database') . '|'
+            . $connection->getConfig('prefix') . '|' . $this->site_id . '|' . $this->member_id);
+        $lock = $pdo->prepare('SELECT GET_LOCK(?, 3)');
+        $lock->execute([$lockName]);
+        if ((int)$lock->fetchColumn() !== 1) throw new CommonException('签到正在处理中，请稍后查看结果，勿重复提交');
+        try {
+            return $this->signLocked();
+        } finally {
+            try {
+                $release = $pdo->prepare('SELECT RELEASE_LOCK(?)');
+                $release->execute([$lockName]);
+            } catch (\Throwable $e) {
+                // 已提交的奖励不因连接释放失败而向客户假报失败；断连会释放命名锁。
+                \think\facade\Log::warning('签到锁释放异常', ['site_id' => $this->site_id, 'member_id' => $this->member_id]);
+            }
+        }
+    }
 
+    private function signLocked()
+    {
         $sign_config = $this->getSign();
         if (!$sign_config['is_use']) throw new CommonException('SIGN_NOT_USE');
         if (empty($sign_config['sign_period']) || empty($sign_config['day_award'])) throw new CommonException('SIGN_NOT_SET');
         $sign_period = $sign_config['sign_period'];//签到周期
-        $today = $this->model->where([['site_id', '=', $this->site_id], ['member_id', '=', $this->member_id]])->whereDay('create_time')->findOrEmpty()->toArray();
-        if (!empty($today)) throw new CommonException('SIGNED_TODAY');
         Db::startTrans();
 
         try {
-            $yesterday = $this->model->where([['site_id', '=', $this->site_id], ['member_id', '=', $this->member_id]])->whereDay('create_time', 'yesterday')->findOrEmpty()->toArray();
+            // 锁定始终存在的会员行，避免“当天还没有签到行”时多个请求同时通过检查。
+            // 与账户入账使用同一连接、同一把行锁；不依赖单进程或缓存锁。
+            $member = (new Member())->where('site_id', $this->site_id)->where('member_id', $this->member_id)
+                ->field('member_id')->lock(true)->find();
+            if (!$member) throw new CommonException('MEMBER_NOT_EXIST');
+            $now = time(); // 等待锁后再确定日期，跨午夜的请求按真正处理时间归属。
+            $dayStart = strtotime(date('Y-m-d', $now));
+            $dayEnd = strtotime('+1 day', $dayStart);
+            $today = $this->model->where('site_id', $this->site_id)->where('member_id', $this->member_id)
+                ->where('create_time', '>=', $dayStart)->where('create_time', '<', $dayEnd)->find();
+            if ($today) throw new CommonException('SIGNED_TODAY');
+            $yesterday = $this->model->where('site_id', $this->site_id)->where('member_id', $this->member_id)
+                ->where('create_time', '>=', strtotime('-1 day', $dayStart))->where('create_time', '<', $dayStart)
+                ->order('sign_id desc')->findOrEmpty()->toArray();
             if ($yesterday) {
                 $days = $yesterday['days'];
                 $days++;
@@ -108,18 +143,16 @@ class MemberSignService extends BaseApiService
             $data['days'] = $days;
             $data['day_award'] = $sign_config['day_award'];
             $data['is_sign'] = 1;
-            $data['create_time'] = time();
+            $data['create_time'] = $now;
             $res = $this->model->create($data);
             if ($res) {
                 //日签奖励发放
-                MemberGiftGrantJob::dispatch([
-                    'site_id' => $this->site_id,
-                    'member_id' => $this->member_id,
-                    'gift' => $sign_config['day_award'],
-                    'param' => [
-                        'from_type' => 'day_sign_award',
-                        'memo' => '日签奖励'
-                    ]
+                // 签到与发奖必须原子提交；不将事务中的奖励提前推入可重复消费的队列。
+                (new CoreMemberService())->memberGiftGrant($this->site_id, $this->member_id, $sign_config['day_award'], [
+                    'from_type' => 'day_sign_award',
+                    'memo' => '日签奖励',
+                    'related_id' => $res->sign_id,
+                    'strict' => true,
                 ]);
                 $awards['day_award'] = $sign_config['day_award'];
 
@@ -145,14 +178,11 @@ class MemberSignService extends BaseApiService
                                     ->whereBetweenTime('create_time', $period_start_time, $period_end_time)->count('sign_id');
                                 if ($receive_count < $value['receive_num']) {
                                     //连签奖励发放
-                                    MemberGiftGrantJob::dispatch([
-                                        'site_id' => $this->site_id,
-                                        'member_id' => $this->member_id,
-                                        'gift' => $gifts,
-                                        'param' => [
-                                            'from_type' => 'continue_sign_award',
-                                            'memo' => '连签奖励'
-                                        ]
+                                    (new CoreMemberService())->memberGiftGrant($this->site_id, $this->member_id, $gifts, [
+                                        'from_type' => 'continue_sign_award',
+                                        'memo' => '连签奖励',
+                                        'related_id' => $res->sign_id,
+                                        'strict' => true,
                                     ]);
                                     $awards['continue_award'] = $gifts;
                                     $continue_text = get_lang('CONTINUE_SIGN').$res->days.get_lang('DAYS');
@@ -161,14 +191,11 @@ class MemberSignService extends BaseApiService
                                 }
                             } else { //不限制
                                 //连签奖励发放
-                                MemberGiftGrantJob::dispatch([
-                                    'site_id' => $this->site_id,
-                                    'member_id' => $this->member_id,
-                                    'gift' => $gifts,
-                                    'param' => [
-                                        'from_type' => 'continue_sign_award',
-                                        'memo' => '连签奖励'
-                                    ]
+                                (new CoreMemberService())->memberGiftGrant($this->site_id, $this->member_id, $gifts, [
+                                    'from_type' => 'continue_sign_award',
+                                    'memo' => '连签奖励',
+                                    'related_id' => $res->sign_id,
+                                    'strict' => true,
                                 ]);
                                 $awards['continue_award'] = $gifts;
                                 $continue_text = get_lang('CONTINUE_SIGN').$res->days.get_lang('DAYS');
@@ -179,11 +206,11 @@ class MemberSignService extends BaseApiService
                     }
                 }
             }
-            Db::commit();
             $awards_total = $this->getTotalAward($awards);
             $result['title'] = get_lang('SIGN_SUCCESS');
             $result['info'] = $continue_text.get_lang('GET_AWARD');
             $result['awards'] = $awards_total;
+            Db::commit();
             if ($awards_total) {
                 return $result;
             } else {
@@ -194,9 +221,9 @@ class MemberSignService extends BaseApiService
                 ];
             }
 
-        } catch (DbException $e) {
+        } catch (\Throwable $e) {
             Db::rollback();
-            throw new CommonException($e->getMessage());
+            throw $e;
         }
 
     }

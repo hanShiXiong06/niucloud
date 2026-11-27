@@ -1,0 +1,9 @@
+{
+    "pages": {
+        "hsx_phone_query": {
+            "hello_world": {
+                "index": "hello_world"
+            }
+        }
+    }
+}

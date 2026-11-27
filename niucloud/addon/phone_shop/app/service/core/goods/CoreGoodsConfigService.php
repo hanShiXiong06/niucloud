@@ -11,6 +11,7 @@
 
 namespace addon\phone_shop\app\service\core\goods;
 
+use addon\phone_shop\app\dict\goods\GoodsDict;
 use app\service\core\sys\CoreConfigService;
 use core\base\BaseCoreService;
 
@@ -22,6 +23,9 @@ use core\base\BaseCoreService;
  */
 class CoreGoodsConfigService extends BaseCoreService
 {
+    public $search_key = 'GOODS_SEARCH_CONFIG';
+    public $unique_key = 'GOODS_UNIQUE_CONFIG';
+    public $sort_key = 'GOODS_SORT_CONFIG';
     //系统配置文件
     public $core_config_service;
 
@@ -46,10 +50,14 @@ class CoreGoodsConfigService extends BaseCoreService
             "search" => $params[ 'search' ],// 顶部搜索框
             'goods' => $params[ 'goods' ], // 商品样式，single-cols：单列，double-cols
             "sort" => $params[ 'sort' ], // 商品排序，default：综合，sales：热销、price：价格
-            'cart' => $params[ 'cart' ]
+            'cart' => $params[ 'cart' ],
+            'show_quality' => (int) ( $params[ 'show_quality' ] ?? 0 ), // 商品卡片是否显示成色/质检角标
+            'warehouse_switch' => (int) ( $params[ 'warehouse_switch' ] ?? 0 ), // 是否显示 本地仓/代理仓 切换
+            'detail_login_required' => (int) ( ( $params[ 'detail_login_required' ] ?? 0 ) == 1 ), // 分类/列表进入商品详情前需登录
+            'imei_tail_only' => $this->normalizeImeiTailOnly($params['imei_tail_only'] ?? 0), // 仅控制客户端展示，不截断真实串号
         ];
 
-        $this->core_config_service->setConfig($params['site_id'], 'GOODS_CATEGORY_CONFIG', $value);
+        $this->core_config_service->setConfig($params[ 'site_id' ], 'GOODS_CATEGORY_CONFIG', $value);
         return true;
     }
 
@@ -78,23 +86,132 @@ class CoreGoodsConfigService extends BaseCoreService
                 'cart' => [
                     'control' => 1, // 开关，1：开启，0：关闭
                     'event' => 'detail', // 购物车事件，detail：跳转商品详情，cart：加入购物车
-                    'style' => 'style-1', // 样式风格
+                    'style' => 'style-4', // 样式风格
                     'text' => '购买' //文字
-                ]
+                ],
+                'show_quality' => 0, // 是否显示成色/质检角标
+                'warehouse_switch' => 0, // 是否显示 本地仓/代理仓 切换
+                'detail_login_required' => 0,
+                'imei_tail_only' => 0,
             ];
         } else {
             $data = [
-                "level" => (int)$res[ 'value' ][ 'level' ], // 展示分类等级
+                "level" => (int) $res[ 'value' ][ 'level' ], // 展示分类等级
                 "template" => $res[ 'value' ][ 'template' ], // 分类模版名称
                 'page_title' => $res[ 'value' ][ 'page_title' ], // 页面标题
                 "search" => $res[ 'value' ][ 'search' ],// 顶部搜索框
                 'goods' => $res[ 'value' ][ 'goods' ],
                 "sort" => $res[ 'value' ][ 'sort' ], // 商品排序，default：综合，sales：热销、price：价格
-                'cart' => $res[ 'value' ][ 'cart' ]
+                'cart' => $res[ 'value' ][ 'cart' ],
+                'show_quality' => (int) ( $res[ 'value' ][ 'show_quality' ] ?? 0 ), // 是否显示成色/质检角标
+                'warehouse_switch' => (int) ( $res[ 'value' ][ 'warehouse_switch' ] ?? 0 ), // 是否显示 本地仓/代理仓 切换
+                'detail_login_required' => (int) ( ( $res[ 'value' ][ 'detail_login_required' ] ?? 0 ) == 1 ),
+                'imei_tail_only' => $this->normalizeImeiTailOnly($res['value']['imei_tail_only'] ?? 0),
             ];
 
         }
         return $data;
     }
+
+    private function normalizeImeiTailOnly($value): int
+    {
+        return in_array($value, [1, '1'], true) ? 1 : 0;
+    }
+
+    /**
+     * 获取商品搜索配置
+     * @return array
+     */
+    public function getSearchConfig($site_id)
+    {
+        $data = $this->core_config_service->getConfigValue($site_id, $this->search_key);
+        if (empty($data)) {
+            return [
+                'default_word' => '',
+                'search_words' => []
+            ];
+        }
+        return $data;
+    }
+
+    /**
+     * 设置商品搜索配置
+     * @param $data
+     * @return SysConfig|bool|\think\Model
+     */
+    public function setSearchConfig(int $site_id, $data)
+    {
+        $data[ 'search_words' ] = explode(',', $data[ 'search_words' ]);
+        return $this->core_config_service->setConfig($site_id, $this->search_key, $data);
+    }
+
+    /**
+     * 获取编码唯一配置
+     * @return array|int[]|mixed
+     */
+    public function getUniqueConfig($site_id)
+    {
+        $data = $this->core_config_service->getConfigValue($site_id, $this->unique_key);
+        if (empty($data)) {
+            return [
+                'is_enable' => 0,
+            ];
+        }
+        return $data;
+    }
+
+    /**
+     * 设置商品编码唯一值配置
+     * @param $data
+     * @return SysConfig|bool|\think\Model
+     */
+    public function setUniqueConfig(int $site_id, $data)
+    {
+        return $this->core_config_service->setConfig($site_id, $this->unique_key, $data);
+    }
+
+    /**
+     * 获取商品排序设置
+     * @return array|int[]|mixed
+     */
+    public function getSortConfig($site_id)
+    {
+        $data = $this->core_config_service->getConfigValue($site_id, $this->sort_key);
+        if (empty($data)) {
+            $data = [
+                'sort_type' => 'desc',
+                'sort_column' => 'create_time',
+                'default_sort' => 0,
+            ];
+        }
+        $data[ 'init' ] = [
+            'sort_type' => GoodsDict::getSortTypeConfig(),
+            'sort_column' => GoodsDict::getSortColumnConfig(),
+        ];
+
+        return $data;
+    }
+
+    /**
+     * 获取设置的默认排序号
+     * @param int $site_id
+     * @return int|mixed
+     */
+    public function getDefaultSort(int $site_id)
+    {
+        $sort_config = $this->getSortConfig($site_id);
+        return $sort_config[ 'default_sort' ] ?? 0;
+    }
+
+    /**
+     * 设置商品排序配置
+     * @param $data
+     * @return SysConfig|bool|\think\Model
+     */
+    public function setSortConfig(int $site_id, $data)
+    {
+        return $this->core_config_service->setConfig($site_id, $this->sort_key, $data);
+    }
+
 
 }

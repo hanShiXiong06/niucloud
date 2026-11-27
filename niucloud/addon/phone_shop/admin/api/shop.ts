@@ -41,4 +41,3 @@ export function getShopOrderStat() {
 export function getShopGoodsStat() {
     return request.get(`phone_shop/stat/goods`)
 }
-

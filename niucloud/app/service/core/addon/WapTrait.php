@@ -30,6 +30,8 @@ trait WapTrait
      */
     public function compileDiyComponentsCode($compile_path, $addon)
     {
+        // 先在内存中检查注册表，失败时不覆盖已有可用文件。
+        $registered_components = [];
         $content = "<template>\n";
         $content .= "    <view class=\"diy-group\" id=\"componentList\">\n";
         $content .= "        <top-tabbar :scrollBool=\"diyGroup.componentsScrollBool.TopTabbar\" v-if=\"data.global && Object.keys(data.global).length && data.global.topStatusBar && data.global.topStatusBar.isShow\" ref=\"topTabbarRef\" :data=\"data.global\" />\n";
@@ -47,7 +49,7 @@ trait WapTrait
 
         if (!empty($file_arr)) {
             foreach ($file_arr as $ck => $cv) {
-                if (str_contains($cv, 'index.vue')) {
+                if ($cv === 'index.vue' && is_file($ck)) {
 
                     $path = str_replace($root_path . '/', '', $ck);
                     $path = str_replace('/index.vue', '', $path);
@@ -62,6 +64,7 @@ trait WapTrait
                         $name_arr[ $k ] = strtoupper($v[ 0 ] ?? '') . substr($v, 1);
                     }
                     $name = implode('', $name_arr);
+                    $this->registerDiyComponentName($registered_components, $name, $ck);
                     $file_name = 'diy-' . $path;
 
                     $content .= "                <template v-if=\"component.componentName == '{$name}'\">\n";
@@ -83,19 +86,30 @@ trait WapTrait
             }
         }
         if (!empty($addon)) {
-            $addon_arr[] = $addon; // 追加新装插件
+            // 追加新装插件
+            if (is_array($addon)) {
+                $addon_arr = array_merge($addon_arr, $addon);
+            } else if (is_string($addon)) {
+                $addon_arr[] = $addon;
+            }
         }
         $addon_arr = array_unique($addon_arr);
 
         foreach ($addon_arr as $k => $v) {
             $addon_path = $compile_path . str_replace('/', DIRECTORY_SEPARATOR, 'addon/' . $v . '/components/diy'); // 插件自定义组件根目录
+            $replaced_directories = $this->getDiyReplacedDirectories($addon_path);
             $addon_file_arr = getFileMap($addon_path);
             if (!empty($addon_file_arr)) {
                 foreach ($addon_file_arr as $ck => $cv) {
-                    if (str_contains($cv, 'index.vue')) {
+                    if ($cv === 'index.vue' && is_file($ck)) {
 
                         $path = str_replace($addon_path . '/', '', $ck);
                         $path = str_replace('/index.vue', '', $path);
+
+                        // 插件复制升级不会删除旧目录；已声明替代组件的目录不再重复注册。
+                        if (isset($replaced_directories[$path])) {
+                            continue;
+                        }
 
                         // 获取自定义组件 key 关键词
                         $name_arr = explode('-', $path);
@@ -104,6 +118,7 @@ trait WapTrait
                             $name_arr[ $nk ] = strtoupper($nv[ 0 ] ?? '') . substr($nv, 1);
                         }
                         $name = implode('', $name_arr);
+                        $this->registerDiyComponentName($registered_components, $name, $ck);
                         $file_name = 'diy-' . $path;
 
                         $content .= "                <template v-if=\"component.componentName == '{$name}'\">\n";
@@ -121,12 +136,12 @@ trait WapTrait
         $content .= "                </view>\n";
         $content .= "            </view>\n";
         $content .= "        </template>\n";
-        $content .= "        <template v-if=\"diyStore.mode == '' && data.global && diyGroup.showCopyright.value && data.global.copyright && data.global.copyright.isShow\">\n";
-        $content .= "           <copy-right />\n";
+        $content .= "        <template v-if=\"data.global && diyGroup.showCopyright.value && data.global.copyright && data.global.copyright.isShow\">\n";
+        $content .= "           <copy-right :textColor=\"data.global.copyright.textColor\" />\n";
         $content .= "        </template>\n\n";
         $content .= "        <template v-if=\"diyStore.mode == '' && data.global && data.global.bottomTabBar && data.global.bottomTabBar.isShow\">\n";
         $content .= "            <view class=\"pt-[20rpx]\"></view>\n";
-        $content .= "            <tabbar :addon=\"data.global.bottomTabBar.designNav.key\" />\n";
+        $content .= "            <tabbar :addon=\"data.global.bottomTabBar.designNav?.key\" />\n";
         $content .= "        </template>\n";
         $content .= "    </view>\n";
         $content .= "</template>\n";
@@ -180,22 +195,85 @@ trait WapTrait
     }
 
     /**
+     * 由插件声明已替换的目录，框架不猜测哪个业务组件应该获胜，也不删除旧文件。
+     */
+    private function getDiyReplacedDirectories(string $component_path): array
+    {
+        $manifest_path = $component_path . '/registration.json';
+        if (!is_file($manifest_path)) {
+            return [];
+        }
+        $manifest = json_decode(file_get_contents($manifest_path), true);
+        if (!is_array($manifest) || ($manifest['version'] ?? null) !== 1
+            || !isset($manifest['replaced_directories']) || !is_array($manifest['replaced_directories'])) {
+            throw new \core\exception\CommonException("DIY组件注册配置不正确：{$manifest_path}");
+        }
+        foreach ($manifest['replaced_directories'] as $old => $replacement) {
+            if (!is_string($old) || !is_string($replacement) || $old === $replacement
+                || !preg_match('/^[a-z][a-z0-9-]*$/D', $old)
+                || !preg_match('/^[a-z][a-z0-9-]*$/D', $replacement)) {
+                throw new \core\exception\CommonException("DIY组件替代目录配置不正确：{$manifest_path}");
+            }
+            if (is_file($component_path . '/' . $old . '/index.vue')
+                && !is_file($component_path . '/' . $replacement . '/index.vue')) {
+                throw new \core\exception\CommonException("DIY组件更新不完整：{$old} 的替代组件 {$replacement}/index.vue 缺失，请补齐插件手机端源码后重新编译");
+            }
+        }
+        return $manifest['replaced_directories'];
+    }
+
+    private function registerDiyComponentName(array &$registered, string $name, string $path): void
+    {
+        $key = strtolower($name);
+        if (isset($registered[$key])) {
+            throw new \core\exception\CommonException("DIY组件重名 {$name}：{$registered[$key]} 与 {$path}。请为插件组件使用独立名称，或通过 registration.json 声明已替换目录；未覆盖现有组件文件");
+        }
+        $registered[$key] = $path;
+    }
+
+    /**
      * 编译 pages.json 页面路由代码文件，// {{PAGE}}
      * @param $compile_path
      * @return bool|int|void
      */
-    public function installPageCode($compile_path)
+    public function installPageCode($compile_path, $addon = '')
     {
-        if (!file_exists($this->geAddonPackagePath($this->addon) . 'uni-app-pages.php')) return;
+        if (is_array($addon)){
+            foreach ($addon as $item_addon){
+                if (!file_exists($this->geAddonPackagePath($item_addon) . 'uni-app-pages.php')) {
+                    continue;
+                }
+                $uniapp_pages = require $this->geAddonPackagePath($item_addon) . 'uni-app-pages.php';
+            }
+        }else{
+            if (!file_exists($this->geAddonPackagePath($this->addon) . 'uni-app-pages.php')) return;
 
-        $uniapp_pages = require $this->geAddonPackagePath($this->addon) . 'uni-app-pages.php';
-
-        if (empty($uniapp_pages[ 'pages' ])) {
-            return;
+            $uniapp_pages = require $this->geAddonPackagePath($this->addon) . 'uni-app-pages.php';
+            if (empty($uniapp_pages[ 'pages' ])) {
+                return;
+            }
         }
 
         $pages = [];
-        $addon_arr = array_unique(array_merge([ $this->addon ], array_column(( new CoreAddonService() )->getInstallAddonList(), 'key')));
+
+        $addon_service = new CoreAddonService();
+        $addon_list = $addon_service->getInstallAddonList();
+        $addon_arr = [];
+        if (!empty($addon_list)) {
+            foreach ($addon_list as $k => $v) {
+                $addon_arr[] = $v[ 'key' ];
+            }
+        }
+        if (!empty($addon)) {
+            // 追加新装插件
+            if (is_array($addon)) {
+                $addon_arr = array_merge($addon_arr, $addon);
+            } else if (is_string($addon)) {
+                $addon_arr[] = $addon;
+            }
+        }
+        $addon_arr = array_unique($addon_arr);
+
         foreach ($addon_arr as $addon) {
             if (!file_exists($this->geAddonPackagePath($addon) . 'uni-app-pages.php')) continue;
             $uniapp_pages = require $this->geAddonPackagePath($addon) . 'uni-app-pages.php';
@@ -284,8 +362,16 @@ trait WapTrait
                     $json = json_decode($app_json, true);
                     // 清空当前安装/卸载的插件语言包
                     foreach ($json as $jk => $jc) {
-                        if (strpos($jk, $addon) !== false) {
-                            unset($json[ $jk ]);
+                        if (is_array($addon)) {
+                            foreach ($addon as $key) {
+                                if (strpos($jk, $key) !== false) {
+                                    unset($json[ $jk ]);
+                                }
+                            }
+                        } else {
+                            if (strpos($jk, $addon) !== false) {
+                                unset($json[ $jk ]);
+                            }
                         }
                     }
                     $locale_data[ $cv ] = [
@@ -305,8 +391,16 @@ trait WapTrait
                 $addon_arr[] = $v[ 'key' ];
             }
         }
-        $addon_arr[] = $addon; // 追加新装插件
+        if (!empty($addon)) {
+            // 追加新装插件
+            if (is_array($addon)) {
+                $addon_arr = array_merge($addon_arr, $addon);
+            } else if (is_string($addon)) {
+                $addon_arr[] = $addon;
+            }
+        }
         $addon_arr = array_unique($addon_arr);
+
         foreach ($addon_arr as $k => $v) {
             $addon_path = $compile_path . str_replace('/', DIRECTORY_SEPARATOR, 'addon/' . $v . '/locale'); // 插件语言包根目录
             $addon_file_arr = getFileMap($addon_path, []);

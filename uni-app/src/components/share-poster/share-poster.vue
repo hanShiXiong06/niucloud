@@ -94,7 +94,7 @@ const props = defineProps({
     },
     posterParam: {
         type: Object,
-        default: {}
+        default: () => ({})
     },
     copyUrl: { // 例 "/wap/addon/shop/pages/goods"
         type: String,
@@ -113,6 +113,8 @@ const props = defineProps({
 const emits = defineEmits(['close'])
 
 const sharePopupShow = ref(false);
+const posterType = ref(props.posterType)
+const posterId = ref(props.posterId)
 
 // 复制
 const copyUrl = () => {
@@ -134,9 +136,12 @@ const copyUrl = () => {
     });
 }
 
-const openShare = () => {
+const openShare = (data: any = {}) => {
+    posterType.value = data?.type || posterType.value || ''
+    posterId.value = data?.id ?? props.posterId
+    runtimePosterParam.value = normalizePosterParam(data?.param ?? props.posterParam)
     sharePopupShow.value = true
-    loadPoster();
+    loadPoster(true);
 }
 
 //生成海报
@@ -144,22 +149,47 @@ const isPosterAnimation = ref(false)
 const isPosterImg = ref(false)
 // 获取分享海报
 const poster = ref('');
-const loadPoster = () => {
-    if (poster.value && props.isPreload) {
+const normalizePosterParam = (param: any) => {
+    if (param && typeof param === 'object' && !Array.isArray(param)) {
+        return { ...param }
+    }
+
+    return {}
+}
+
+const runtimePosterParam = ref(normalizePosterParam(props.posterParam))
+const posterCacheKey = ref('')
+
+const buildPosterKey = () => {
+    return JSON.stringify({
+        id: posterId.value,
+        type: posterType.value,
+        param: runtimePosterParam.value || {},
+    })
+}
+
+const loadPoster = (force = false) => {
+    const currentKey = buildPosterKey()
+    if (!force && poster.value && props.isPreload && posterCacheKey.value === currentKey) {
         // 预加载
         isPosterAnimation.value = false;
         isPosterImg.value = true;
     } else {
+        if (posterCacheKey.value !== currentKey) {
+            poster.value = '';
+        }
+        posterCacheKey.value = currentKey
         isPosterAnimation.value = true;
         isPosterImg.value = false;
         let obj = {
-            id: props.posterId,
-            type: props.posterType,
-            param: props.posterParam
+            id: posterId.value,
+            type: posterType.value,
+            param: runtimePosterParam.value
         }
         let startTime = Date.parse(new Date());
         getPoster(obj).then((res: any) => {
             poster.value = res.data && img(res.data) || '';
+            posterCacheKey.value = currentKey;
 
             let endTime = Date.parse(new Date());
             let time = endTime - startTime;

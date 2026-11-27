@@ -1,0 +1,32 @@
+/* 在线链接服务仅供平台体验和调试使用，平台不承诺服务的稳定性，企业客户需下载字体包自行发布使用并做好备份。 */
+@font-face {
+  font-family: 'tk_jhkd';  /* Project id 4386057 */
+  src: url('//at.alicdn.com/t/c/font_4386057_bpjqwm8426e.woff2?t=1703402176689') format('woff2'),
+       url('//at.alicdn.com/t/c/font_4386057_bpjqwm8426e.woff?t=1703402176689') format('woff'),
+       url('//at.alicdn.com/t/c/font_4386057_bpjqwm8426e.ttf?t=1703402176689') format('truetype');
+}
+
+.tk_jhkd {
+  font-family: "tk_jhkd" !important;
+  font-size: 16px;
+  font-style: normal;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.jhkd-0-15:before {
+  content: "\e605";
+}
+
+.jhkd-kuaidi:before {
+  content: "\e693";
+}
+
+.jhkd-kuaidi1:before {
+  content: "\ed9f";
+}
+
+.jhkd-kuaidi2:before {
+  content: "\e672";
+}
+

@@ -11,16 +11,15 @@
 
 namespace addon\phone_shop\app\model\goods;
 
+use addon\phone_shop\app\dict\active\DiscountDict;
 use addon\phone_shop\app\dict\goods\GoodsDict;
-use addon\phone_shop\app\model\site\Site;
 use addon\phone_shop\app\model\active\ActiveGoods;
+use addon\phone_shop\app\model\discount\DiscountGoods;
 use addon\phone_shop\app\service\core\delivery\CoreDeliveryService;
 use app\dict\sys\FileDict;
 use core\base\BaseModel;
 use think\db\Query;
 use think\model\concern\SoftDelete;
-// use addon\phone_shop\app\model\goods\GoodsCategory;
-use addon\phone_shop\app\model\goods\Brand;
 
 /**
  * 商品模型
@@ -57,7 +56,7 @@ class Goods extends BaseModel
     protected $defaultSoftDelete = 0;
 
     // 设置json类型字段
-    protected $json = [ 'goods_category', 'label_ids', 'service_ids', 'delivery_type' ];
+    protected $json = [ 'goods_category', 'label_ids', 'service_ids', 'delivery_type', 'attr_ids', 'attr_format' ];
 
     // 设置JSON数据返回数组
     protected $jsonAssoc = true;
@@ -90,6 +89,18 @@ class Goods extends BaseModel
         return '';
     }
 
+    /** 对外统一销售状态，避免页面分别解释 status 与 sale_status。 */
+    public function getSaleStateAttr($value, $data)
+    {
+        return GoodsDict::getSaleState($data);
+    }
+
+    public function getWarrantyExpireDateAttr($value, $data): string
+    {
+        $timestamp = (int)($data['warranty_expire_time'] ?? 0);
+        return $timestamp > 0 ? date('Y-m-d', $timestamp) : '';
+    }
+
     /**
      * 状态字段转化：配送方式
      * @param $value
@@ -100,15 +111,22 @@ class Goods extends BaseModel
     {
         if (!empty($data[ 'delivery_type' ])) {
             $deliver_list = ( new CoreDeliveryService() )->getDeliveryConfig($data[ 'site_id' ]);
-            $res = [];
-            foreach ($data[ 'delivery_type' ] as $k => $v) {
-                if (isset($deliver_list[ $v ]) && $deliver_list[ $v ][ 'status' ] == 1) {
-                    $res[ $v ] = $deliver_list[ $v ];
+            $configKeys = array_keys($deliver_list); // 缓存配置数组的键
+            $result = [];
+
+            // 筛选可用的配送方式并按配置顺序排序
+            foreach ($data[ 'delivery_type' ] as $type) {
+                if (isset($deliver_list[ $type ]) && $deliver_list[ $type ][ 'status' ] === 1) {
+                    $position = array_search($type, $configKeys);
+                    $result[ $position ] = [ $type => $deliver_list[ $type ] ];
                 }
             }
-            return $res;
+            // 按键排序（保持配置中的原始顺序）
+            ksort($result);
+            // 转换为一维数组（保持原始代码的输出结构）
+            return array_merge([], ...array_values($result));
         }
-        return '';
+        return [];
     }
 
     /**
@@ -119,7 +137,7 @@ class Goods extends BaseModel
         if (isset($data[ 'goods_cover' ]) && $data[ 'goods_cover' ] != '') {
             return get_thumb_images($data[ 'site_id' ], $data[ 'goods_cover' ], FileDict::SMALL);
         }
-        return [];
+        return '';
     }
 
     /**
@@ -130,7 +148,7 @@ class Goods extends BaseModel
         if (isset($data[ 'goods_cover' ]) && $data[ 'goods_cover' ] != '') {
             return get_thumb_images($data[ 'site_id' ], $data[ 'goods_cover' ], FileDict::MID);
         }
-        return [];
+        return '';
     }
 
     /**
@@ -141,7 +159,7 @@ class Goods extends BaseModel
         if (isset($data[ 'goods_cover' ]) && $data[ 'goods_cover' ] != '') {
             return get_thumb_images($data[ 'site_id' ], $data[ 'goods_cover' ], FileDict::BIG);
         }
-        return [];
+        return '';
     }
 
     /**
@@ -210,7 +228,7 @@ class Goods extends BaseModel
             $value = json_decode($value, true);
         }
         if (!empty($value)) {
-            return array_map(function($item) {
+            return array_map(function ($item) {
                 return (int) $item;
             }, $value);
         }
@@ -222,11 +240,37 @@ class Goods extends BaseModel
         if (isset($data[ 'label_ids' ]) && !empty($data[ 'label_ids' ])) {
             $goods_label_model = new Label();
             return $goods_label_model->where([
-                [ 'label_id', 'in', $data[ 'label_ids' ] ]
-            ])->field('label_id, label_name, memo')
-                ->select()->toArray();
+                [ 'label_id', 'in', $data[ 'label_ids' ] ],
+                [ 'status', '=', 1 ]
+            ])->field('label_id, label_name, style_type,color_json,icon')->order('sort desc,label_id desc')->select()->toArray();
         }
 
+    }
+
+    public function getGoodsBrandAttr($value, $data)
+    {
+        if (isset($data[ 'brand_id' ]) && !empty($data[ 'brand_id' ])) {
+            $goods_brand_model = new Brand();
+            $info = $goods_brand_model->where([
+                [ 'brand_id', '=', $data[ 'brand_id' ] ],
+            ])->field('brand_id,brand_name,logo,color_json')
+                ->findOrEmpty()->toArray();
+            return $info;
+        }
+    }
+
+    /**
+     * 状态字段转化
+     * @param $value
+     * @param $data
+     * @return mixed
+     */
+    public function getDiscountStatusNameAttr($value, $data)
+    {
+        if (!empty($data[ 'discount_status' ])) {
+            return DiscountDict::getStatus($data[ 'discount_status' ]) ?? '';
+        }
+        return '';
     }
 
     /**
@@ -240,7 +284,6 @@ class Goods extends BaseModel
             $query->where("goods_id", $value);
         }
     }
-    
 
     /**
      * 搜索器:商品商品名称
@@ -298,16 +341,14 @@ class Goods extends BaseModel
     public function searchGoodsCategoryAttr(Query $query, $value, $data)
     {
         if ($value) {
-            // 将传入的分类ID字符串转为数组
-            $category_ids = is_array($value) ? $value : explode(',', $value);
-            
-            // 构建查询条件
-            $query->where(function ($query) use ($category_ids) {
-                foreach ($category_ids as $category_id) {
-                    // 使用 JSON_CONTAINS 函数查询，支持精确匹配数组中的值
-                    $query->whereOr("JSON_CONTAINS(goods_category, '\"$category_id\"')");
-                }
-            });
+            if (is_array($value)) {
+                $temp_where = array_map(function ($item) {
+                    return '%"' . $item . '"%';
+                }, $value);
+            } else {
+                $temp_where = [ '%"' . $value . '"%' ];
+            }
+            $query->where('goods_category', 'like', $temp_where, 'or');
         }
     }
 
@@ -320,7 +361,9 @@ class Goods extends BaseModel
     {
         if ($value) {
             if (is_array($value)) {
-                $temp_where = array_map(function($item) { return '%"' . $item . '"%'; }, $value);
+                $temp_where = array_map(function ($item) {
+                    return '%"' . $item . '"%';
+                }, $value);
             } else {
                 $temp_where = [ '%"' . $value . '"%' ];
             }
@@ -337,7 +380,9 @@ class Goods extends BaseModel
     {
         if ($value) {
             if (is_array($value)) {
-                $temp_where = array_map(function($item) { return '%"' . $item . '"%'; }, $value);
+                $temp_where = array_map(function ($item) {
+                    return '%"' . $item . '"%';
+                }, $value);
             } else {
                 $temp_where = [ '%"' . $value . '"%' ];
             }
@@ -396,6 +441,30 @@ class Goods extends BaseModel
         }
     }
 
+    /** 搜索器:内存(二手机) */
+    public function searchMemoryGroupAttr($query, $value, $data)
+    {
+        if ($value !== '' && $value !== null) {
+            $query->where("goods.memory_group", "like", "%" . $value . "%");
+        }
+    }
+
+    /** 搜索器:成色等级(二手机) */
+    public function searchConditionGradeAttr($query, $value, $data)
+    {
+        if ($value !== '' && $value !== null) {
+            $query->where("goods.condition_grade", "like", "%" . $value . "%");
+        }
+    }
+
+    /** 搜索器:售卖状态(available在售/locked锁定/sold已售) */
+    public function searchSaleStatusAttr($query, $value, $data)
+    {
+        if ($value !== '' && $value !== null) {
+            $query->where("goods.sale_status", $value);
+        }
+    }
+
     /**
      * 搜索器:供应商id
      * @param $value
@@ -409,6 +478,19 @@ class Goods extends BaseModel
     }
 
     /**
+     * 搜索器:站点id
+     * @param $query
+     * @param $value
+     * @param $data
+     */
+    public function searchSiteIdAttr($query, $value, $data)
+    {
+        if ($value) {
+            $query->where("site_id", $value);
+        }
+    }
+
+    /**
      * 关联默认商品规格
      * @return \think\model\relation\HasOne
      */
@@ -417,19 +499,6 @@ class Goods extends BaseModel
         return $this->hasOne(GoodsSku::class, 'goods_id', 'goods_id');
     }
 
-    // brand_name
-    public function brandName()
-    {
-        return $this->hasOne( Brand::class, 'brand_id', 'brand_id')
-        ->withField(' brand_name, logo');
-    }
-
-    // goods_category
-    // public function goodsCategory()
-    // {
-    //     return $this->hasOne(GoodsCategory::class, 'goods_category_id', 'goods_category');
-    // }
-
     /**
      * 关联活动
      * @return \think\model\relation\HasOne
@@ -437,6 +506,15 @@ class Goods extends BaseModel
     public function activeGoods()
     {
         return $this->hasOne(ActiveGoods::class, 'goods_id', 'goods_id');
+    }
+
+    /**
+     * 关联活动
+     * @return \think\model\relation\hasOne
+     */
+    public function discountGoods()
+    {
+        return $this->hasOne(discountGoods::class, 'goods_id', 'goods_id');
     }
 
     /**
@@ -467,75 +545,5 @@ class Goods extends BaseModel
             ->joinType('left')
             ->withField('brand_id, brand_name, logo, desc');
     }
-    // site_name
-    // 查询站点名
-    //  string
-    public function getSiteNameAttr($value, $data)
-    {
-        if (isset($data['site_id'])) {
-            $site = (new Site())->where('site_id', '=', $data['site_id'])->value('site_name');
-            return $site ?: '';
-        }
-        return '';
-    }
 
-    // protected $append = ['site_name'];
-    // 
-
-    /**
-     * 关联商品参数
-     * @return \think\model\relation\HasOne
-     */
-    public function attr()
-    {
-        return $this->hasOne(Attr::class, 'attr_id', 'attr_id')
-            ->joinType('left')
-            ->withField('attr_id, attr_name, attr_value_format, sort');
-    }
-  
-
-    /**
-     * 获取商品的总数量 
-     * 
-    */
-    public static function getGoodsCount($condition = [])
-    {
-        // 获取所有的商品数量
-        $count = self::where($condition)->count();
-        return $count;
-    }
-    public function getBrandNameAttr($value, $data)
-    {
-        // 如果已经加载了 brand 关联，则直接返回 brand_name
-        if (isset($this->brand) && $this->brand) {
-            return $this->brand->brand_name;
-        }
-        return null;
-    }
-    protected $append = ['brand_name'];  // 确保在模型数组/JSON表示中包含 brand_name
-
-    public function searchSkuNoAttr($query, $value, $data)
-    {
-        if ($value) {
-            $query->where("sku_no", "like", "%". $value. "%");
-        }
-    }
-    public function skuNo(){
-        return $this->hasOne(GoodsSku::class,'sku_no','sku_no');
-    }
-
-    /**
-     * 获取商品的最后一条的 goods_id 值
-     * 
-    */
-    public static function getLastGoodsId()
-    {
-        $goods_id = self::order('goods_id desc')->limit(1)->value('goods_id');
-        if (empty($goods_id)) {
-            $goods_id = 0;
-        }
-        return $goods_id;
-    }
-    
-    
 }

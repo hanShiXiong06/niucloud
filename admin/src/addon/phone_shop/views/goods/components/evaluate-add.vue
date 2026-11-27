@@ -49,7 +49,6 @@ import { ref, reactive, computed } from 'vue'
 import { t } from '@/lang'
 import goodsSelectPopup from '@/addon/phone_shop/views/goods/components/goods-select-popup.vue'
 import type { FormInstance } from 'element-plus'
-
 import { addEvaluate } from '@/addon/phone_shop/api/goods'
 
 const showDialog = ref(false)

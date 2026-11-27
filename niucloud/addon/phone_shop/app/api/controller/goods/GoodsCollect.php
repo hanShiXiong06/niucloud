@@ -48,9 +48,10 @@ class GoodsCollect extends BaseApiController
     public function cancelGoodsCollect()
     {
         $data = $this->request->params([
-            [ 'goods_id', 0 ],
+            [ 'goods_ids', [] ],
         ]);
-        return success(( new GoodsCollectService() )->cancelGoodsCollect($data));
+        ( new GoodsCollectService() )->cancelGoodsCollect($data);
+        return success('CANCEL_COLLECT_SUCCESS');
     }
 
 }

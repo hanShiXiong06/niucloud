@@ -1,0 +1,471 @@
+<?php
+declare(strict_types=1);
+
+require dirname(__DIR__, 3) . '/vendor/autoload.php';
+
+use addon\hsx_erp\app\listener\ErpDeviceInboundRequested;
+use addon\hsx_erp\app\support\ErpIdempotency;
+use core\exception\CommonException;
+
+$assertionCount = 0;
+$assert = static function (bool $condition, string $message) use (&$assertionCount): void {
+    $assertionCount++;
+    if (!$condition) {
+        fwrite(STDERR, "[FAIL] {$message}\n");
+        exit(1);
+    }
+};
+
+class FakeRecycleInboundListener extends ErpDeviceInboundRequested
+{
+    public int $siteId = 100005;
+    public array $created = [];
+    public array $registeredConsignments = [];
+    public array $existing = [];
+    public array $sourceOrders = [];
+    public array $sourceDevices = [];
+    public array $inboxes = [];
+    private int $nextId = 900;
+    private int $nextInboxId = 10;
+
+    protected function currentSiteId(): int
+    {
+        return $this->siteId;
+    }
+
+    protected function existingOrderId(int $siteId, string $requestId): int
+    {
+        return (int)($this->existing[$requestId] ?? 0);
+    }
+
+    protected function createPurchase(array $data): int
+    {
+        // 替身也执行真实服务的幂等键校验，避免仅测试追加编排而漏掉入库边界。
+        ErpIdempotency::normalize($data['request_id'] ?? '');
+        ErpIdempotency::normalize($data['settlement_request_id'] ?? '');
+        $this->created[] = $data;
+        $orderId = (int)($data['append_order_id'] ?? 0);
+        if ($orderId <= 0) {
+            $orderId = ++$this->nextId;
+            $key = $this->sourceKey(
+                (string)($data['origin_plugin'] ?? ''),
+                (string)($data['origin_type'] ?? ''),
+                (string)($data['origin_no'] ?? '')
+            );
+            $this->sourceOrders[$key] = $orderId;
+        }
+        foreach ((array)($data['items'] ?? []) as $item) {
+            $sourceDeviceId = (string)($item['spec_json']['source_device_id'] ?? '');
+            if ($sourceDeviceId !== '' && $sourceDeviceId !== '0') $this->sourceDevices[$orderId][$sourceDeviceId] = true;
+        }
+        return $orderId;
+    }
+
+    protected function existingSourceOrderId(int $siteId, string $sourcePlugin, string $sourceType, string $sourceOrderNo): int
+    {
+        return (int)($this->sourceOrders[$this->sourceKey($sourcePlugin, $sourceType, $sourceOrderNo)] ?? 0);
+    }
+
+    protected function filterMissingSourceDevices(int $siteId, int $orderId, array $devices): array
+    {
+        return array_values(array_filter($devices, function (array $device) use ($orderId): bool {
+            $sourceDeviceId = (string)($device['source_device_id'] ?? '');
+            return $sourceDeviceId === '' || $sourceDeviceId === '0' || !isset($this->sourceDevices[$orderId][$sourceDeviceId]);
+        }));
+    }
+
+    private function sourceKey(string $plugin, string $type, string $orderNo): string
+    {
+        return $plugin . '|' . $type . '|' . $orderNo;
+    }
+
+    protected function registerConsignment(array $event, array $device, array $item): array
+    {
+        $this->registeredConsignments[] = compact('event', 'device', 'item');
+        return ['asset_id' => ++$this->nextId, 'created' => true];
+    }
+
+    protected function resolveSourcePaidAccount(int $siteId): object
+    {
+        return (object)['id' => 990, 'account_name' => '来源系统已付待核对'];
+    }
+
+    protected function assetIdsForPurchaseOrders(int $siteId, array $orderIds): array
+    {
+        return [];
+    }
+
+    protected function resolveBusinessSource(string $sourceType): ?array
+    {
+        return [
+            'key' => $sourceType,
+            'name' => str_contains($sourceType, 'recycle') ? '回收插件采购' : '合作方采购',
+            'direction' => 'expense',
+            'scene' => 'purchase',
+            'source_plugin' => strstr($sourceType, '.', true) ?: 'hsx_recycle',
+            'enabled' => 1,
+        ];
+    }
+
+    protected function findInbox(int $siteId, string $eventId, bool $lock = false): ?array
+    {
+        return $this->inboxes[$siteId . ':' . $eventId] ?? null;
+    }
+
+    protected function createInbox(int $siteId, string $eventId, array $event, array $requestPayload): int
+    {
+        $id = ++$this->nextInboxId;
+        $this->inboxes[$siteId . ':' . $eventId] = [
+            'id' => $id,
+            'status' => 'processing',
+            'payload_json' => json_encode(['request' => $requestPayload], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+        ];
+        return $id;
+    }
+
+    protected function markInboxProcessing(int $inboxId, array $requestPayload): void
+    {
+        foreach ($this->inboxes as &$inbox) {
+            if ((int)$inbox['id'] !== $inboxId) continue;
+            $inbox['status'] = 'processing';
+            $inbox['payload_json'] = json_encode(['request' => $requestPayload], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        }
+        unset($inbox);
+    }
+
+    protected function completeInbox(int $inboxId, array $requestPayload, array $result): void
+    {
+        foreach ($this->inboxes as &$inbox) {
+            if ((int)$inbox['id'] !== $inboxId) continue;
+            $inbox['status'] = 'processed';
+            $inbox['payload_json'] = json_encode(['request' => $requestPayload, 'result' => $result], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        }
+        unset($inbox);
+    }
+
+    protected function recordFailedInbox(int $siteId, string $eventId, array $event, array $requestPayload, string $message): void
+    {
+        $key = $siteId . ':' . $eventId;
+        $this->inboxes[$key] = [
+            'id' => (int)($this->inboxes[$key]['id'] ?? ++$this->nextInboxId),
+            'status' => 'failed',
+            'payload_json' => json_encode(['request' => $requestPayload, 'error' => $message], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+        ];
+    }
+
+    protected function withinTransaction(callable $callback): array
+    {
+        return $callback();
+    }
+}
+
+$counterpartyA = [
+    'source_plugin' => 'niucloud', 'source_type' => 'member', 'source_id' => 88,
+    'member_id' => 88, 'name' => '回收客户甲', 'mobile' => '13800000001',
+];
+$counterpartyB = [
+    'source_plugin' => 'niucloud', 'source_type' => 'member', 'source_id' => 99,
+    'name' => '回收客户乙', 'mobile' => '13800000002',
+];
+$device = static function (int $id, int $orderId, string $orderNo, array $counterparty, int $warehouseId, int $locationId): array {
+    return [
+        'source_id' => $orderId,
+        'source_device_id' => $id,
+        'source_order_no' => $orderNo,
+        'imei' => 'IMEI-' . $id,
+        'sn' => '',
+        'model' => '测试手机' . $id,
+        'capacity' => '256G',
+        'color' => '黑色',
+        'ownership_type' => 'owned',
+        'purchase_cost' => 1000,
+        'paid_amount' => 1000,
+        'settlement_status' => 'paid',
+        'counterparty' => $counterparty,
+        'target_warehouse_id' => $warehouseId,
+        'target_location_id' => $locationId,
+        'suggested_sale_price' => 1200,
+        'acquired_at' => 1783700000 + $id,
+        'pricing_snapshot' => [
+            'price_uid' => 27,
+            'price_name' => '历史定价员张三',
+            'historical_operator' => true,
+            'price_at' => 1783690000 + $id,
+        ],
+        'check_snapshot' => ['check_result' => '检测正常', 'check_remark' => '屏幕轻微划痕'],
+    ];
+};
+
+$event = [
+    'event_id' => 'recycle-inbound-100005-test-001',
+    'event_name' => 'recycle.device.inbound_requested',
+    'event_version' => 1,
+    'site_id' => 100005,
+    'occurred_at' => 1783709999,
+    'targets' => ['self_erp'],
+    'operator' => ['type' => 'staff', 'id' => 7, 'name' => '采购员'],
+    'source' => ['plugin' => 'hsx_recycle', 'type' => 'recycle_device', 'id' => 0],
+    'devices' => [
+        $device(11, 101, 'RC20260711001', $counterpartyA, 1, 11),
+        $device(12, 101, 'RC20260711001', $counterpartyA, 2, 22),
+        $device(13, 102, 'RC20260711002', $counterpartyB, 1, 11),
+    ],
+];
+
+// Independent staff facts: final pricing (uid 27) is not the inbound confirming clerk (uid 34).
+$event['devices'][1]['pricing_snapshot']['price_uid'] = 28;
+$event['devices'][1]['pricing_snapshot']['price_name'] = '第二台定价员李四';
+foreach ([0=>11,1=>12] as $index=>$deviceId) $event['devices'][$index]['inbound_operator'] =
+    ['uid'=>34,'name'=>'原签收入库员','device_id'=>$deviceId,'log_id'=>9910+$index];
+
+$listener = new FakeRecycleInboundListener();
+$result = $listener->handle($event);
+$assert(($result['consumer'] ?? '') === 'hsx_erp', '返回值必须声明hsx_erp消费者');
+$assert(($result['target'] ?? '') === 'self_erp', '返回值必须声明self_erp目标');
+$assert(($result['status'] ?? '') === 'processed', '首次消费状态必须为processed');
+$assert(count($result['order_ids'] ?? []) === 2, '三个设备必须按来源订单和往来主体拆成两张采购单');
+$assert(($result['created_count'] ?? 0) === 3, '首次消费必须报告三台新增设备');
+$assert(count($listener->created) === 2, '监听器必须分组调用两次采购服务');
+
+$first = $listener->created[0];
+$actor = \addon\hsx_erp\app\support\RecycleInboundActor::fromItems($first['items']);
+$assert($actor === ['uid'=>34,'name'=>'原签收入库员'] && $first['purchaser_uid']===27, '采购入库制单人必须来自这批设备原确认日志，和定价采购员分别核对');
+$assert(\addon\hsx_erp\app\support\RecycleInboundActor::fromItems($listener->created[1]['items'])===null,'客户确认或没有原操作证据时不得拿定价员或当前登录人代签');
+$mixed = $first['items']; $mixed[1]['spec_json']['inbound_operator']['uid']=77;
+$assert(\addon\hsx_erp\app\support\RecycleInboundActor::fromItems($mixed)===null,'混合经办人不能猜一个人作为整批制单人');
+$wrongDevice = $first['items']; $wrongDevice[1]['spec_json']['inbound_operator']['device_id']=11;
+$assert(\addon\hsx_erp\app\support\RecycleInboundActor::fromItems($wrongDevice)===null,'另一台设备的原操作日志不能用来署名');
+$assert($first['items'][0]['quality_remark'] === '屏幕轻微划痕', '质检摘要不能拼接到人工备注中');
+$inspectionSnapshot = json_decode($first['items'][0]['qc_report'], true);
+$assert(($inspectionSnapshot['raw']['check_result'] ?? '') === '检测正常', '原始质检数据必须完整保留在独立快照中');
+$assert($first['items'][0]['remark'] === '' && $first['items'][0]['remark_internal'] === '', '来源内部编号不得生成客户看见的备注');
+$assert(($first['origin_plugin'] ?? '') === 'hsx_recycle', '采购单必须保存回收来源插件');
+$assert(($first['origin_type'] ?? '') === 'hsx_recycle.recycle_purchase', '采购单必须保存回收采购来源类型');
+$assert(($first['origin_no'] ?? '') === 'RC20260711001' && ($first['source_order_no'] ?? '') === 'RC20260711001', '采购单必须保存原回收单号');
+$assert(($first['origin_event_id'] ?? '') === $event['event_id'], '采购单必须保存原始事件ID');
+$assert(($first['party_name'] ?? '') === '回收客户甲', '采购单必须按来源往来主体建单');
+$assert(($first['member_id'] ?? 0) === 88, '回收会员ID必须传给ERP并绑定既有会员主体');
+$assert(($first['contact_mobile'] ?? '') === '13800000001', '回收会员手机号必须写入ERP主体联系方式');
+$assert(($first['paid_amount'] ?? -1) === 2000.0, '来源系统已付款必须按设备明细进入ERP核销，避免重复打款');
+$assert(($first['settle_mode'] ?? '') === 'cash' && ($first['source_paid_allocation'] ?? 0) === 1, '来源已付必须进入精确核销模式');
+$assert(($first['capital_account_id'] ?? 0) === 990, '来源已付必须进入明确的待核对账户');
+$assert(($first['purchaser_uid'] ?? 0) === 27, 'ERP采购员必须取设备最终定价员，不得取确认请求的当前操作人');
+$assert(($first['purchaser_snapshot_name'] ?? '') === '历史定价员张三' && ($first['allow_historical_purchaser'] ?? 0) === 1, '历史定价员快照必须随事件保留，离职后仍可完成历史入库');
+$assert(count($first['items'] ?? []) === 2, '同来源订单和往来主体的设备必须合并建单');
+$assert(($first['items'][0]['warehouse_id'] ?? 0) === 1 && ($first['items'][0]['location_id'] ?? 0) === 11, '第一台设备必须保留自己的仓库库位');
+$assert(($first['items'][1]['warehouse_id'] ?? 0) === 2 && ($first['items'][1]['location_id'] ?? 0) === 22, '第二台设备必须保留自己的仓库库位');
+$assert(($first['items'][0]['spec_json']['source_device_id'] ?? 0) === 11, '设备快照必须保留原回收设备行ID');
+$assert(($first['items'][0]['spec_json']['pricing_operator']['uid'] ?? 0) === 27, '设备快照必须保留该设备的最终定价员');
+$assert($first['items'][1]['spec_json']['pricing_operator'] === ['uid'=>28,'priced_at'=>1783690012,'source'=>'recycle_final_price','name'=>'第二台定价员李四'], '同批不同人定价时，第二台快照取自己的最终定价人，不能继承单头或制单人');
+$assert(($first['items'][0]['source_paid_amount'] ?? 0) === 1000.0, '每台设备必须保留自己的已付金额，不能按订单顺序误核销');
+$assert(str_starts_with((string)($first['settlement_request_id'] ?? ''), 'source-paid:'), '来源已付核销必须有稳定幂等键');
+$assert(strlen((string)$first['request_id']) <= 80 && str_starts_with((string)$first['request_id'], 'source-purchase:'), '采购request_id必须由来源订单稳定派生且符合长度约束');
+$assert($listener->created[0]['request_id'] !== $listener->created[1]['request_id'], '不同分组必须使用不同request_id');
+$assert(($listener->inboxes['100005:' . $event['event_id']]['status'] ?? '') === 'processed', '完整入库事件必须写入processed收件箱');
+
+$createdBeforeReplay = count($listener->created);
+$inboxDuplicate = $listener->handle($event);
+$assert(($inboxDuplicate['status'] ?? '') === 'duplicate', '相同event_id必须由顶层inbox返回duplicate');
+$assert(count($listener->created) === $createdBeforeReplay, 'inbox重复事件不得再次进入任何采购分组');
+
+$collision = $event;
+$collision['devices'][] = $device(14, 103, 'RC20260711003', $counterpartyA, 1, 11);
+$collisionRejected = false;
+try {
+    $listener->handle($collision);
+} catch (CommonException $e) {
+    $collisionRejected = str_contains($e->getMessage(), 'event_id');
+}
+$assert($collisionRejected, '同event_id增加新分组必须拒绝，不能追加采购单');
+
+$duplicate = new FakeRecycleInboundListener();
+$duplicate->sourceOrders = $listener->sourceOrders;
+$duplicate->sourceDevices = $listener->sourceDevices;
+$duplicateResult = $duplicate->handle($event);
+$assert(($duplicateResult['status'] ?? '') === 'duplicate', '相同事件重放必须返回duplicate');
+$assert(($duplicateResult['existing_count'] ?? 0) === 3, '相同事件重放必须报告三台已存在设备');
+$assert($duplicate->created === [], '相同事件重放不得再次调用采购创建');
+
+$laterDeviceEvent = $event;
+$laterDeviceEvent['event_id'] = 'recycle-inbound-100005-test-002';
+$laterDeviceEvent['occurred_at'] += 600;
+$laterDeviceEvent['devices'] = [$device(14, 101, 'RC20260711001', $counterpartyA, 1, 11)];
+$laterResult = $listener->handle($laterDeviceEvent);
+$assert(($laterResult['order_ids'][0] ?? 0) === ($result['order_ids'][0] ?? 0), '同一回收订单后续设备必须追加到原ERP采购单');
+$assert(($laterResult['created_count'] ?? 0) === 1, '后续完成的设备必须报告一台新增');
+$laterCreate = $listener->created[array_key_last($listener->created)];
+$assert((int)($laterCreate['append_order_id'] ?? 0) === (int)$result['order_ids'][0], '后续设备必须使用append_order_id追加，不得再建采购单');
+$assert(strlen($laterCreate['request_id']) === 62, '追加采购键固定为62字符，不能在原采购键上不断拼接');
+$assert(strlen($laterCreate['settlement_request_id']) === 74, '追加设备的已付核销键也必须小于80字符');
+
+$createdBeforeSameEventReplay = count($listener->created);
+$sameEventReplay = $listener->handle($laterDeviceEvent);
+$assert(($sameEventReplay['status'] ?? '') === 'duplicate'
+    && count($listener->created) === $createdBeforeSameEventReplay, '同一追加事件重试不得重复创建采购明细或核销');
+
+$laterReplay = $laterDeviceEvent;
+$laterReplay['event_id'] = 'recycle-inbound-100005-test-003';
+$createdBeforeLaterReplay = count($listener->created);
+$laterReplayResult = $listener->handle($laterReplay);
+$assert(($laterReplayResult['existing_count'] ?? 0) === 1, '同一来源设备换事event_id重放也必须被识别为已入库');
+$assert(count($listener->created) === $createdBeforeLaterReplay, '同一来源设备换事event_id重放不得重复追加');
+
+$otherTarget = $event;
+$otherTarget['targets'] = ['third_party_erp'];
+$assert((new FakeRecycleInboundListener())->handle($otherTarget) === null, '未指定self_erp时监听器不得认领事件');
+
+$siteMismatch = new FakeRecycleInboundListener();
+$siteMismatch->siteId = 100006;
+$rejected = false;
+try {
+    $siteMismatch->handle($event);
+} catch (CommonException $e) {
+    $rejected = str_contains($e->getMessage(), '站点');
+}
+$assert($rejected, '事件站点与当前请求站点不一致时必须拒绝处理');
+
+$genericEvent = $event;
+$genericEvent['event_id'] = 'partner-purchase-inbound-001';
+$genericEvent['event_name'] = 'erp.device.inbound_requested';
+$genericEvent['source'] = ['plugin' => 'partner_purchase', 'plugin_name' => '合作采购', 'type' => 'partner_purchase.device_purchase', 'source_name' => '合作方采购'];
+$genericEvent['channel'] = ['code' => 'partner_api', 'name' => '合作方接口'];
+$genericListener = new FakeRecycleInboundListener();
+$genericResult = $genericListener->handle($genericEvent);
+$assert(($genericResult['status'] ?? '') === 'processed', '注册采购来源的其它插件必须可复用标准入库Hook');
+$assert(($genericListener->created[0]['origin_plugin'] ?? '') === 'partner_purchase', '标准入库Hook不得把来源硬编码为回收插件');
+$assert(($genericListener->created[0]['origin_type'] ?? '') === 'partner_purchase.device_purchase', '标准入库Hook必须保留插件注册来源类型');
+$assert(($genericListener->created[0]['purchase_channel'] ?? '') === '合作方接口', '标准入库Hook必须保留独立业务渠道');
+
+$consignmentEvent = $event;
+$consignmentEvent['event_id'] = 'recycle-consignment-inbound-001';
+$consignmentDevice = $device(21, 201, 'RC20260711021', $counterpartyA, 3, 33);
+$consignmentDevice['ownership_type'] = 'consign';
+$consignmentDevice['purchase_cost'] = 0;
+$consignmentDevice['paid_amount'] = 0;
+$consignmentEvent['devices'] = [$consignmentDevice];
+$consignmentListener = new FakeRecycleInboundListener();
+$consignmentResult = $consignmentListener->handle($consignmentEvent);
+$assert(($consignmentResult['status'] ?? '') === 'processed', '代卖设备首次登记必须返回processed');
+$assert(($consignmentResult['order_ids'] ?? []) === [], '代卖登记不得生成ERP采购单');
+$assert(count($consignmentResult['consignment_asset_ids'] ?? []) === 1, '代卖登记必须返回客户物权资产ID');
+$assert($consignmentListener->created === [], '代卖登记不得调用采购创建服务');
+$assert(count($consignmentListener->registeredConsignments) === 1, '代卖设备必须进入独立登记服务');
+
+$eventConfig = require dirname(__DIR__) . '/app/event.php';
+$listeners = (array)($eventConfig['listen']['ErpDeviceInboundRequested'] ?? []);
+$assert(in_array('addon\hsx_erp\app\listener\ErpDeviceInboundRequested', $listeners, true), 'app/event.php必须注册回收入库监听器');
+
+$listenerSource = (string)file_get_contents(dirname(__DIR__) . '/app/listener/ErpDeviceInboundRequested.php');
+$assert(str_contains($listenerSource, 'withinTransaction') && str_contains($listenerSource, 'completeInbox'), '整次设备入库必须以顶层事务和Inbox保证原子幂等');
+$assert(!str_contains($listenerSource, "!== 'hsx_recycle'"), 'ERP入库核心不得只认某一个具体插件');
+
+$recycleSyncSource = (string)file_get_contents(dirname(__DIR__, 2) . '/hsx_recycle/app/service/admin/order/RecycleDeviceErpSyncService.php');
+$assert(str_contains($recycleSyncSource, 'memberSnapshot') && str_contains($recycleSyncSource, "['nickname']"), '回收插件必须按member_id读取nickname/mobile生成ERP主体快照');
+$purchaseSource = (string)file_get_contents(dirname(__DIR__) . '/app/service/admin/ErpPurchaseService.php');
+$assert(str_contains($purchaseSource, 'ErpPartyMember') && str_contains($purchaseSource, 'bindPartyMember'), 'ERP采购入库必须把来源会员稳定绑定到往来主体');
+
+// 回归线上“一单多台，第一台成功、后续设备 request_id 超长”场景。
+class RetryBoundaryRecycleInboundListener extends FakeRecycleInboundListener
+{
+    public bool $failNextPurchase = false;
+    public array $attemptedPurchaseData = [];
+
+    protected function createPurchase(array $data): int
+    {
+        ErpIdempotency::normalize($data['request_id'] ?? '');
+        ErpIdempotency::normalize($data['settlement_request_id'] ?? '');
+        $this->attemptedPurchaseData[] = $data;
+        if ($this->failNextPurchase) {
+            $this->failNextPurchase = false;
+            throw new CommonException('模拟追加前失败');
+        }
+        return parent::createPurchase($data);
+    }
+}
+
+$boundary = new RetryBoundaryRecycleInboundListener();
+$initialEvent = $event;
+$initialEvent['event_id'] = str_repeat('a', ErpIdempotency::MAX_REQUEST_ID_LENGTH);
+$initialEvent['devices'] = [$device(301, 777, 'RC-APPEND-LENGTH-TEST', $counterpartyA, 1, 11)];
+$initialEvent['devices'][0]['paid_amount'] = 0;
+$initialEvent['devices'][0]['settlement_status'] = 'unpaid';
+$initialResult = $boundary->handle($initialEvent);
+$initialData = $boundary->created[0];
+$expectedInitialKey = 'source-purchase:' . substr(hash('sha256', '100005|hsx_recycle|hsx_recycle.recycle_purchase|RC-APPEND-LENGTH-TEST'), 0, 48);
+$assert($initialData['request_id'] === $expectedInitialKey, '首次采购幂等键必须保持旧算法，不能导致已有订单另建一单');
+$assert(strlen($initialData['request_id']) === 64 && strlen($initialData['settlement_request_id']) === 76,
+    '80字符事件号不能使首次采购或核销键超长');
+
+$appendEvent = $initialEvent;
+$appendEvent['event_id'] = str_repeat('b', ErpIdempotency::MAX_REQUEST_ID_LENGTH);
+$appendEvent['devices'] = [$device(302, 777, 'RC-APPEND-LENGTH-TEST', $counterpartyA, 1, 11)];
+$boundary->failNextPurchase = true;
+$appendFailed = false;
+try {
+    $boundary->handle($appendEvent);
+} catch (CommonException $e) {
+    $appendFailed = $e->getMessage() === '模拟追加前失败';
+}
+$failedData = $boundary->attemptedPurchaseData[array_key_last($boundary->attemptedPurchaseData)];
+$assert($appendFailed && count($boundary->created) === 1, '追加失败保留首次采购，不制造第二张采购单');
+$assert(($boundary->inboxes['100005:' . $appendEvent['event_id']]['status'] ?? '') === 'failed', '追加失败保留原事件供重试');
+$recovered = $boundary->handle($appendEvent);
+$recoveredData = $boundary->created[1];
+$assert($recovered['order_ids'] === $initialResult['order_ids'] && $recovered['created_count'] === 1,
+    '同一失败事件重试只把第二台追加到原采购单');
+$assert($failedData['request_id'] === $recoveredData['request_id']
+    && $failedData['settlement_request_id'] === $recoveredData['settlement_request_id'], '失败重试必须生成稳定采购和核销编号');
+$assert($boundary->created[0] === $initialData, '后续设备不能覆盖第一台设备及其付款快照');
+$assert($recoveredData['paid_amount'] === 1000.0 && $recoveredData['items'][0]['source_paid_amount'] === 1000.0,
+    '追加设备保留自己已付金额，不分摊给第一台未付设备');
+$replayed = $boundary->handle($appendEvent);
+$assert($replayed['status'] === 'duplicate' && count($boundary->created) === 2, '补齐成功后再次重试不得重复入账');
+
+$thirdEvent = $initialEvent;
+$thirdEvent['event_id'] = str_repeat('c', ErpIdempotency::MAX_REQUEST_ID_LENGTH);
+$thirdEvent['devices'] = [
+    $device(303, 777, 'RC-APPEND-LENGTH-TEST', $counterpartyA, 1, 11),
+    $device(304, 777, 'RC-APPEND-LENGTH-TEST', $counterpartyA, 1, 11),
+];
+$thirdEvent['devices'][0]['paid_amount'] = 0;
+$thirdEvent['devices'][0]['settlement_status'] = 'unpaid';
+$thirdEvent['devices'][1]['paid_amount'] = 300;
+$thirdResult = $boundary->handle($thirdEvent);
+$thirdData = $boundary->created[2];
+$assert($thirdResult['order_ids'] === $initialResult['order_ids'] && $thirdResult['created_count'] === 2,
+    '第三批多台设备仍追加原采购单');
+$assert($thirdData['request_id'] !== $recoveredData['request_id']
+    && $thirdData['settlement_request_id'] !== $recoveredData['settlement_request_id'], '不同追加批次不能复用上一批核销编号');
+$assert($thirdData['paid_amount'] === 300.0 && $thirdData['items'][0]['source_paid_amount'] === 0.0
+    && $thirdData['items'][1]['source_paid_amount'] === 300.0, '多台混合已付未付时仅按各自金额核销');
+
+$otherSite = new FakeRecycleInboundListener();
+$otherSite->siteId = 100006;
+$otherSiteInitial = array_replace($initialEvent, ['site_id' => 100006]);
+$otherSiteAppend = array_replace($appendEvent, ['site_id' => 100006]);
+$otherSite->handle($otherSiteInitial);
+$otherSite->handle($otherSiteAppend);
+$assert($otherSite->created[1]['request_id'] !== $recoveredData['request_id'], '相同订单号与事件号在不同站点不能生成相同追加键');
+
+$otherOrder = new FakeRecycleInboundListener();
+$otherOrderInitial = $initialEvent;
+$otherOrderAppend = $appendEvent;
+foreach ($otherOrderInitial['devices'] as &$row) { $row['source_id'] = 778; $row['source_order_no'] = 'RC-OTHER-ORDER'; }
+unset($row);
+foreach ($otherOrderAppend['devices'] as &$row) { $row['source_id'] = 778; $row['source_order_no'] = 'RC-OTHER-ORDER'; }
+unset($row);
+$otherOrder->handle($otherOrderInitial);
+$otherOrder->handle($otherOrderAppend);
+$assert($otherOrder->created[1]['request_id'] !== $recoveredData['request_id'], '不同来源订单不能生成相同追加键');
+
+$oversizedEvent = $initialEvent;
+$oversizedEvent['event_id'] .= 'x';
+$oversizedRejected = false;
+try {
+    (new FakeRecycleInboundListener())->handle($oversizedEvent);
+} catch (CommonException $e) {
+    $oversizedRejected = str_contains($e->getMessage(), 'request_id长度不能超过80个字符');
+}
+$assert($oversizedRejected, '不得通过放宽原事件80字符校验来修复派生编号');
+
+echo "[PASS] ERP recycle inbound listener smoke test: {$assertionCount} assertions; no database or payment\n";

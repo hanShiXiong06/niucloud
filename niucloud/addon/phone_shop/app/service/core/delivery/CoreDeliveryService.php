@@ -43,39 +43,45 @@ class CoreDeliveryService extends BaseCoreService
         return true;
     }
 
+    public function getConfig(int $site_id, $key)
+    {
+        return $this->core_config_service->getConfig($site_id, $key);
+    }
+
     /**
      * 物流
      */
     public function getExpressConfig(int $site_id)
     {
-        $data = ( new CoreConfigService() )->getConfigValue($site_id, 'SHOP_DELIVERY_CONFIG');
+        $data = (new CoreConfigService())->getConfigValue($site_id, 'SHOP_DELIVERY_CONFIG');
         if (empty($data)) {
             $expressInfo = [
                 'name' => '物流配送',
                 'status' => '',
-                'key' => 'express'
+                'key' => 'express',
+                'desc' => '买家下单可以选择快递发货'
             ];
         } else {
-            $expressInfo = $data[ array_search('express', array_column($data, 'key')) ];
+            $expressInfo = $data[array_search('express', array_column($data, 'key'))];
         }
         return $expressInfo;
     }
-
 
     /**
      * 同城
      */
     public function getLocalDeliveryConfig(int $site_id)
     {
-        $data = ( new CoreConfigService() )->getConfigValue($site_id, 'SHOP_DELIVERY_CONFIG');
+        $data = (new CoreConfigService())->getConfigValue($site_id, 'SHOP_DELIVERY_CONFIG');
         if (empty($data)) {
             $localDeliveryInfo = [
                 'name' => '同城配送',
                 'status' => '',
-                'key' => 'local_delivery'
+                'key' => 'local_delivery',
+                'desc' => '在配送范围内的买家可以选择同城配送'
             ];
         } else {
-            $localDeliveryInfo = $data[ array_search('local_delivery', array_column($data, 'key')) ];
+            $localDeliveryInfo = $data[array_search('local_delivery', array_column($data, 'key'))];
         }
         return $localDeliveryInfo;
     }
@@ -85,15 +91,16 @@ class CoreDeliveryService extends BaseCoreService
      */
     public function getStoreConfig(int $site_id)
     {
-        $data = ( new CoreConfigService() )->getConfigValue($site_id, 'SHOP_DELIVERY_CONFIG');
+        $data = (new CoreConfigService())->getConfigValue($site_id, 'SHOP_DELIVERY_CONFIG');
         if (empty($data)) {
             $storeInfo = [
                 'name' => '门店配送',
                 'status' => '',
-                'key' => 'store'
+                'key' => 'store',
+                'desc' => '买家可选择自提点提货'
             ];
         } else {
-            $storeInfo = $data[ array_search('store', array_column($data, 'key')) ];
+            $storeInfo = $data[array_search('store', array_column($data, 'key'))];
         }
         return $storeInfo;
     }
@@ -105,31 +112,40 @@ class CoreDeliveryService extends BaseCoreService
      */
     public function getDeliveryConfig(int $site_id)
     {
-        $data = ( new CoreConfigService() )->getConfigValue($site_id,'SHOP_DELIVERY_CONFIG');
+        $data = (new CoreConfigService())->getConfigValue($site_id, 'SHOP_DELIVERY_CONFIG');
         if (empty($data)) {
             $list = [
                 'express' => [
                     'name' => '物流配送',
                     'status' => 1,
-                    'key' => 'express'
+                    'key' => 'express',
+                    'desc' => '买家下单可以选择快递发货'
                 ],
                 'local_delivery' => [
                     'name' => '同城配送',
                     'status' => 1,
-                    'key' => 'local_delivery'
+                    'key' => 'local_delivery',
+                    'desc' => '在配送范围内的买家可以选择同城配送'
                 ],
                 'store' => [
                     'name' => '门店自提',
                     'status' => 1,
-                    'key' => 'store'
+                    'key' => 'store',
+                    'desc' => '买家可选择自提点提货'
                 ]
             ];
         } else {
+            $desc_arr = [
+                'express' => '买家下单可以选择快递发货',
+                'local_delivery' => '在配送范围内的买家可以选择同城配送',
+                'store' => '买家可选择自提点提货',
+            ];
             foreach ($data as $value) {
-                $list[ $value[ 'key' ] ] = [
-                    'name' => $value[ 'name' ],
-                    'status' => $value[ 'status' ],
-                    'key' => $value[ 'key' ]
+                $list[$value['key']] = [
+                    'name' => $value['name'],
+                    'status' => $value['status'],
+                    'key' => $value['key'],
+                    'desc' => $value['desc'] ?? $desc_arr[$value['key']]
                 ];
             }
         }
@@ -142,12 +158,12 @@ class CoreDeliveryService extends BaseCoreService
      */
     public function getDeliveryList(int $site_id)
     {
-        $deliver = ( new CoreConfigService() )->getConfigValue($site_id, 'SHOP_DELIVERY_CONFIG');
+        $deliver = (new CoreConfigService())->getConfigValue($site_id, 'SHOP_DELIVERY_CONFIG');
         foreach ($deliver as $value) {
-            $list[ $value[ 'key' ] ] = [
-                'name' => $value[ 'name' ],
-                'status' => $value[ 'status' ],
-                'key' => $value[ 'key' ]
+            $list[$value['key']] = [
+                'name' => $value['name'],
+                'status' => $value['status'],
+                'key' => $value['key']
             ];
         }
         if (empty($deliver)) {

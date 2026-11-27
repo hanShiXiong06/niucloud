@@ -11,6 +11,7 @@
 
 namespace addon\phone_shop\app\model\order;
 
+use addon\phone_shop\app\dict\delivery\DeliveryDict;
 use addon\phone_shop\app\dict\order\OrderDeliveryDict;
 use addon\phone_shop\app\dict\order\OrderDict;
 use addon\phone_shop\app\model\delivery\Store;
@@ -19,6 +20,7 @@ use app\model\member\Member;
 use app\model\pay\Pay;
 use core\base\BaseModel;
 use think\db\Query;
+use think\model\concern\SoftDelete;
 use think\model\relation\HasMany;
 use think\model\relation\HasOne;
 
@@ -27,6 +29,13 @@ use think\model\relation\HasOne;
  */
 class Order extends BaseModel
 {
+    use SoftDelete;
+
+    /**
+     * phone_shop_order 历史表只有 create_time，没有 update_time。
+     * 显式关闭更新时间字段，避免模型二次保存时由 ORM 自动写入不存在的列。
+     */
+    protected $updateTime = false;
 
     /**
      * 数据表主键
@@ -55,6 +64,14 @@ class Order extends BaseModel
 
     // 设置JSON数据返回数组
     protected $jsonAssoc = true;
+
+    /**
+     * 定义软删除标记字段.
+     * @var string
+     */
+    protected $deleteTime = 'delete_time';
+
+    protected $defaultSoftDelete = 0;
 
     /**
      * 订单项
@@ -119,6 +136,15 @@ class Order extends BaseModel
     }
 
     /**
+     * 优惠表
+     * @return hasMany
+     */
+    public function orderDiscount()
+    {
+        return $this->hasMany(OrderDiscounts::class, 'order_id', 'order_id');
+    }
+
+    /**
      * 发票
      * @return HasOne
      */
@@ -137,7 +163,12 @@ class Order extends BaseModel
     {
         if (empty($data[ 'order_from' ]))
             return '';
-        return ChannelDict::getType()[ $data[ 'order_from' ] ] ?? '';
+        $order_from_list = ChannelDict::getType();
+        $from_event_list = array_filter(event('OrderFromList')) ?? [];
+        foreach ($from_event_list as $item) {
+            $order_from_list = array_merge($order_from_list, $item);
+        }
+        return $order_from_list[ $data[ 'order_from' ] ] ?? '';
     }
 
     /**
@@ -150,7 +181,17 @@ class Order extends BaseModel
     {
         if (empty($data[ 'order_type' ]))
             return '';
-//        return OrderDict::getType()[$data['order_type']] ?? '';
+//        return OrderDict::getOrderType($data['order_type']) ?? '';
+    }
+    /**
+     * 订单类型
+     * @param $value
+     * @param $data
+     * @return mixed|string
+     */
+    public function getActivityTypeNameAttr($value, $data)
+    {
+        return OrderDict::getOrderActiveTypeName($data['activity_type']);
     }
 
     /**
@@ -163,7 +204,17 @@ class Order extends BaseModel
     {
         if (empty($data[ 'status' ]))
             return '';
-        return OrderDict::getStatus()[ $data[ 'status' ] ] ?? '';
+        if ((int)$data['status'] === OrderDict::WAIT_PAY
+            && (string)($data['payment_mode'] ?? '') === 'offline_pending') {
+            return [
+                'name' => '待商家处理',
+                'status' => OrderDict::WAIT_PAY,
+                'is_refund' => 0,
+                'action' => [],
+                'member_action' => [],
+            ];
+        }
+        return OrderDict::getStatus($data[ 'status' ],$data['delivery_type'])?? '';
     }
 
     /**
@@ -188,6 +239,18 @@ class Order extends BaseModel
     {
         if ($value != '') {
             $query->where("order_no", "like", "%$value%");
+        }
+    }
+
+    /**
+     * 搜索器:订单内容
+     * @param $value
+     * @param $data
+     */
+    public function searchBodyAttr($query, $value, $data)
+    {
+        if ($value != '') {
+            $query->where("body", "like", "%$value%");
         }
     }
 
@@ -298,6 +361,7 @@ class Order extends BaseModel
             $search_name = $this->handelSpecialCharacter($data[ 'search_name' ]);
             if ($value == 'order_no') $query->where("order_no", "like", "%$search_name%");
             if ($value == 'out_trade_no') $query->where("order.out_trade_no", "like", "%$search_name%");
+            if ($value == 'goods_name') $query->where("order.body", "like", "%$search_name%");
         }
     }
 
@@ -324,10 +388,4 @@ class Order extends BaseModel
             $query->whereLike("taker_name|taker_mobile", "%" . $this->handelSpecialCharacter($value) . "%");
         }
     }
-    // 获取最后一条信息的订单编号
-    public function getLastOrder($order_no)
-    {
-        return $this->where('order_no', $order_no)->order('id desc')->find();
-    }
-    
 }

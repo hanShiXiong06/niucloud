@@ -4,7 +4,7 @@
         <layout-aside></layout-aside>
         <!-- 左侧边栏 end -->
 
-        <el-container>
+        <el-container class="min-w-0">
             <!-- 顶部 -->
             <el-header>
                 <layout-header></layout-header>
@@ -18,7 +18,7 @@
                 <el-scrollbar>
                     <div class="p-[15px]">
                         <router-view v-slot="{ Component, route }" v-if="appStore.routeRefreshTag">
-                            <keep-alive :include="tabbarStore.tabNames">
+                            <keep-alive :include="tabbarStore.tabNames" :max="15">
                                 <component :is="Component" :key="route.fullPath" />
                             </keep-alive>
                         </router-view>

@@ -53,7 +53,7 @@ class PrinterContentListener
 
         // 查询订单信息
         $order_model = new Order();
-        $field = 'order_id, order_no, order_from, out_trade_no, status, member_id,taker_name, taker_mobile, goods_money, delivery_money, discount_money, order_money, create_time, pay_time, finish_time, delivery_type, take_store_id, taker_name, taker_mobile, taker_full_address, member_remark, shop_remark';
+        $field = 'order_id, order_no, order_from, out_trade_no, payment_mode, status, member_id,taker_name, taker_mobile, goods_money, delivery_money, discount_money, order_money, create_time, pay_time, finish_time, delivery_type, take_store_id, taker_name, taker_mobile, taker_full_address, member_remark, shop_remark';
         $order_info = $order_model->where([ [ 'order_id', '=', $params[ 'business' ][ 'order_id' ] ], [ 'site_id', '=', $params[ 'site_id' ] ] ])->field($field)
             ->with(
                 [
@@ -61,7 +61,7 @@ class PrinterContentListener
                         $query->field('order_goods_id, order_id, goods_id, sku_id, goods_name, sku_name, price, num, goods_money, discount_money, status, order_goods_money, original_price')->append([ 'status_name' ]);
                     },
                     'member' => function($query) {
-                        $query->field('member_id,mobile,balance,point');
+                        $query->field('member_id,nickname,mobile,balance,point');
                     }
                 ])->append([ 'order_from_name', 'status_name', 'delivery_type_name' ])->findOrEmpty()->toArray();
 
@@ -72,6 +72,8 @@ class PrinterContentListener
             ];
         }
 
+        // 线下收款／挂账不一定产生线上支付流水，打印不能依赖 pay 必然存在。
+        $order_info[ 'pay' ] = [];
         if ($order_info[ 'out_trade_no' ]) {
             $order_info[ 'pay' ] = ( new Pay() )->where([ [ 'out_trade_no', '=', $order_info[ 'out_trade_no' ] ] ])
                 ->field('out_trade_no, type, pay_time')->append([ 'type_name' ])->findOrEmpty()->toArray();
@@ -246,7 +248,15 @@ class PrinterContentListener
 
             // 支付方式
             if (in_array('pay_type', $data[ 'order_item' ][ 'value' ])) {
-                $content .= '支付方式：' . $order_info[ 'pay' ][ 'type_name' ] . "\n";
+                $offline_pay_names = [
+                    'offline_pending' => '线下付款（待确认）',
+                    'offline_cash' => '线下收款',
+                    'offline_credit' => '线下挂账',
+                ];
+                // 订单已转线下时，以订单方式为准，不采用可能尚未支付的线上流水类型。
+                $pay_type_name = $offline_pay_names[ $order_info[ 'payment_mode' ] ?? '' ]
+                    ?? ($order_info[ 'pay' ][ 'type_name' ] ?? '');
+                $content .= '支付方式：' . ($pay_type_name ?: '未记录') . "\n";
             }
 
             // 配送方式
@@ -294,7 +304,10 @@ class PrinterContentListener
                 $content .= "<FB>";
             }
 
-            $content .= '实付金额：￥' . $order_info[ 'order_money' ];
+            // 待确认和挂账不是已收款，不能把订单金额打印成实付金额。
+            $money_title = in_array($order_info[ 'payment_mode' ] ?? '', ['offline_pending', 'offline_credit'], true)
+                ? '订单金额' : '实付金额';
+            $content .= $money_title . '：￥' . $order_info[ 'order_money' ];
 
             if ($data[ 'order_money' ][ 'fontWeight' ] == 'bold') {
                 $content .= "</FB>";
@@ -449,7 +462,7 @@ class PrinterContentListener
 
             // 买家昵称
             if (in_array('nickname', $data[ 'member_basic_info' ][ 'value' ])) {
-                $content .= '会员昵称：' . $order_info[ 'taker_name' ] . "\n";
+                $content .= '会员昵称：' . $order_info[ 'member' ][ 'nickname' ] . "\n";
             }
 
             // 账户余额

@@ -12,21 +12,23 @@ export function getExchangePoint() {
  * 获取积分商城推荐列表
  * @returns
  */
-export function getExchangeComponentsList(params : Record<string, any>) {
-	return request.get(`phone_shop/exchange/components`, params)
+export function getExchangeComponentsList(params: Record<string, any>) {
+    return request.get(`phone_shop/exchange/components`, params)
 }
+
 /**
  * 获取积分商城列表
  * @returns
  */
-export function getExchangeGoodsList(params : Record<string, any>) {
-	return request.get(`phone_shop/exchange`, params)
+export function getExchangeGoodsList(params: Record<string, any>) {
+    return request.get(`phone_shop/exchange`, params)
 }
+
 /**
  * 获取积分商品详情
  */
 export function getExchangeGoodsDetail(id: any) {
-    return request.get(`phone_shop/exchange/goods/${id}`)
+    return request.get(`phone_shop/exchange/goods/${ id }`)
 }
 
 /**
@@ -42,4 +44,3 @@ export function orderCreateCalculate(params: Record<string, any>) {
 export function orderCreate(params: Record<string, any>) {
     return request.post('phone_shop/exchange_order/create', params)
 }
-

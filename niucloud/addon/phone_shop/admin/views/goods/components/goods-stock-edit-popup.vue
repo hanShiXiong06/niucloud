@@ -1,6 +1,6 @@
 <template>
     <div>
-        <el-dialog v-model="showDialog" :title="t('editStockPopupTitle')" width="600px" :close-on-press-escape="false" :destroy-on-close="true" :close-on-click-modal="false">
+        <el-dialog v-model="showDialog" :title="t('editStockPopupTitle')" width="600px" :destroy-on-close="true" :close-on-click-modal="false">
 
             <div class="flex items-center mb-[10px]">
                 <div class="min-w-[70px] h-[70px] flex items-center justify-center">
@@ -22,7 +22,7 @@
             <!-- 批量设置 -->
             <div class="batch-operation-sku" v-if="activeGoodsCount == 0 && goodsTable.data.length > 1">
                 <label>{{ t('batchOperationSku') }}</label>
-                <el-input v-model="batchOperation.value" clearable :placeholder="t('stock')" class="set-input" maxlength="20" :autofocus="true" />
+                <el-input v-model.trim="batchOperation.value" clearable :placeholder="t('stock')" class="set-input" maxlength="8" :autofocus="true" />
                 <el-button type="primary" @click="saveBatch">{{ t('confirm') }}</el-button>
             </div>
 
@@ -35,7 +35,7 @@
                 <el-table-column prop="price" :label="t('price')" min-width="120" />
                 <el-table-column prop="stock" :label="t('stock')" min-width="120">
                     <template #default="{ row }">
-                        <el-input v-model="row.stock" clearable placeholder="0" maxlength="10" :disabled="activeGoodsCount > 0" />
+                        <el-input v-model.trim="row.stock" clearable placeholder="0" maxlength="8" :disabled="activeGoodsCount > 0" />
                     </template>
                 </el-table-column>
 
@@ -130,7 +130,7 @@ const loadGoodsList = () => {
 
 const show = (data: any) => {
     Object.assign(goods, data)
-    getActiveGoodsCountFn();
+    // getActiveGoodsCountFn(); // 暂时不控制
     loadGoodsList()
     showDialog.value = true
 }

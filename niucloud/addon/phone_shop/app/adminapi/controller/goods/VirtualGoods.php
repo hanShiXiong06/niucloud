@@ -24,6 +24,7 @@ class VirtualGoods extends BaseAdminController
 {
     /**
      * 获取商品添加/编辑数据
+     * @description 获取商品添加/编辑数据
      * @return \think\Response
      */
     public function init()
@@ -36,6 +37,7 @@ class VirtualGoods extends BaseAdminController
 
     /**
      * 添加商品
+     * @description 添加虚拟商品
      * @return \think\Response
      */
     public function add()
@@ -45,6 +47,9 @@ class VirtualGoods extends BaseAdminController
             [ "sub_title", "" ],
             [ "goods_type", "" ],
             [ "goods_image", "" ],
+            ["goods_image_width", ""],
+            ["goods_image_height", ""],
+            [ "goods_video", "" ],
             [ "goods_category", '' ],
             [ "brand_id", 0 ],
             [ "label_ids", "" ],
@@ -52,8 +57,9 @@ class VirtualGoods extends BaseAdminController
             [ 'supplier_id', 0 ],
             [ "status", 0 ],
             [ "sort", 0 ],
-            [ 'attr_id', 0 ],
+            [ 'attr_ids', [] ],
             [ 'attr_format', '' ],
+            [ 'is_gift', 0 ],
 
             // 规格类型，single：单规格，multi：多规格
             [ 'spec_type', '' ],
@@ -67,6 +73,10 @@ class VirtualGoods extends BaseAdminController
             [ "sku_no", '' ],
             [ "unit", "件" ],
             [ "virtual_sale_num", 0 ],
+            [ "is_limit", 0 ],
+            [ "limit_type", 1 ],
+            [ "max_buy", 0 ],
+            [ "min_buy", 0 ],
 
             // 多规格数据
             [ 'goods_spec_format', '' ],
@@ -80,10 +90,11 @@ class VirtualGoods extends BaseAdminController
 
             // 商品详情
             [ "goods_desc", "" ],
-            [ "goods_url", "" ],
 
             [ 'member_discount', '' ], // 会员等级折扣，不参与：空，会员折扣：discount，指定会员价：fixed_price
-            [ 'poster_id', 0 ] // 海报id
+            [ 'poster_id', 0 ], // 海报id
+            ['form_id', 0], // 万能表单id
+            ['diy_detail_id', 0] // 自定义详情id
         ]);
 
         $this->validate($data, 'addon\phone_shop\app\validate\goods\Goods.add');
@@ -93,6 +104,7 @@ class VirtualGoods extends BaseAdminController
 
     /**
      * 商品编辑
+     * @description 编辑虚拟商品
      * @param $id  商品id
      * @return \think\Response
      */
@@ -103,6 +115,9 @@ class VirtualGoods extends BaseAdminController
             [ "sub_title", "" ],
             [ "goods_type", "" ],
             [ "goods_image", "" ],
+            ["goods_image_width", ""],
+            ["goods_image_height", ""],
+            [ "goods_video", "" ],
             [ "goods_category", '' ],
             [ "brand_id", 0 ],
             [ "label_ids", "" ],
@@ -110,8 +125,9 @@ class VirtualGoods extends BaseAdminController
             [ 'supplier_id', 0 ],
             [ "status", 0 ],
             [ "sort", 0 ],
-            [ 'attr_id', 0 ],
+            [ 'attr_ids', [] ],
             [ 'attr_format', '' ],
+            [ 'is_gift', 0 ],
 
             // 规格类型，single：单规格，multi：多规格
             [ 'spec_type', '' ],
@@ -125,6 +141,10 @@ class VirtualGoods extends BaseAdminController
             [ "sku_no", '' ],
             [ "unit", "件" ],
             [ "virtual_sale_num", 0 ],
+            [ "is_limit", 0 ],
+            [ "limit_type", 1 ],
+            [ "max_buy", 0 ],
+            [ "min_buy", 0 ],
 
             // 多规格数据
             [ 'goods_spec_format', '' ],
@@ -138,11 +158,11 @@ class VirtualGoods extends BaseAdminController
 
             // 商品详情
             [ "goods_desc", "" ],
-            [ "goods_url", "" ],
-
 
             [ 'member_discount', '' ], // 会员等级折扣，不参与：空，会员折扣：discount，指定会员价：fixed_price
-            [ 'poster_id', 0 ] // 海报id
+            [ 'poster_id', 0 ], // 海报id
+            ['form_id', 0], // 万能表单id
+            ['diy_detail_id', 0] // 自定义详情id
         ]);
         $this->validate($data, 'addon\phone_shop\app\validate\goods\Goods.edit');
         $res = ( new VirtualGoodsService() )->edit($id, $data);

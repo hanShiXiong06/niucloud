@@ -13,7 +13,6 @@ namespace addon\phone_shop\app\model\goods;
 
 use app\dict\sys\FileDict;
 use core\base\BaseModel;
-use addon\phone_shop\app\model\site\Site;
 
 /**
  * 商品规格模型
@@ -248,7 +247,6 @@ class GoodsSku extends BaseModel
             $query->where("is_default", $value);
         }
     }
-   // 
 
     /**
      * 关联商品主表
@@ -258,8 +256,17 @@ class GoodsSku extends BaseModel
     {
         return $this->hasOne(Goods::class, 'goods_id', 'goods_id')
             ->joinType('left')
-            ->withField('goods_id, is_discount, site_id, goods_name, goods_type, sub_title,memory_ids , goods_cover, goods_image,goods_desc,brand_id,label_ids,service_ids, unit, stock, sale_num + virtual_sale_num as sale_num, status, is_free_shipping, fee_type, delivery_type, delivery_money, delivery_template_id, goods_category,attr_id,attr_format,member_discount,is_discount')
-            ->append([ 'goods_type_name', 'goods_cover_thumb_small', 'goods_cover_thumb_mid', 'goods_cover_thumb_big', 'delivery_type_list', 'goods_image_thumb_small', 'goods_image_thumb_mid', 'goods_image_thumb_big' ]);
+            ->withField('goods_id, is_discount, site_id, goods_name, goods_type, sub_title, goods_cover, goods_image,goods_desc,brand_id,label_ids,service_ids, unit, stock, sale_num + virtual_sale_num as sale_num, is_limit, limit_type, max_buy, min_buy, status, is_free_shipping, fee_type, delivery_type, delivery_money, delivery_template_id, goods_category,supplier_id,attr_ids,attr_format,member_discount,is_discount,form_id,source,is_proxy')
+            ->append([ 'goods_type_name', 'goods_cover_thumb_small', 'goods_cover_thumb_mid', 'delivery_type_list', 'goods_image_thumb_small', 'goods_image_thumb_mid', 'goods_image_thumb_big' ]);
+    }
+
+    /**
+     * 关联商品主表（自定义字段）
+     * @return \think\model\relation\HasOne
+     */
+    public function goodsSingle()
+    {
+        return $this->hasOne(Goods::class, 'goods_id', 'goods_id')->joinType('left');
     }
 
     /**
@@ -279,5 +286,15 @@ class GoodsSku extends BaseModel
     {
         return $this->hasMany(GoodsSpec::class, 'goods_id', 'goods_id');
     }
-    
+
+    /**
+     * 关联商品主表
+     * @return \think\model\relation\HasOne
+     */
+    public function goodsInfo()
+    {
+        return $this->hasOne(Goods::class, 'goods_id', 'goods_id')
+            ->joinType('left');
+    }
+
 }

@@ -3,6 +3,7 @@ import { onLoad, onShow, onHide, onPageScroll, onUnload } from '@dcloudio/uni-ap
 import { img, handleOnloadParams } from '@/utils/common';
 import { getDiyInfo } from '@/app/api/diy';
 import useDiyStore from '@/app/stores/diy';
+import { parseJsonValue } from '@/utils/json';
 
 export function useDiy(params: any = {}) {
 
@@ -102,6 +103,9 @@ export function useDiy(params: any = {}) {
             if (diyStore.mode == 'decorate') {
                 diyStore.init();
             } else {
+                // Optional lifecycle notifications let a page provide its own
+                // loading/error UI without copying this renderer or loader.
+                if (typeof params.onRequestStart === 'function') params.onRequestStart();
                 getDiyInfo({
                     id: id.value,
                     name: name.value,
@@ -112,9 +116,9 @@ export function useDiy(params: any = {}) {
                         diyData.pageMode = requestData.mode;
                         diyData.title = requestData.title;
 
-                        let sources = JSON.parse(requestData.value); // todo diy的结构应该后台处理好，前端就不需要再转换了
+                        const sources = parseJsonValue<any>(requestData.value, { global: {}, value: [] });
 
-                        diyData.global = sources.global;
+                        diyData.global = sources.global || {};
 
                         diyData.global.id = requestData.id;
                         diyData.global.site_id = requestData.site_id;
@@ -125,7 +129,7 @@ export function useDiy(params: any = {}) {
                             diyData.global.popWindow.id = requestData.id;
                         }
                         
-                        diyData.value = sources.value;
+                        diyData.value = Array.isArray(sources.value) ? sources.value : [];
                         diyData.value.forEach((item: any, index) => {
                             item.pageStyle = '';
                             item.componentIsShow = true // 是否显示
@@ -143,6 +147,9 @@ export function useDiy(params: any = {}) {
                                 item.pageStyle += 'padding-left:' + item.margin.both * 2 + 'rpx' + ';';
                             }
                         });
+                        
+                        diyStore.global = diyData.global
+                        diyStore.value = diyData.value
 
                         // 控制自定义头部是否出现 | 微信小程序
                         isShowTopTabbar.value = diyData.value.some((item: any) => {
@@ -158,6 +165,14 @@ export function useDiy(params: any = {}) {
 
                     if (callback) callback(requestData)
 
+                }).catch((error: unknown) => {
+                    if (typeof params.onRequestError === 'function') {
+                        loading.value = false;
+                        params.onRequestError(error);
+                        return;
+                    }
+                    // Preserve the existing error contract for other pages.
+                    throw error;
                 });
             }
         })

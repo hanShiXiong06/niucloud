@@ -17,6 +17,7 @@ use addon\phone_shop\app\dict\coupon\CouponMemberDict;
 use addon\phone_shop\app\model\coupon\Coupon;
 use addon\phone_shop\app\model\coupon\CouponGoods;
 use addon\phone_shop\app\model\coupon\CouponMember;
+use addon\phone_shop\app\service\core\coupon\CoreCouponEligibilityService;
 use app\model\member\Member;
 use app\service\core\sys\CoreSysConfigService;
 use core\base\BaseApiService;
@@ -62,7 +63,7 @@ class CouponService extends BaseApiService
             }
         }
         $field = 'id,title,start_time,end_time,remain_count,receive_count,limit_count,status,price,min_condition_money,type
-        ,receive_type,valid_type,length,valid_start_time,valid_end_time,sort';
+        ,receive_type,valid_type,length,valid_start_time,valid_end_time,sort,is_non_vip_only';
 
         // 参数过滤
         if (!empty($data[ 'order' ]) && in_array($data[ 'order' ], [ 'create_time', 'price' ])) {
@@ -70,10 +71,15 @@ class CouponService extends BaseApiService
         } else {
             $order = 'id desc';
         }
-
         $where[] = [ 'site_id', '=', $this->site_id ];
         $where[] = [ 'status', '=', CouponDict::NORMAL ];
         $where[] = [ 'receive_type', '=', CouponDict::USER ];
+        if ((new CoreCouponEligibilityService())->isVipMember($this->site_id, $this->member_id)) {
+            $where[] = [ 'is_non_vip_only', '=', 0 ];
+        }
+        $where[] = function ($query) {
+            $query->where([ [ 'remain_count', '=', '-1' ] ])->whereOr([ [ 'remain_count', '>', 0 ] ]);
+        };
 
         $time_where = function($query) {
             $nowtime = time();
@@ -124,7 +130,6 @@ class CouponService extends BaseApiService
                 }
                 $query->whereOr($temp_where);
             };
-
             $search_model = $this->model
                 ->field($field)
                 ->where($where)
@@ -150,6 +155,7 @@ class CouponService extends BaseApiService
         }
         $list = $this->pageQuery($search_model);
         $coupon_member = new CouponMember();
+        $member_info = ( new Member() )->where([ [ 'site_id', '=', $this->site_id ], [ 'member_id', '=', $this->member_id ] ])->field('member_id')->findOrEmpty()->toArray();
         foreach ($list[ 'data' ] as $k => &$v) {
             if ($v[ 'remain_count' ] != '-1') {
                 $v[ 'sum_count' ] = $v[ 'remain_count' ] + $v[ 'receive_count' ];
@@ -157,10 +163,8 @@ class CouponService extends BaseApiService
                 $v[ 'sum_count' ] = '-1';
             }
 
-            $member_info = ( new Member() )->where([ [ 'site_id', '=', $this->site_id ], [ 'member_id', '=', $this->member_id ] ])->field('member_id')->findOrEmpty()->toArray();
             if ($member_info) {
-
-                $coupon_member_count = $coupon_member->where([ [ 'site_id', '=', $this->site_id ], [ 'member_id', '=', $this->member_id ], [ 'coupon_id', '=', $v[ 'id' ] ] ])->count();
+                $coupon_member_count = $coupon_member->where([ [ 'site_id', '=', $this->site_id ], [ 'member_id', '=', $this->member_id ], [ 'coupon_id', '=', $v[ 'id' ] ], [ 'receive_type', '=', 'receive' ] ])->count();
                 if ($coupon_member_count) {
                     $v[ 'is_receive' ] = 1;
                     $v[ 'member_receive_count' ] = $coupon_member_count;
@@ -176,33 +180,6 @@ class CouponService extends BaseApiService
         return $list;
     }
 
-
-    public function getCouponListByGoodsIdOrCategoryIds($data)
-    {
-        $goods_coupon_id = [];
-
-        if ($data[ 'goods_id' ] != '') {
-            $coupon_goods_model = new CouponGoods();
-            $goods_coupon_list = $coupon_goods_model->where([ [ 'site_id', '=', $this->site_id ], [ 'goods_id', '=', $data[ 'goods_id' ] ] ])->select()->toArray();
-            if (!empty($goods_coupon)) {
-                $goods_coupon_id = array_column($goods_coupon_list, 'coupon_id');
-            } else {
-                $goods_coupon_id = [ -1 ];
-            }
-        }
-
-        $category_coupon_id = [];
-        if ($data[ 'category_ids' ] != '') {
-            $coupon_goods_model = new CouponGoods();
-            $category_coupon_list = $coupon_goods_model->where([ [ 'site_id', '=', $this->site_id ], [ 'category_id', 'in', $data[ 'category_ids' ] ] ])->select()->toArray();
-            if (!empty($category_coupon_list)) {
-                $category_coupon_id = array_column($category_coupon_list, 'coupon_id');
-            } else {
-                $category_coupon_id = [ -1 ];
-            }
-        }
-    }
-
     /**
      * 查询优惠券详情
      */
@@ -213,6 +190,7 @@ class CouponService extends BaseApiService
         if (empty($info)) {
             throw new CommonException('COUPON_NOT_EXIST');
         }
+        (new CoreCouponEligibilityService())->assertEligible($this->site_id, $this->member_id, $info);
         if ($info[ 'remain_count' ] != '-1') {
             $info[ 'sum_count' ] = $info[ 'remain_count' ] + $info[ 'receive_count' ];
         } else {
@@ -222,7 +200,7 @@ class CouponService extends BaseApiService
         $member_info = ( new Member() )->where([ [ 'member_id', '=', $this->member_id ], [ 'site_id', '=', $this->site_id ] ])->field('member_id')->findOrEmpty()->toArray();
 
         if ($member_info) {
-            $coupon_member_count = $coupon_member->where([ [ 'member_id', '=', $this->member_id ], [ 'site_id', '=', $this->site_id ], [ 'coupon_id', '=', $id ] ])->count();
+            $coupon_member_count = $coupon_member->where([ [ 'member_id', '=', $this->member_id ], [ 'site_id', '=', $this->site_id ], [ 'coupon_id', '=', $id ], [ 'receive_type', '=', 'receive' ] ])->count();
             if ($coupon_member_count) {
                 $info[ 'is_receive' ] = 1;
                 $info[ 'member_receive_count' ] = $coupon_member_count;
@@ -262,9 +240,14 @@ class CouponService extends BaseApiService
             if (empty($info)) {
                 throw new CommonException('COUPON_NOT_EXIST');
             }
+            (new CoreCouponEligibilityService())->assertEligible($this->site_id, $member_id, $info);
 
-            if($info['status'] != 1){
+            if($info['status'] != CouponDict::NORMAL){
                 throw new CommonException('COUPON_INVALID');//优惠券已失效
+            }
+
+            if($info['receive_type'] != CouponDict::USER) {
+                throw new CommonException('COUPON_CAN_NOT_MANUAL_RECEIVE');//该优惠券不可手动领取
             }
 
             if ($member_coupon_count == $info[ 'limit_count' ]) {
@@ -277,10 +260,10 @@ class CouponService extends BaseApiService
             if (strtotime($info[ 'start_time' ]) > 0) {
                 $time = time();
                 if ($time < strtotime($info[ 'start_time' ])) {
-                    throw new CommonException('COUPON_RECEIVE_NOT_TIME');//优惠券已被领完
+                    throw new CommonException('COUPON_RECEIVE_NOT_TIME');//优惠券不在领取时间范围内
                 }
                 if ($time > strtotime($info[ 'end_time' ])) {
-                    throw new CommonException('COUPON_RECEIVE_NOT_TIME');//优惠券已被领完
+                    throw new CommonException('COUPON_RECEIVE_NOT_TIME');//优惠券不在领取时间范围内
                 }
             }
 
@@ -339,6 +322,11 @@ class CouponService extends BaseApiService
 //            $where[] = [ 'expire_time', '>', time() + 86400 * 3 ];
 //        }
         $where[] = [ 'member_id', '=', $this->member_id ];
+        $where[] = [ 'site_id', '=', $this->site_id ];
+        if ((int)($data['status'] ?? 0) === CouponMemberDict::WAIT_USE) {
+            $unavailableIds = (new CoreCouponEligibilityService())->getUnavailableCouponIds($this->site_id, $this->member_id);
+            if ($unavailableIds) $where[] = [ 'coupon_id', 'not in', $unavailableIds ];
+        }
         $coupon_member_model = new CouponMember();
         $search_model = $coupon_member_model
             ->where($where)
@@ -359,7 +347,12 @@ class CouponService extends BaseApiService
         $status_array = array_keys(CouponMemberDict::getStatus());
         foreach ($status_array as $v) {
             $coupon_member_model = new CouponMember();
-            $count = $coupon_member_model->where([[ 'member_id', '=', $this->member_id ], [ 'status', '=', $v]])->count();
+            $where = [[ 'site_id', '=', $this->site_id ], [ 'member_id', '=', $this->member_id ], [ 'status', '=', $v]];
+            if ((int)$v === CouponMemberDict::WAIT_USE) {
+                $unavailableIds = (new CoreCouponEligibilityService())->getUnavailableCouponIds($this->site_id, $this->member_id);
+                if ($unavailableIds) $where[] = [ 'coupon_id', 'not in', $unavailableIds ];
+            }
+            $count = $coupon_member_model->where($where)->count();
             $count_list[] = [
                 'status' => $v,
                 'status_name' => CouponMemberDict::getStatus($v),
@@ -380,6 +373,11 @@ class CouponService extends BaseApiService
             $where[] = [ 'status', '=', $data[ 'status' ] ];
         }
         $where[] = [ 'member_id', '=', $this->member_id ];
+        $where[] = [ 'site_id', '=', $this->site_id ];
+        if ((int)($data['status'] ?? 0) === CouponMemberDict::WAIT_USE) {
+            $unavailableIds = (new CoreCouponEligibilityService())->getUnavailableCouponIds($this->site_id, $this->member_id);
+            if ($unavailableIds) $where[] = [ 'coupon_id', 'not in', $unavailableIds ];
+        }
 //        $where[] = [ 'expire_time', '>', time() ];
         $coupon_member_model = new CouponMember();
         $count = $search_model = $coupon_member_model
@@ -431,12 +429,15 @@ class CouponService extends BaseApiService
     public function getCouponComponents($data)
     {
         $field = 'id,title,start_time,end_time,remain_count,receive_count,limit_count,status,price,min_condition_money,type
-        ,receive_type,valid_type,length,valid_start_time,valid_end_time,sort';
+        ,receive_type,valid_type,length,valid_start_time,valid_end_time,sort,is_non_vip_only';
         $order = 'id desc';
 
         $where[] = [ 'site_id', '=', $this->site_id ];
         $where[] = ['status', '=', CouponDict::NORMAL];
         $where[] = [ 'receive_type', '=', CouponDict::USER ];
+        if ((new CoreCouponEligibilityService())->isVipMember($this->site_id, $this->member_id)) {
+            $where[] = [ 'is_non_vip_only', '=', 0 ];
+        }
         if (!empty($data[ 'coupon_ids' ])) {
             $where[] = [ 'id', 'in', $data[ 'coupon_ids' ] ];
         }
@@ -493,10 +494,9 @@ class CouponService extends BaseApiService
                 'value' => $id
             ]
         ];
-        $dir = 'upload/' . $this->site_id . '/phone_shop_coupon_qrcode';
-        $channel = 'weapp';
+        $dir = 'upload/' . $this->site_id . '/shop_coupon_qrcode';
 
-        $path = qrcode($url, $page, $data, $this->site_id, $dir, $channel);
+        $path = qrcode($url, $page, $data, $this->site_id, $dir, $this->channel);
         return $path;
     }
 }

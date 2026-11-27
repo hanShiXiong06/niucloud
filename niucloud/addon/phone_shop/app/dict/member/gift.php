@@ -1,22 +1,27 @@
 <?php
 
 return [
-    'shop_coupon' => [
+    'phone_shop_coupon' => [
         'key' => 'phone_shop_coupon',
         'name' => '优惠券', // 礼包名称
         'desc' => '发放优惠券', // 礼包说明
         'component' => '/src/addon/phone_shop/views/member/components/gift-coupon.vue',
         // 礼包发放调用方法
-        'grant' => function($site_id, $member_id, $config) {
-            $service = new \addon\phone_shop\app\service\core\coupon\CoreCouponMemberService();
-            foreach ($config[ 'coupon_id' ] as $coupon_id) {
-                if (!isset($config[ 'coupon_list' ][ 'id_' . $coupon_id ])) continue;
-                $service->sendCoupon($site_id, $member_id, $coupon_id, $config[ 'coupon_list' ][ 'id_' . $coupon_id ]);
+        'grant' => function ($site_id, $member_id, $config) {
+            if (!empty($config[ 'coupon_id' ])) {
+                $service = new \addon\phone_shop\app\service\core\coupon\CoreCouponMemberService();
+                foreach ($config[ 'coupon_id' ] as $coupon_id) {
+                    if (!isset($config[ 'coupon_list' ][ 'id_' . $coupon_id ])) continue;
+                    $service->sendCoupon($site_id, $member_id, $coupon_id, $config[ 'coupon_list' ][ 'id_' . $coupon_id ]);
+                }
             }
         },
         "content" => [
             // 管理端
-            'admin' => function($site_id, $config) {
+            'admin' => function ($site_id, $config) {
+                if (empty($config[ 'coupon_id' ])) {
+                    return '';
+                }
                 $content = [];
                 $model = ( new addon\phone_shop\app\model\coupon\Coupon() );
                 $coupon_list = $model->where([ [ 'site_id', '=', $site_id ], [ 'id', 'in', $config[ 'coupon_id' ] ] ])->field('id,title')->select()->toArray();
@@ -28,7 +33,10 @@ return [
                 return implode(',', $content);
             },
             // 会员等级
-            'member_level' => function($site_id, $config) {
+            'member_level' => function ($site_id, $config) {
+                if (empty($config[ 'coupon_id' ])) {
+                    return '';
+                }
                 $content = [];
                 $model = ( new addon\phone_shop\app\model\coupon\Coupon() );
                 $coupon_list = $model->where([ [ 'site_id', '=', $site_id ], [ 'id', 'in', $config[ 'coupon_id' ] ] ])->field('id,price')->select()->toArray();
@@ -43,7 +51,10 @@ return [
                 return $content;
             },
             // 会员签到（日签）
-            'member_sign' => function($site_id, $config) {
+            'member_sign' => function ($site_id, $config) {
+                if (empty($config[ 'coupon_id' ])) {
+                    return [];
+                }
                 $content = [];
                 $model = ( new addon\phone_shop\app\model\coupon\Coupon() );
                 $coupon_list = $model->where([ [ 'site_id', '=', $site_id ], [ 'id', 'in', $config[ 'coupon_id' ] ] ])->field('id,price')->select()->toArray();
@@ -58,7 +69,10 @@ return [
                 return $content;
             },
             // 会员签到（连签）
-            'member_sign_continue' => function($site_id, $config) {
+            'member_sign_continue' => function ($site_id, $config) {
+                if (empty($config[ 'coupon_id' ])) {
+                    return [];
+                }
                 $content = [];
                 $model = ( new addon\phone_shop\app\model\coupon\Coupon() );
                 $coupon_list = $model->where([ [ 'site_id', '=', $site_id ], [ 'id', 'in', $config[ 'coupon_id' ] ] ])->field('id,price')->select()->toArray();

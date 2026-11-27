@@ -12,8 +12,7 @@
                 <el-tab-pane :label="t('tabGoodsCategoryConfig')" name="/phone_shop/goods/category/config" />
             </el-tabs>
             <div class="mt-[10px]">
-                <el-table :data="categoryTable.data" ref="tableRef" size="large" v-loading="categoryTable.loading"
-                    row-key="category_id" :tree-props="{ hasChildren: 'hasChildren', children: 'child_list' }">
+                <el-table :data="categoryTable.data" ref="tableRef" size="large" v-loading="categoryTable.loading" row-key="category_id" :tree-props="{ hasChildren: 'hasChildren', children: 'child_list' }">
                     <template #empty>
                         <span>{{ !categoryTable.loading ? t('emptyData') : '' }}</span>
                     </template>
@@ -23,16 +22,13 @@
                             <span class="order-2">{{ row.category_name }}</span>
                         </template>
                     </el-table-column>
-                    <el-table-column :label="t('分类id')" min-width="120" prop="category_id" />
-                    <el-table-column :label="t('memoryGroup')" min-width="120" prop="group_name" />
                     <el-table-column :label="t('image')" width="170" align="left">
                         <template #default="{ row }">
                             <div class="h-[30px]">
                                 <el-image class="w-[30px] h-[30px] " :src="img(row.image)" fit="contain">
                                     <template #error>
                                         <div class="image-slot">
-                                            <img class="w-[30px] h-[30px]"
-                                                src="@/addon/phone_shop/assets/category_default.png" />
+                                            <img class="w-[30px] h-[30px]" src="@/addon/phone_shop/assets/category_default.png" />
                                         </div>
                                     </template>
                                 </el-image>
@@ -41,19 +37,15 @@
                     </el-table-column>
                     <el-table-column prop="is_show" :label="t('isShow')" width="400">
                         <template #default="{ row }">
-                            <el-tag class="cursor-pointer" :type="row.is_show != 2 ? 'success' : 'danger'"
-                                @click="showClick(row)">{{ row.is_show != 2 ? '是' : '否' }}</el-tag>
+                            <el-tag class="cursor-pointer" :type="row.is_show != 2 ? 'success' : 'danger'" @click="showClick(row)">{{ row.is_show != 2 ? '是' : '否' }}</el-tag>
                         </template>
                     </el-table-column>
-                    <!-- <el-table-column prop="sort" :label="t('sort')" width="120" /> -->
+                     <el-table-column prop="sort" :label="t('sort')" width="120" />
                     <el-table-column :label="t('operation')" fixed="right" align="right" width="200">
                         <template #default="{ row }">
-                            <el-button type="primary" link @click="spreadEvent(row)">{{ t('spreadGoodsCategory')
-                                }}</el-button>
-                            <el-button type="primary" v-if="userStore().siteInfo.site_id == row.site_id" link
-                                @click="editEvent(row)">{{ t('edit') }}</el-button>
-                            <el-button type="primary" v-if="userStore().siteInfo.site_id == row.site_id" link
-                                @click="deleteEvent(row)">{{ t('delete') }}</el-button>
+                            <el-button type="primary" link @click="spreadEvent(row)">{{ t('spreadGoodsCategory') }}</el-button>
+                            <el-button type="primary" link @click="editEvent(row)">{{ t('edit') }}</el-button>
+                            <el-button type="primary" link @click="deleteEvent(row)">{{ t('delete') }}</el-button>
                         </template>
                     </el-table-column>
 
@@ -64,7 +56,7 @@
         </el-card>
 
         <!-- 商品分类推广弹出框 -->
-        <goods-category-spread-popup ref="goodsCategorySpreadPopupRef" />
+        <spread-popup ref="spreadPopupRef" />
 
     </div>
 </template>
@@ -76,20 +68,15 @@ import { getCategoryTree, deleteCategory, updateCategory, editCategory } from '@
 import { img } from '@/utils/common'
 import { ElMessageBox } from 'element-plus'
 import categoryEdit from '@/addon/phone_shop/views/goods/components/category-edit.vue'
-import goodsCategorySpreadPopup from '@/addon/phone_shop/views/goods/components/goods-category-spread-popup.vue'
 import { useRoute, useRouter } from 'vue-router'
 import Sortable from 'sortablejs'
 import { useTemplateRefsList } from '@vueuse/core'
 import { cloneDeep } from 'lodash-es'
-import userStore from '@/stores/modules/user'
-
+import spreadPopup from '@/components/spread-popup/index.vue'
 
 const route = useRoute()
 const pageName = route.meta.title
 const tableRef = useTemplateRefsList<HTMLElement>()
-
-
-
 const categoryTable = reactive({
     loading: true,
     data: []
@@ -156,16 +143,16 @@ const rowDrop = () => {
 }
 
 /**
-  * 将树数据转化为平铺数据
-  * @param <Array> treeData当前要转的id
-  * @param <String> childKey 子级字段
-  * @return <Array> 返回数据
-  */
-const treeToTile = (treeData: any, childKey = 'child_list') => {
-    const arr: Array<any> = []
-    const expanded = (data: any) => {
+ * 将树数据转化为平铺数据
+ * @param childKey
+ * @param treeData
+ * @param childKey
+ */
+const treeToTile = (treeData:any, childKey = 'child_list') => {
+    const arr:Array<any> = []
+    const expanded = (data:any) => {
         if (data && data.length > 0) {
-            data.filter((d: any) => d).forEach((e: any) => {
+            data.filter((d:any) => d).forEach((e:any) => {
                 arr.push(e)
                 expanded(e[childKey] || [])
             })
@@ -189,7 +176,9 @@ const loadCategoryList = () => {
     })
 }
 const updateCategoryFn = (params: any) => {
-    updateCategory(params).then(res => { })
+    updateCategory(params).then(res => {
+        loadCategoryList()
+    })
 }
 
 const showClick = (row: any) => {
@@ -236,10 +225,16 @@ const deleteEvent = (row: any) => {
 }
 
 // 商品分类推广
-const goodsCategorySpreadPopupRef: any = ref(null)
+const spreadPopupRef = ref(null)
 
 const spreadEvent = (data: any) => {
-    goodsCategorySpreadPopupRef.value.show(data)
+    const pagePath = '/addon/phone_shop/pages/goods/list'
+    const paramsArr = [
+        { name: 'curr_goods_category', value: data.category_id },
+    ];
+    const title = '商品分类推广'
+    const folder = 'goods_category'
+    spreadPopupRef.value?.show(pagePath, paramsArr, title, folder);
 }
 
 const router = useRouter()
@@ -252,7 +247,7 @@ const handleClick = (path: string) => {
 
 <style lang="scss" scoped>
 :deep(.el-table__row) {
-    >.el-table__cell:nth-child(1) {
+    > .el-table__cell:nth-child(1) {
         .cell {
             display: flex;
             align-items: center;

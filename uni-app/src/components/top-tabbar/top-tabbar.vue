@@ -1,23 +1,23 @@
 <template>
-    <view class="ns-navbar-wrap" v-if="diyStore.mode !='decorate' && topStatusBarData" :class="topStatusBarData.style">
+    <view class="ns-navbar-wrap" v-if="diyStore.mode !='decorate' && topStatusBarData" :class="[topStatusBarData.style, { 'is-h5-visible': topStatusBarData.h5Visible === true }]">
         <view class="u-navbar z-100" :class="{'fixed': props.scrollBool != -1, 'absolute': props.scrollBool == -1}" :style="{ backgroundColor: bgColor}">
             <view class="navbar-inner" :style="{ width: '100%', height: placeholderHeight + 'px' }">
                 <view v-if="topStatusBarData.style == 'style-1'" class="content-wrap" :class="[topStatusBarData.textAlign]" :style="navbarInnerStyle">
-                    <view class="back-wrap -ml-[16rpx] text-[26px] nc-iconfont nc-icon-zuoV6xx" :class="{'!text-transparent': !isBackShow}" :style="{ color: titleTextColor }" @tap="goBack"></view>
+                    <view v-if="isBackShow" class="back-wrap nc-iconfont nc-icon-zuoV6xx" :class="{'!text-transparent': !isBackShow}" :style="{ color: titleTextColor }" @tap="goBack"></view>
                     <view class="title-wrap" :style="styleOneFontSize">{{ data.title }}</view>
                 </view>
                 <view v-if="topStatusBarData.style == 'style-2'" class="content-wrap" :style="navbarInnerStyle" @click="diyStore.toRedirect(topStatusBarData.link)">
-                    <view class="back-wrap -ml-[16rpx] text-[26px] nc-iconfont nc-icon-zuoV6xx" :style="{ color: titleTextColor }" :class="{'!text-transparent': !isBackShow}" @tap="goBack"></view>
+                    <view class="back-wrap nc-iconfont nc-icon-zuoV6xx" :style="{ color: titleTextColor }" :class="{'!text-transparent': !isBackShow}" @tap="goBack"></view>
                     <view class="title-wrap" :style="{ color: topStatusBarData.textColor }">
                         <view>
                             <image :src="img(topStatusBarData.imgUrl)" mode="heightFix"/>
                         </view>
-                        <view :style="{ color: topStatusBarData.textColor }">{{ data.title }}</view>
+                        <view :style="{ color: topStatusBarData.textColor, ...titleTypography }">{{ data.title }}</view>
                     </view>
                 </view>
 
                 <view v-if="topStatusBarData.style == 'style-3'" :style="navbarInnerStyle" class="content-wrap">
-                    <view v-if="isBackShow" class="back-wrap -ml-[16rpx] text-[26px] nc-iconfont nc-icon-zuoV6xx" :style="{ color: titleTextColor }" @tap="goBack" :class="{'!text-transparent': !isBackShow}"></view>
+                    <view v-if="isBackShow" class="back-wrap nc-iconfont nc-icon-zuoV6xx" :style="{ color: titleTextColor }" @tap="goBack" :class="{'!text-transparent': !isBackShow}"></view>
                     <view class="title-wrap" @click="diyStore.toRedirect(topStatusBarData.link)">
                         <image :src="img(topStatusBarData.imgUrl)" mode="heightFix"/>
                     </view>
@@ -29,10 +29,10 @@
                 </view>
 
                 <view v-if="topStatusBarData.style == 'style-4'" :style="navbarInnerStyle" class="content-wrap">
-                    <view class="back-wrap -ml-[16rpx] text-[26px] nc-iconfont nc-icon-zuoV6xx" :style="{ color: titleTextColor }" @tap="goBack" :class="{'!text-transparent': !isBackShow}"></view>
+                    <view class="back-wrap nc-iconfont nc-icon-zuoV6xx" :style="{ color: titleTextColor }" @tap="goBack" :class="{'!text-transparent': !isBackShow}"></view>
                     <text class="nc-iconfont nc-icon-dizhiguanliV6xx text-[28rpx]" :style="{ color: topStatusBarData.textColor }"></text>
-                    <view class="title-wrap" @click.stop="locationVal.reposition()" :style="{ color: topStatusBarData.textColor }" v-if="systemStore.diyAddressInfo">{{ systemStore.diyAddressInfo.community }}</view>
-                    <view class="title-wrap" @click.stop="locationVal.reposition()" :style="{ color: topStatusBarData.textColor }" v-else>{{ systemStore.defaultPositionAddress }}</view>
+                    <view class="title-wrap" @click.stop="locationVal.reposition()" :style="{ color: topStatusBarData.textColor, ...titleTypography }" v-if="systemStore.diyAddressInfo">{{ systemStore.diyAddressInfo.community }}</view>
+                    <view class="title-wrap" @click.stop="locationVal.reposition()" :style="{ color: topStatusBarData.textColor, ...titleTypography }" v-else>{{ systemStore.defaultPositionAddress }}</view>
                     <text class="nc-iconfont nc-icon-youV6xx text-[26rpx]" @click.stop="locationVal.reposition()" :style="{ color: topStatusBarData.textColor }"></text>
                 </view>
             </view>
@@ -45,7 +45,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, getCurrentInstance, nextTick } from 'vue';
-import { redirect, img } from '@/utils/common';
+import { redirect, img ,currRoute} from '@/utils/common';
 import useSystemStore from '@/stores/system';
 import useDiyStore from '@/app/stores/diy';
 import { useLocation } from '@/hooks/useLocation'
@@ -104,6 +104,20 @@ const topStatusBarData = computed(() => {
     if (props.data && props.data.topStatusBar) return props.data.topStatusBar;
 });
 
+// Optional page-level typography; absent/invalid values preserve the existing
+// platform defaults. Values are numeric pixels, never arbitrary CSS strings.
+const titleTypography = computed(() => {
+    const config = topStatusBarData.value || {};
+    const style: Record<string, string | number> = {};
+    const size = Number(config.titleFontSize);
+    const weight = Number(config.titleFontWeight);
+    const lineHeight = Number(config.titleLineHeight);
+    if (Number.isFinite(size) && size >= 12 && size <= 32) style.fontSize = size + 'px';
+    if (Number.isInteger(weight) && weight >= 100 && weight <= 900 && weight % 100 === 0) style.fontWeight = weight;
+    if (Number.isFinite(lineHeight) && lineHeight >= 16 && lineHeight <= 48) style.lineHeight = lineHeight + 'px';
+    return style;
+});
+
 // 导航栏内部盒子的样式
 const navbarInnerStyle = computed(() => {
     let style = '';
@@ -125,6 +139,12 @@ const navbarInnerStyle = computed(() => {
     // #endif
     // #ifdef APP-PLUS
      style += 'padding-top:' + systemStore.systemInfo.statusBarHeight + 'px;';
+    // #endif
+    // #ifdef H5
+    if (topStatusBarData.value.h5Visible === true) {
+        const height = Number(topStatusBarData.value.h5Height);
+        style += 'height:' + (Number.isFinite(height) && height >= 32 && height <= 80 ? height : 44) + 'px;';
+    }
     // #endif
     return style;
 })
@@ -151,6 +171,10 @@ const styleOneFontSize = computed(() => {
     if (topStatusBarData.value.style == 'style-1') {
         style += `text-align: ${ topStatusBarData.value.textAlign };`;
     }
+    Object.entries(titleTypography.value).forEach(([property, value]) => {
+        const name = property.replace(/[A-Z]/g, letter => '-' + letter.toLowerCase());
+        style += `${name}:${value};`;
+    });
     return style;
 })
 
@@ -192,9 +216,11 @@ if (componentsScrollVal) {
 let pages = getCurrentPages();
 const isBackShow = computed(() => {
     let bool = false;
-    if (props.isBack) {
+    if (props.isBack && pages.length > 1) {
         bool = true; 
-    } 
+    } else if (currRoute() == 'app/pages/auth/index' || currRoute() == 'app/pages/auth/login') {
+        bool = true;
+    }
     return bool;
 })
 
@@ -285,6 +311,12 @@ defineExpose({
     display: none;
 }
 
+.is-h5-visible.style-1,
+.is-h5-visible.style-2,
+.is-h5-visible.style-3 {
+    display: block;
+}
+
 /* #endif */
 
 .u-navbar {
@@ -310,6 +342,8 @@ defineExpose({
 .back-wrap {
     padding-right: 10rpx;
     line-height: 1;
+    margin-left: -16rpx;
+    font-size: 26rpx;
 
     .iconfont {
         font-size: 40rpx;

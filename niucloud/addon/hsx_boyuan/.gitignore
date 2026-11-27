@@ -1,0 +1,7 @@
+!README.md
+!docs/*.md
+!tests/
+!tests/**
+tests/evidence/
+tests/acceptance/.vite/
+node_modules/

@@ -1,28 +1,33 @@
 <template>
     <el-dialog v-model="showDialog" :title="t('detail')" width="800px" :destroy-on-close="true">
-        <el-scrollbar height="400px" v-loading="loading">
+        <el-scrollbar height="400px" v-loading="loading" class="invoice-detail-wrap">
             <el-descriptions :column="2">
-                <el-descriptions-item :label="t('headerName')" label-align="right">{{ logData.header_name }}</el-descriptions-item>
-                <el-descriptions-item :label="t('headTypeName')" label-align="right">{{ logData.header_type_name }}</el-descriptions-item>
-                <el-descriptions-item :label="t('name')" label-align="right">{{ logData.name }}</el-descriptions-item>
-                <el-descriptions-item :label="t('invoiceNumber')" label-align="right">{{ logData.invoice_number }}</el-descriptions-item>
-                <el-descriptions-item :label="t('typeName')" label-align="right">{{ logData.type_name }}</el-descriptions-item>
-                <el-descriptions-item :label="t('taxNumber')" label-align="right">{{ logData.tax_number}}</el-descriptions-item>
-                <el-descriptions-item :label="t('money')" label-align="right">{{ logData.money }}</el-descriptions-item>
-                <el-descriptions-item :label="t('invoiceTime')" label-align="right">{{ logData.invoice_time === 0 ? '' : logData.invoice_time }}</el-descriptions-item>
+                <el-descriptions-item :label="t('headerName')" label-align="right">{{ logData.header_name || '--' }}</el-descriptions-item>
+                <el-descriptions-item :label="t('headTypeName')" label-align="right">{{ logData.header_type_name || '--' }}</el-descriptions-item>
+                <el-descriptions-item :label="t('name')" label-align="right">{{ logData.name || '--' }}</el-descriptions-item>
+                <el-descriptions-item :label="t('invoiceNumber')" label-align="right">{{ logData.invoice_number || '--' }}</el-descriptions-item>
+                <el-descriptions-item :label="t('typeName')" label-align="right">{{ logData.type_name || '--' }}</el-descriptions-item>
+                <el-descriptions-item :label="t('taxNumber')" label-align="right">{{ logData.tax_number || '--'}}</el-descriptions-item>
+                <el-descriptions-item :label="t('money')" label-align="right">{{ logData.money || '--' }}</el-descriptions-item>
+                <el-descriptions-item :label="t('invoiceTime')" label-align="right">{{ logData.invoice_time === 0 ? '--' : logData.invoice_time }}</el-descriptions-item>
                 <el-descriptions-item :label="t('invoiceVoucher')" label-align="right">
-					<span>
-                        <img class="w-[50px] max-h-[50px] inline-block" v-if="logData.invoice_voucher" :src="img(logData.invoice_voucher)" alt="" @click="previewImage" >
+                    <span>
+                        <img class="w-[50px] max-h-[50px] inline-block" v-if="logData.invoice_voucher" :src="img(logData.invoice_voucher)" alt="" @click="previewImageInvoice(logData.invoice_voucher)" >
                     </span>
                 </el-descriptions-item>
-                <el-descriptions-item :label="t('bankTame')" label-align="right">{{ logData.bank_name }}</el-descriptions-item>
-                <el-descriptions-item :label="t('bankCardNumber')" label-align="right">{{ logData.bank_card_number }}</el-descriptions-item>
-                <el-descriptions-item :label="t('address')" label-align="right">{{ logData.address }}</el-descriptions-item>
-                <el-descriptions-item :label="t('telephone')" label-align="right">{{ logData.telephone }}</el-descriptions-item>
-                <el-descriptions-item :label="t('email')" label-align="right">{{ logData.email }}</el-descriptions-item>
-                <el-descriptions-item :label="t('mobile')" label-align="right">{{ logData.mobile }}</el-descriptions-item>
-                <el-descriptions-item :label="t('createTime')" label-align="right">{{ logData.create_time }}</el-descriptions-item>
-                <el-descriptions-item :label="t('remark')" label-align="right">{{ logData.remark }}</el-descriptions-item>
+                <el-descriptions-item :label="t('支付凭证')" label-align="right">
+                    <span v-if="logData.pay_voucher">
+                        <img class="w-[50px] max-h-[50px] inline-block"  v-for="(item, index) in logData.pay_voucher.split(',')" :key="index" :src="img(item)" alt="" @click="previewImageInvoice(item)" >
+                    </span>
+                </el-descriptions-item>
+                <el-descriptions-item :label="t('bankTame')" label-align="right">{{ logData.bank_name || '--' }}</el-descriptions-item>
+                <el-descriptions-item :label="t('bankCardNumber')" label-align="right">{{ logData.bank_card_number || '--' }}</el-descriptions-item>
+                <el-descriptions-item :label="t('address')" label-align="right">{{ logData.address || '--' }}</el-descriptions-item>
+                <el-descriptions-item :label="t('telephone')" label-align="right">{{ logData.telephone || '--' }}</el-descriptions-item>
+                <!-- <el-descriptions-item :label="t('email')" label-align="right">{{ logData.email || '--' }}</el-descriptions-item> -->
+                <!-- <el-descriptions-item :label="t('mobile')" label-align="right">{{ logData.mobile || '--' }}</el-descriptions-item> -->
+                <el-descriptions-item :label="t('createTime')" label-align="right">{{ logData.create_time || '--' }}</el-descriptions-item>
+                <el-descriptions-item :label="t('remark')" label-align="right">{{ logData.remark || '--' }}</el-descriptions-item>
             </el-descriptions>
         </el-scrollbar>
 
@@ -36,7 +41,7 @@
 </template>
 
 <script lang="ts" setup>
-import { ref,reactive } from 'vue'
+import { ref, reactive } from 'vue'
 import { t } from '@/lang'
 import { getInvoiceDetail } from '@/addon/phone_shop/api/order'
 import { img } from '@/utils/common'
@@ -66,10 +71,10 @@ const logData = ref<LogDataType>({})
 const getInvoiceDetailList = async () => {
     logData.value = await (await getInvoiceDetail(id)).data
     loading.value = false
-    previewImageList.splice(0, previewImageList.length);
-    if (logData.value.invoice_voucher) {
-        previewImageList.push(img(logData.value.invoice_voucher))
-    }
+    // previewImageList.splice(0, previewImageList.length)
+    // if (logData.value.invoice_voucher) {
+    //     previewImageList.push(img(logData.value.invoice_voucher))
+    // }
 }
 
 let id = 0
@@ -82,6 +87,12 @@ const setFormData = async (row: any = null) => {
 }
 
 const previewImageList: string[] = reactive([])
+
+const previewImageInvoice = (item: string) => {
+    previewImageList.splice(0, previewImageList.length)
+    previewImageList.push(img(item))
+    imageViewer.show = true
+}
 
 /**
  * 查看图片
@@ -100,4 +111,23 @@ defineExpose({
 })
 </script>
 
-<style lang="scss" scoped></style>
+<style lang="scss">
+.invoice-detail-wrap{
+    .el-descriptions .el-descriptions__body .el-descriptions__table{
+        tr{
+            display: flex;
+        }
+        .el-descriptions__cell{
+            display: flex;
+            flex: 1;
+            .el-descriptions__label{
+                white-space: nowrap;
+            }
+            .el-descriptions__content{
+                width: 290px;
+                line-height: 1.4;
+            }
+        }
+    }
+}
+</style>

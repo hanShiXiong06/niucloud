@@ -37,23 +37,34 @@ class AfterShopOrderFinish
 
             //定时关闭订单允许退款开关
             $core_order_config_service = new CoreOrderConfigService();
-            $order_config = $core_order_config_service->orderRefund($order_data[ 'site_id' ]);
-            if ($order_config[ 'no_allow_refund' ] == 1) {
+            $order_config = $core_order_config_service->orderRefund($order_data[ 'site_id' ]); //确认收货后售后，1.开启，2.关闭
+            $paymentMode = (string)($order_data['payment_mode'] ?? '');
+            if ($paymentMode === '') {
+                $paymentMode = (string)((new Order())->where([
+                    ['order_id', '=', (int)$order_data['order_id']],
+                ])->value('payment_mode') ?? 'online');
+            }
+            $isOnlinePayment = $paymentMode === 'online';
+            if (!$isOnlinePayment || $order_config[ 'no_allow_refund' ] == 2) {//线下订单始终由ERP处理退款
+                ( new Order() )->where([ [ 'order_id', '=', $order_data[ 'order_id' ] ] ])->update([
+                    'is_enable_refund' => 0
+                ]);
                 ( new OrderGoods() )->where([ [ 'order_id', '=', $order_data[ 'order_id' ] ] ])->update([
                     'is_enable_refund' => 0
                 ]);
             } else {
                 if ($order_config[ 'refund_length' ] > 0) {
                     ( new Order() )->where([ [ 'order_id', '=', $order_data[ 'order_id' ] ] ])->update([
-                        'timeout' => $order_data[ 'finish_time' ] + $order_config[ 'refund_length' ] * 60
+                        'is_enable_refund' => 1,
+                        'timeout' => $order_data[ 'finish_time' ] + $order_config[ 'refund_length' ] * 86400  //确认收货后售后，单位为天
                     ]);
 //                OrderCloseAllowRefund::dispatch(['order_id' => $order_data['order_id'] ], secs: $order_config['refund_length'] * 86400);
                 }
             }
 
             // 订单完成发放积分成长值
-            CoreMemberService::sendGrowth($order_data[ 'site_id' ], $order_data[ 'member_id' ], 'shop_buy_goods', $order_data);
-            CoreMemberService::sendGrowth($order_data[ 'site_id' ], $order_data[ 'member_id' ], 'shop_buy_order');
+            CoreMemberService::sendGrowth($order_data[ 'site_id' ], $order_data[ 'member_id' ], 'shop_buy_goods', array_merge($order_data, [ 'from_type' => 'shop_buy_goods', 'related_id' => $order_data[ 'order_id' ] ]));
+            CoreMemberService::sendGrowth($order_data[ 'site_id' ], $order_data[ 'member_id' ], 'shop_buy_order',['from_type'=>'shop_buy_order','related_id'=>$order_data[ 'order_id' ] ]);
             CoreMemberService::sendPoint($order_data[ 'site_id' ], $order_data[ 'member_id' ], 'shop_buy_goods', array_merge($order_data, [ 'from_type' => 'consume_reward', 'related_id' => $order_data[ 'order_id' ] ]));
 
             // 微信小程序 发送 确认收货提醒消息

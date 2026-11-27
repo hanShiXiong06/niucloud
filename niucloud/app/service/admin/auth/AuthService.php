@@ -20,9 +20,11 @@ use app\service\admin\sys\MenuService;
 use app\service\admin\sys\RoleService;
 use app\service\admin\user\UserRoleService;
 use app\service\admin\user\UserService;
+use app\service\core\niucloud\CoreAuthService;
 use app\service\core\site\CoreSiteService;
 use core\base\BaseAdminService;
 use core\exception\AuthException;
+use core\exception\CommonException;
 use Exception;
 use think\facade\Cache;
 
@@ -64,13 +66,15 @@ class AuthService extends BaseAdminService
      */
     public function checkRole(Request $request)
     {
+        $this->checkAuthinfo($request);
 
         $rule = strtolower(trim($request->rule()->getRule()));
         $method = strtolower(trim($request->method()));
         $site_info = (new AuthSiteService())->getSiteInfo();
         if ($method != 'get') {
-            if ($site_info['status'] == SiteDict::EXPIRE) throw new AuthException('SITE_EXPIRE_NOT_ALLOW');
-            if ($site_info['status'] == SiteDict::CLOSE) throw new AuthException('SITE_CLOSE_NOT_ALLOW');
+//            throw new AuthException('演示站禁止操作');
+            if ($site_info[ 'status' ] == SiteDict::EXPIRE) throw new AuthException('SITE_EXPIRE_NOT_ALLOW');
+            if ($site_info[ 'status' ] == SiteDict::CLOSE) throw new AuthException('SITE_CLOSE_NOT_ALLOW');
         }
 
         $menu_service = new MenuService();
@@ -93,6 +97,51 @@ class AuthService extends BaseAdminService
 
         throw new AuthException('NO_PERMISSION');
 
+    }
+
+    public function checkAuthinfo(Request $request) {
+        $rule = strtolower(trim($request->rule()->getRule()));
+        $method = strtolower(trim($request->method()));
+
+        if ($method == 'get') return;
+
+        $ignore = ['niucloud/authinfo', 'upgrade', 'niucloud/build', 'sys/cache/clear'];
+        foreach ($ignore as $item) {
+            if (strpos($rule, $item) !== false) return;
+        }
+
+        $authinfo = [];
+        try {
+            $authinfo = (new CoreAuthService())->getAuthInfo()['data'] ?? [];;
+        } catch (Exception $e) {
+        }
+        if (empty($authinfo)) return;
+
+        if (!$this->isCheckDomain()) return;
+
+        $site_address = $authinfo['site_address'] ?? '';
+        $domain = request()->domain();
+
+        // 如果是站点域名不进行验证
+        $site_id = (new CoreSiteService())->getSiteIdByDomain($domain);
+        if (!empty($site_id)) return;
+
+        if (!empty($site_address) && strpos($domain, $site_address) !== false) return;
+
+        throw new CommonException("授权域名校验失败！请确保当前访问域名与授权码绑定的域名一致");
+    }
+
+    private function isCheckDomain() {
+        // .env [SYSTEM] AUTH_DOMAIN_IGNORE_HOSTS（逗号分隔）：当前访问域名/IP 命中其一则不校验授权域名。
+        $ignore = array_filter(array_map('trim', explode(',', (string)env('system.auth_domain_ignore_hosts', ''))));
+        // 兼容原有逻辑：本机回环始终放过
+        $ignore = array_values(array_unique(array_merge($ignore, ['127.0.0.1', 'localhost', '172.16.28.64'])));
+        $host = explode(':', (string)request()->host())[0];
+        $ip = (string)request()->ip();
+        if (in_array($host, $ignore, true) || in_array($ip, $ignore, true)) {
+            return false;
+        }
+        return true;
     }
 
     /**

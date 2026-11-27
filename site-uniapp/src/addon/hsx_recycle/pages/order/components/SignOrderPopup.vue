@@ -1,0 +1,1430 @@
+<template>
+    <u-popup :show="show" mode="bottom" round="20" :safeAreaInsetBottom="true" :closeOnClickOverlay="!operationBusy" @close="handleClose">
+        <view class="sign-popup" :class="{ 'sign-popup--agent': isAgent }">
+            <!-- 头部 -->
+            <view class="popup-header">
+                <view class="popup-title">{{ isAgent ? '代客户下单' : '订单签收' }} · {{ devices.length }} 台设备</view>
+                <text class="nc-iconfont nc-icon-guanbiV6xx1 text-[32rpx] text-[#999]" @click="handleClose"></text>
+            </view>
+
+            <!-- 提示 -->
+            <view class="tip-bar">
+                <text>{{ isAgent ? '先选择客户，再录入已收到的设备；下单签收后进入质检，不发起上门取件。' : '请确认设备信息无误后签收，签收后将进入质检流程' }}</text>
+            </view>
+
+            <!-- 设备列表 -->
+            <scroll-view scroll-y class="device-list">
+                <view v-if="isAgent" class="agent-customer">
+                    <view class="agent-customer__row" @click="openMemberPicker">
+                        <text class="agent-customer__label">客户 <text class="agent-required">*</text></text>
+                        <view class="agent-customer__main">
+                            <text :class="{ 'agent-placeholder': !selectedMember }">{{ selectedMember ? (selectedMember.nickname || selectedMember.username || '已选客户') : '选择客户' }}</text>
+                            <text v-if="selectedMember" class="agent-customer__mobile">{{ selectedMember.mobile || '未绑定手机号' }}</text>
+                        </view>
+                        <text v-if="!agentState.draftId && !agentState.creatingUnknown" class="nc-iconfont nc-icon-youV6xx1"></text>
+                    </view>
+                    <view class="agent-delivery">
+                        <text class="agent-customer__label">到货方式</text>
+                        <view class="agent-delivery__options">
+                            <view :class="{ 'agent-delivery--active': deliveryType === '2' }" @click="selectDelivery('2')">到店</view>
+                            <view :class="{ 'agent-delivery--active': deliveryType === '1' }" @click="selectDelivery('1')">快递已到</view>
+                        </view>
+                    </view>
+                    <view v-if="deliveryType === '1'" class="agent-express">
+                        <ScanCodeInput v-model="expressNo" :disabled="Boolean(operationBusy || agentState.draftId || agentState.creatingUnknown)" :maxlength="80" placeholder="填写或扫描快递单号" inputAlign="left" border="none" />
+                    </view>
+                    <view class="agent-total">
+                        <text class="agent-customer__label">本单总台数</text>
+                        <view class="agent-total__control">
+                            <view class="agent-total__input" :class="{ 'agent-total__input--locked': countConfirmed }">
+                                <u-input v-model="agentTotalInput" type="number" :maxlength="5" border="none" inputAlign="center"
+                                    :disabled="Boolean(operationBusy || agentState.draftId || agentState.creatingUnknown)"
+                                    fontSize="28rpx" placeholder="1" @confirm="confirmTotal" />
+                            </view>
+                            <text class="agent-total__unit">台</text>
+                            <text v-if="countConfirmed" class="agent-total__locked">已锁定</text>
+                            <u-button v-else type="primary" size="mini" :plain="true" :loading="confirmingTotal"
+                                :disabled="submitting || agentState.creatingUnknown" :customStyle="{ width: '112rpx', margin: 0, flexShrink: 0 }"
+                                @click="confirmTotal">确定</u-button>
+                        </view>
+                    </view>
+                    <view class="agent-total__hint">{{ countConfirmed ? `已录入 ${devices.length} / 共 ${agentState.confirmedCount} 台，标签按此总数编号` : '先确认总台数，用于标签 1/N；确认后本单不可修改。' }}</view>
+                </view>
+                <view v-if="isAgent && agentState.draftId" class="agent-notice">订单 {{ agentState.orderNo || agentState.draftId }} 已建立，客户、到货方式及总台数已锁定；继续提交不会新建订单。</view>
+                <view v-if="isAgent && agentState.creatingUnknown" class="agent-notice agent-notice--error">
+                    <text>创建结果未确认，请先到订单列表核对，避免重复下单。当前填写会保留。</text>
+                    <view class="agent-retry" @click="confirmCreateRetry">已核对没有新订单，重新提交</view>
+                </view>
+                <view v-if="submitError" class="agent-notice agent-notice--error">{{ submitError }}</view>
+                <u-empty v-if="devices.length === 0" text="暂无设备，请点击下方添加" mode="list"></u-empty>
+
+                <view v-for="(device, index) in devices" :key="device.id || index" class="device-card">
+                    <view class="card-top">
+                        <text class="card-index">{{ index + 1 }}</text>
+                        <text class="card-model">{{ getDeviceModelLeafName(device.model, '未填写型号') }}</text>
+                        <view class="card-actions">
+                            <text class="nc-iconfont nc-icon-bianjiV6xx1 action-icon" @click="editDevice(device, index)"></text>
+                            <text class="nc-iconfont nc-icon-shanchuV6xx1 action-icon action-icon--danger" @click="deleteDevice(index)"></text>
+                        </view>
+                    </view>
+                    <view class="card-body">
+                        <view class="card-row">
+                            <text class="card-label">IMEI</text>
+                            <text class="card-value card-value--mono">{{ device.imei || '未填写' }}</text>
+                        </view>
+                        <view v-if="device.user_sn" class="card-row">
+                            <text class="card-label">用户串号</text>
+                            <text class="card-value">{{ device.user_sn }}</text>
+                        </view>
+                        <view v-if="device.initial_price && Number(device.initial_price) > 0" class="card-row">
+                            <text class="card-label">预估价</text>
+                            <text class="card-value card-value--price">¥{{ device.initial_price }}</text>
+                        </view>
+                    </view>
+                </view>
+
+                <!-- 添加设备 -->
+                <view class="add-btn" :class="{ 'add-btn--disabled': isAgent && (!countConfirmed || devices.length >= agentState.confirmedCount) }" @click="addDevice">
+                    <text class="nc-iconfont nc-icon-tianjiaV6xx1 text-[28rpx] mr-[8rpx]"></text>
+                    <text>添加设备</text>
+                </view>
+            </scroll-view>
+
+            <NextAssigneePicker v-model="nextAssigneeUid" stage-key="check" label="下一步 · 质检负责人" />
+
+            <!-- 底部 -->
+            <view class="popup-footer">
+                <u-button @click="handleClose" :disabled="operationBusy" :customStyle="{ flex: 1 }">{{ isAgent && agentState.draftId ? '稍后继续' : '取消' }}</u-button>
+                <u-button type="primary" :loading="submitting" :disabled="confirmingTotal || (isAgent && (agentState.creatingUnknown || !countConfirmed))" @click="handleSubmit" :customStyle="{ flex: 2 }">
+                    {{ isAgent ? (agentMemberError(Number(selectedMember?.member_id || 0)) ? '先选择客户' : '下单并签收') : '确认签收' }}
+                </u-button>
+            </view>
+        </view>
+
+        <!-- 编辑设备弹窗 -->
+        <u-popup :show="editVisible" mode="bottom" round="20" :safeAreaInsetBottom="true" @close="closeEdit">
+            <view class="edit-popup">
+                <view class="popup-header">
+                    <view class="popup-title">{{ editingIndex === -1 ? '添加设备' : '编辑设备' }}</view>
+                    <text class="nc-iconfont nc-icon-guanbiV6xx1 text-[32rpx] text-[#999]" @click="closeEdit"></text>
+                </view>
+
+                <scroll-view scroll-y class="edit-body">
+                    <u-form labelPosition="left" labelWidth="160rpx" errorType="toast">
+                        <u-form-item label="IMEI串号" required :border-bottom="false">
+                            <view class="form-control">
+                                <ScanCodeInput
+                                    v-model="editForm.imei"
+                                    type="text"
+                                    :maxlength="15"
+                                    border="none"
+                                    clearable
+                                    placeholder="6–15位字母或数字"
+                                    inputAlign="right"
+                                    fontSize="28rpx"
+                                    placeholderClass="text-[var(--text-color-light9)] text-[28rpx]"
+                                    @scan="handleImeiScan"
+                                />
+                            </view>
+                        </u-form-item>
+
+                        <u-form-item label="设备型号" required :border-bottom="false">
+                            <view class="model-select" @click="openModelPicker">
+                                <text class="model-select__text" :class="{ 'model-select__placeholder': !editForm.model }">
+                                    {{ getDeviceModelLeafName(editForm.model, '选择设备分类/末级设备') }}
+                                </text>
+                                <text class="nc-iconfont nc-icon-youV6xx1 model-select__icon"></text>
+                            </view>
+                        </u-form-item>
+                    </u-form>
+
+                    <view class="form-item">
+                        <view class="form-label">预估价格 <text class="text-[22rpx] text-[#999]">（选填）</text></view>
+                        <view class="price-input-wrap">
+                            <text class="price-symbol">¥</text>
+                            <u-input
+                                v-model="editForm.initial_price"
+                                type="number"
+                                border="none"
+                                clearable
+                                placeholder="0.00"
+                                class="price-input"
+                                inputAlign="right"
+                                fontSize="28rpx"
+                                placeholderClass="text-[var(--text-color-light9)] text-[28rpx]"
+                            ></u-input>
+                        </view>
+                    </view>
+
+                    <QuoteUserPicker v-model="editForm.initial_price_uid" v-model:name="editForm.initial_price_name" />
+                    <!-- 按后台模板显示全部已配置的设备摘要，不在移动端再次截断。 -->
+                    <view v-if="summaryLoading" class="summary-loading">
+                        <text>加载质检摘要项…</text>
+                    </view>
+                    <view v-else-if="summaryError" class="summary-error" role="alert">
+                        <text class="summary-error__title">设备摘要加载失败</text>
+                        <text class="summary-error__message">{{ summaryError }}</text>
+                        <text class="summary-error__tip">已填写的信息会保留，请重试后再保存。</text>
+                        <u-button size="small" :plain="true" type="primary" @click="loadSummaryFields">重新加载</u-button>
+                    </view>
+                    <view v-else-if="editForm.summary_fields && editForm.summary_fields.length" class="summary-section">
+                        <view class="summary-section__title">质检摘要 <text class="summary-section__tip">（签收即录，质检时自动带出）</text></view>
+                        <view v-for="field in editForm.summary_fields" :key="field.field_key" class="summary-field">
+                            <view class="summary-field__label">
+                                <text v-if="Number(field.is_required) === 1" class="summary-required">*</text>
+                                {{ field.field_name }}<text v-if="field.unit" class="summary-unit">（{{ field.unit }}）</text>
+                            </view>
+                            <!-- 选项类：通用标签选择组件 -->
+                            <RecycleTagGroup
+                                v-if="isOptionSummaryField(field)"
+                                v-model="editForm.summary_values[field.field_key]"
+                                :options="field.options"
+                                :multiple="isMultiSummaryField(field)"
+                            />
+                            <!-- 开关类 -->
+                            <u-switch v-else-if="isSwitchSummaryField(field)" v-model="editForm.summary_values[field.field_key]" size="22" />
+                            <!-- 文本/数字 -->
+                            <u-input
+                                v-else
+                                v-model="editForm.summary_values[field.field_key]"
+                                :type="field.component === 'number' ? 'number' : 'text'"
+                                border="bottom"
+                                clearable
+                                :placeholder="field.placeholder || '请输入'"
+                                fontSize="28rpx"
+                                inputAlign="right"
+                                placeholderClass="text-[var(--text-color-light9)] text-[28rpx]"
+                            ></u-input>
+                        </view>
+                    </view>
+                    <view v-else-if="summaryLoaded" class="summary-empty">{{ summaryEmptyMessage || '此型号的模板未配置设备摘要，可继续录入基础信息。' }}</view>
+
+                </scroll-view>
+
+                <view class="popup-footer">
+                    <u-button @click="closeEdit" :customStyle="{ flex: 1 }">取消</u-button>
+                    <u-button type="primary" :disabled="summaryLoading || !!summaryError" @click="saveEdit" :customStyle="{ flex: 2 }">{{ summaryLoading ? '摘要加载中' : '保存' }}</u-button>
+                </view>
+            </view>
+        </u-popup>
+
+        <u-popup :show="modelPickerVisible" mode="bottom" round="20" :safeAreaInsetBottom="true" @close="closeModelPicker">
+            <view class="model-picker-popup">
+                <view class="popup-header">
+                    <view class="popup-title">选择设备分类</view>
+                    <text class="nc-iconfont nc-icon-guanbiV6xx1 text-[32rpx] text-[#999]" @click="closeModelPicker"></text>
+                </view>
+
+                <view class="model-search">
+                    <u-input
+                        v-model="modelKeyword"
+                        border="none"
+                        clearable
+                        placeholder="搜索分类、路径或外部ID"
+                        fontSize="26rpx"
+                        @input="handleModelKeywordInput"
+                        @change="handleModelKeywordInput"
+                        @confirm="searchModelKeyword"
+                    ></u-input>
+                </view>
+                <scroll-view v-if="hasModelKeyword" scroll-y class="model-search-list">
+                    <view v-if="modelSearching" class="model-loading">搜索中...</view>
+                    <block v-if="!modelSearching && modelSearchList.length">
+                        <view
+                            v-for="item in modelSearchList"
+                            :key="item.id"
+                            class="model-search-item"
+                            @click="chooseModelNode(item)"
+                        >
+                            <text class="model-search-item__name">{{ getDeviceModelLeafName(item.model_full_name || item.node_name) }}</text>
+                            <text v-if="item.source_node_id" class="model-search-item__code">ID: {{ item.source_node_id }}</text>
+                        </view>
+                    </block>
+                    <view v-if="!modelSearching && !modelSearchList.length" class="model-loading">没有匹配分类</view>
+                </scroll-view>
+                <view v-else class="model-cascade">
+                    <view v-if="selectedModelPath.length" class="model-path">
+                        <text
+                            v-for="(name, index) in selectedModelPath"
+                            :key="`${name}-${index}`"
+                            class="model-path__item"
+                        >
+                            {{ name }}
+                        </text>
+                    </view>
+                    <view class="model-column-row">
+                        <scroll-view
+                            v-for="column in visibleModelColumns"
+                            :key="column.pid || 'root'"
+                            scroll-y
+                            class="model-column"
+                        >
+                            <view class="model-column__title">{{ getModelColumnTitle(column.index) }}</view>
+                            <view
+                                v-for="item in column.items"
+                                :key="item.id"
+                                class="model-option"
+                                :class="{ 'model-option--active': String(column.activeId) === String(item.id) }"
+                                @click="selectModelNode(item, column.index)"
+                            >
+                                <text class="model-option__name">{{ item.node_name }}</text>
+                                <text v-if="isLeafNode(item)" class="model-option__leaf">选择</text>
+                                <text v-else class="nc-iconfont nc-icon-youV6xx1 model-option__next"></text>
+                            </view>
+                        </scroll-view>
+                        <view v-if="!modelColumns.length || !modelColumns[0].items.length" class="model-empty">
+                            <text>暂无可选分类，请到 PC 端维护设备分类后再签收。</text>
+                        </view>
+                    </view>
+                </view>
+            </view>
+        </u-popup>
+        <RecycleMemberPicker v-if="isAgent" v-model:show="memberPickerVisible" :selected-member="selectedMember" @select="selectMember" />
+    </u-popup>
+</template>
+
+<script setup lang="ts">
+import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
+import { createAgentOrder, getOrderDetail, getDeviceModelDictChildren, searchDeviceModelDictOptions, updateOrder } from '@/addon/hsx_recycle/api/order'
+import { getCheckTemplateSchema } from '@/addon/hsx_recycle/api/check-template'
+import ScanCodeInput from '@/addon/hsx_recycle/components/ScanCodeInput.vue'
+import RecycleTagGroup from '@/addon/hsx_recycle/components/RecycleTagGroup.vue'
+import NextAssigneePicker from '@/addon/hsx_recycle/components/NextAssigneePicker.vue'
+import QuoteUserPicker from '@/addon/hsx_recycle/components/QuoteUserPicker.vue'
+import RecycleMemberPicker from '@/addon/hsx_recycle/components/RecycleMemberPicker.vue'
+import type { RecycleMemberOption } from '@/addon/hsx_recycle/components/RecycleMemberPicker.vue'
+import { agentMemberError, agentOrderError, confirmAgentOrderTotal, deviceEntryError, newAgentOrderState, submitAgentOrder } from '@/addon/hsx_recycle/utils/agentOrder'
+import { getDeviceModelLeafName } from '@/addon/hsx_recycle/utils/device'
+
+interface Props {
+    visible: boolean
+    orderId?: string | number
+    deviceList?: any[]
+    mode?: 'sign' | 'agent'
+}
+
+const props = defineProps<Props>()
+const emit = defineEmits(['update:visible', 'success', 'draft-saved'])
+
+const show = ref(false)
+const submitting = ref(false)
+const confirmingTotal = ref(false)
+const operationBusy = computed(() => submitting.value || confirmingTotal.value)
+const summaryLoading = ref(false) // 质检摘要字段加载中
+const summaryError = ref('')
+const summaryLoaded = ref(false)
+const summaryEmptyMessage = ref('')
+let summaryRequestId = 0
+const invalidateSummaryLoad = () => {
+    summaryRequestId++
+    summaryLoading.value = false
+    summaryError.value = ''
+    summaryLoaded.value = false
+    summaryEmptyMessage.value = ''
+}
+const devices = ref<any[]>([])
+const nextAssigneeUid = ref(0)
+const isAgent = computed(() => props.mode === 'agent')
+const agentState = reactive(newAgentOrderState())
+const agentTotalInput = ref<string | number>(1)
+const countConfirmed = computed(() => agentState.draftId > 0 && agentState.confirmedCount > 0)
+const selectedMember = ref<RecycleMemberOption | null>(null)
+const memberPickerVisible = ref(false)
+const deliveryType = ref('2')
+const expressNo = ref('')
+const submitError = ref('')
+const addAfterMember = ref(false)
+const openMemberPicker = () => {
+    if (!agentState.draftId && !agentState.creatingUnknown && !operationBusy.value) {
+        addAfterMember.value = false
+        memberPickerVisible.value = true
+    }
+}
+const selectMember = (member: RecycleMemberOption) => {
+    if (operationBusy.value || agentState.draftId || agentState.creatingUnknown) return
+    const error = agentMemberError(Number(member?.member_id))
+    if (error) { uni.showToast({ title: error, icon: 'none' }); return }
+    const continueAdding = addAfterMember.value
+    addAfterMember.value = false
+    selectedMember.value = member
+    submitError.value = ''
+    memberPickerVisible.value = false
+    if (continueAdding) addDevice()
+}
+const requireAgentCustomer = (continueAdding = false) => {
+    if (!isAgent.value || !agentMemberError(Number(selectedMember.value?.member_id || 0))) return true
+    submitError.value = agentState.draftId || agentState.creatingUnknown
+        ? '原订单客户尚未核对，请从订单列表查看，不会再次保存或打印。'
+        : '请先选择客户，再保存设备，确保标签关联到正确的客户。'
+    uni.showToast({ title: submitError.value, icon: 'none' })
+    if (!agentState.draftId && !agentState.creatingUnknown && !operationBusy.value) {
+        addAfterMember.value = continueAdding
+        memberPickerVisible.value = true
+    }
+    return false
+}
+const selectDelivery = (type: string) => { if (!agentState.draftId && !agentState.creatingUnknown && !operationBusy.value) deliveryType.value = type }
+const requireAgentTotal = () => {
+    if (!isAgent.value || countConfirmed.value) return true
+    submitError.value = agentState.creatingUnknown
+        ? '创建结果未确认，请先核对订单列表，不要重复提交。'
+        : '请先确认本单总台数，再录入或保存设备。'
+    uni.showToast({ title: submitError.value, icon: 'none' })
+    return false
+}
+const confirmTotal = async () => {
+    if (!isAgent.value || operationBusy.value || countConfirmed.value) return
+    if (!requireAgentCustomer()) return
+    confirmingTotal.value = true
+    submitError.value = ''
+    uni.hideKeyboard()
+    try {
+        await confirmAgentOrderTotal(agentState, { create: createAgentOrder }, {
+            memberId: Number(selectedMember.value?.member_id || 0), deliveryType: deliveryType.value,
+            expressNo: expressNo.value, count: Number(agentTotalInput.value)
+        })
+        agentTotalInput.value = agentState.confirmedCount
+        uni.showToast({ title: `本单共 ${agentState.confirmedCount} 台已确认`, icon: 'success' })
+    } catch (error: any) {
+        submitError.value = agentState.creatingUnknown ? '创建结果未确认，请先核对订单列表，不要重复提交。' : (error?.msg || error?.message || '确认总台数失败，请重试')
+        uni.showToast({ title: submitError.value, icon: 'none' })
+    } finally {
+        confirmingTotal.value = false
+    }
+}
+const confirmCreateRetry = () => {
+    uni.showModal({ title: '确认未创建订单', content: '请先在订单列表核对刚才所选客户。只有确认没有新订单时才能重新提交，否则可能重复下单。', confirmText: '确认未创建', success: result => {
+        if (result.confirm) { agentState.creatingUnknown = false; submitError.value = '' }
+    } })
+}
+
+// 组件类型决定交互；input/number 等不能被残留 options 或多选标记变成选择组件。
+const isMultiSummaryField = (field: any) => field?.component === 'checkbox'
+    || (field?.component === 'select' && field?.selection_mode === 'multiple')
+const isOptionSummaryField = (field: any) => ['radio', 'select', 'checkbox'].includes(field?.component)
+const isSwitchSummaryField = (field: any) => field?.component === 'switch'
+
+const summaryOptionActive = (field: any, optionValue: any) => {
+    const cur = editForm.value.summary_values?.[field.field_key]
+    return Array.isArray(cur) ? cur.some((v: any) => String(v) === String(optionValue)) : String(cur) === String(optionValue)
+}
+const toggleSummaryOption = (field: any, optionValue: any) => {
+    const values = editForm.value.summary_values || (editForm.value.summary_values = {})
+    if (isMultiSummaryField(field)) {
+        const cur = Array.isArray(values[field.field_key]) ? [...values[field.field_key]] : []
+        const idx = cur.findIndex((v: any) => String(v) === String(optionValue))
+        if (idx >= 0) cur.splice(idx, 1)
+        else cur.push(optionValue)
+        values[field.field_key] = cur
+    } else {
+        values[field.field_key] = String(values[field.field_key]) === String(optionValue) ? '' : optionValue
+    }
+}
+// 收集有效摘要值 { field_key: value }（剔除空值）
+const collectSummaryValues = (fields: any[] = [], values: Record<string, any> = {}) => {
+    const out: Record<string, any> = {}
+    fields.forEach((field) => {
+        const v = values[field.field_key]
+        if (Array.isArray(v)) {
+            if (v.length) out[field.field_key] = v
+        } else if (v !== undefined && v !== null && v !== '') {
+            out[field.field_key] = v
+        }
+    })
+    return out
+}
+
+// 与 PC 一样消费后台模板的设备摘要配置，保留后台顺序和已有输入。
+const loadSummaryFields = async () => {
+    const requestId = ++summaryRequestId
+    const categoryId = Number(editForm.value.category_id || 0)
+    summaryError.value = ''
+    summaryLoaded.value = false
+    summaryEmptyMessage.value = ''
+    editForm.value.summary_fields = []
+    editForm.value.check_template_id = 0
+    if (!categoryId) { summaryLoading.value = false; return }
+    summaryLoading.value = true
+    try {
+        const res: any = await getCheckTemplateSchema({ category_id: categoryId })
+        if (requestId !== summaryRequestId || categoryId !== Number(editForm.value.category_id || 0)) return
+        const data = res?.data
+        if (!data || !Array.isArray(data.groups) || !data.template) throw new Error('未取得有效的质检模板，请重新加载或联系管理员检查型号绑定。')
+        if (['missing', 'invalid'].includes(String(data.schema_status || ''))) {
+            throw new Error(data.schema_message || '该型号的质检模板暂无可用字段，请联系管理员检查模板配置。')
+        }
+        if (data.schema_status === 'empty') {
+            summaryEmptyMessage.value = `${data.schema_message || '此型号的模板暂无启用的质检字段。'} 可继续录入基础信息。`
+        }
+        const groups = data.groups
+        const resolve = data.resolve || {}
+        const template = data.template || {}
+        const fields: any[] = []
+        groups.forEach((group: any) => {
+            ;(group.fields || []).forEach((field: any) => {
+                if (Number(field?.extra_config?.summary_visible || 0) === 1) {
+                    fields.push({
+                        field_key: String(field.field_key),
+                        field_name: String(field.field_name),
+                        component: String(field.component || 'input'),
+                        selection_mode: field.selection_mode,
+                        unit: field.unit,
+                        placeholder: field.placeholder,
+                        default_value: field.default_value,
+                        is_required: Number(field.is_required || 0),
+                        options: (field.options || []).map((opt: any) => ({ value: opt.value, label: opt.label || opt.name }))
+                    })
+                }
+            })
+        })
+        editForm.value.check_template_id = Number(resolve.template_id || template.id || 0)
+        editForm.value.summary_fields = fields
+        const values: Record<string, any> = { ...(editForm.value.summary_values || {}) }
+        fields.forEach((field) => {
+            const multi = isMultiSummaryField(field)
+            if (values[field.field_key] === undefined || values[field.field_key] === '') {
+                if (field.default_value !== undefined && field.default_value !== null && field.default_value !== '') {
+                    values[field.field_key] = multi
+                        ? (Array.isArray(field.default_value) ? field.default_value : [field.default_value])
+                        : field.default_value
+                } else {
+                    values[field.field_key] = multi ? [] : (isSwitchSummaryField(field) ? false : '')
+                }
+            } else if (multi && !Array.isArray(values[field.field_key])) {
+                values[field.field_key] = [values[field.field_key]]
+            }
+        })
+        editForm.value.summary_values = values
+        summaryLoaded.value = true
+    } catch (error: any) {
+        if (requestId !== summaryRequestId || categoryId !== Number(editForm.value.category_id || 0)) return
+        summaryError.value = error?.msg || error?.message || '网络异常，暂时无法加载设备摘要，请重试。'
+    } finally {
+        if (requestId === summaryRequestId) summaryLoading.value = false
+    }
+}
+const modelColumns = ref<Array<{ pid: number | string, items: any[], activeId: string | number }>>([])
+const modelKeyword = ref('')
+const modelSearchList = ref<any[]>([])
+const modelSearching = ref(false)
+let modelSearchTimer: any = null
+const modelPickerVisible = ref(false)
+
+const editVisible = ref(false)
+const editingIndex = ref(-1)
+const editForm = ref({
+    model: '',
+    imei: '',
+    user_sn: '',
+    initial_price: '',
+    initial_price_uid: 0,
+    initial_price_name: '',
+    category_id: 0,
+    category_path: [] as Array<string | number>,
+    check_template_id: 0,
+    summary_fields: [] as any[],
+    summary_values: {} as Record<string, any>
+})
+
+const visibleModelColumns = computed(() => {
+    const columns = modelColumns.value.map((column, index) => ({ ...column, index }))
+    return columns.slice(Math.max(columns.length - 3, 0))
+})
+
+const selectedModelPath = computed(() => {
+    return modelColumns.value
+        .map(column => column.items.find(item => String(item.id) === String(column.activeId)))
+        .filter(Boolean)
+        .map(item => item.node_name || item.model_full_name || '')
+        .filter(Boolean)
+})
+
+const hasModelKeyword = computed(() => modelKeyword.value.trim().length > 0)
+
+const getModelColumnTitle = (index: number) => {
+    const titles = ['品类', '品牌/子类', '系列', '型号']
+    return titles[index] || `第${index + 1}级`
+}
+
+const isLeafNode = (node: any) => Number(node?.has_children || 0) !== 1 && (!Array.isArray(node?.child_list) || node.child_list.length === 0)
+
+const normalizeModelTree = (nodes: any[] = []): any[] => {
+    return nodes
+        .filter(item => Number(item.status ?? 1) === 1)
+        .map(item => {
+            const children = normalizeModelTree(Array.isArray(item.child_list) ? item.child_list : [])
+            return {
+                ...item,
+                child_list: children.length ? children : []
+            }
+        })
+}
+
+const loadModelChildren = async (pid = 0) => {
+    try {
+        const res: any = await getDeviceModelDictChildren({ pid, limit: 300 })
+        return normalizeModelTree(res.data || [])
+    } catch (error) {
+        return []
+    }
+}
+
+const loadRootModels = async () => {
+    const roots = await loadModelChildren(0)
+    modelColumns.value = [{ pid: 0, items: roots, activeId: '' }]
+}
+
+watch(() => props.visible, (val) => {
+    show.value = val
+    if (!val) {
+        invalidateSummaryLoad()
+        addAfterMember.value = false
+        memberPickerVisible.value = false
+        editVisible.value = false
+        modelPickerVisible.value = false
+    }
+    if (val && !isAgent.value) {
+        devices.value = JSON.parse(JSON.stringify(props.deviceList || [])).map((device: any) => ({ ...device,
+            initial_price_uid: Number(device.customer_quote?.uid || device.info?.customer_quote?.uid || 0),
+            initial_price_name: device.customer_quote?.name || device.info?.customer_quote?.name || ''
+        }))
+    }
+}, { immediate: true })
+
+watch(() => memberPickerVisible.value, (visible) => { if (!visible) addAfterMember.value = false })
+
+watch(() => show.value, (val) => {
+    if (!val) emit('update:visible', false)
+})
+
+watch(() => modelKeyword.value, () => {
+    if (modelSearchTimer) clearTimeout(modelSearchTimer)
+    modelSearchTimer = setTimeout(searchModelKeyword, 300)
+})
+
+const handleClose = () => {
+    if (operationBusy.value) return
+    uni.hideKeyboard()
+    invalidateSummaryLoad()
+    if (isAgent.value && agentState.draftId) emit('draft-saved', agentState.draftId)
+    memberPickerVisible.value = false
+    editVisible.value = false
+    modelPickerVisible.value = false
+    show.value = false
+    emit('update:visible', false)
+}
+
+const addDevice = () => {
+    if (operationBusy.value) return
+    if (!requireAgentCustomer(true)) return
+    if (!requireAgentTotal()) return
+    if (isAgent.value && devices.value.length >= agentState.confirmedCount) {
+        uni.showToast({ title: `本单共 ${agentState.confirmedCount} 台，不能继续添加`, icon: 'none' })
+        return
+    }
+    invalidateSummaryLoad()
+    editingIndex.value = -1
+    editForm.value = { model: '', imei: '', user_sn: '', initial_price: '', initial_price_uid: 0, initial_price_name: '', category_id: 0, category_path: [], check_template_id: 0, summary_fields: [], summary_values: {} }
+    editVisible.value = true
+}
+
+// 从已签收设备的 info 还原已录入的摘要值（优先 sign_summary）
+const extractDeviceSummaryValues = (device: any): Record<string, any> => {
+    const info = typeof device?.info === 'string' ? safeJson(device.info) : (device?.info || {})
+    if (info?.sign_summary && typeof info.sign_summary === 'object' && !Array.isArray(info.sign_summary)) {
+        return { ...info.sign_summary }
+    }
+    if (device?.summary_values && typeof device.summary_values === 'object') {
+        return { ...device.summary_values }
+    }
+    return {}
+}
+
+const editDevice = (device: any, index: number) => {
+    if (operationBusy.value) return
+    invalidateSummaryLoad()
+    editingIndex.value = index
+    editForm.value = {
+        model: device.model || '',
+        imei: device.imei || '',
+        user_sn: device.user_sn || '',
+        initial_price: device.initial_price || '',
+        initial_price_uid: Number(device.initial_price_uid || 0),
+        initial_price_name: device.initial_price_name || '',
+        category_id: device.category_id || 0,
+        category_path: normalizeCategoryPath(device.category_path || device.info?.goods_category || [], device.category_id || 0),
+        check_template_id: Number(device.check_template_id || 0),
+        summary_fields: Array.isArray(device.summary_fields) ? device.summary_fields : [],
+        summary_values: extractDeviceSummaryValues(device)
+    }
+    editVisible.value = true
+    // 按分类解析模板/摘要字段（保留已录入值）
+    if (editForm.value.category_id) loadSummaryFields()
+}
+
+const safeJson = (value: any) => {
+    try { const v = JSON.parse(value); return v && typeof v === 'object' ? v : {} } catch { return {} }
+}
+
+const deleteDevice = (index: number) => {
+    if (operationBusy.value) return
+    uni.showModal({
+        title: '删除设备',
+        content: '确定删除该设备？',
+        success: (res) => {
+            if (res.confirm) devices.value.splice(index, 1)
+        }
+    })
+}
+
+const closeEdit = () => {
+    invalidateSummaryLoad()
+    editVisible.value = false
+}
+
+const openModelPicker = async () => {
+    modelKeyword.value = ''
+    modelSearchList.value = []
+    if (!modelColumns.value.length) {
+        await loadRootModels()
+    }
+    modelPickerVisible.value = true
+}
+
+const closeModelPicker = () => {
+    modelPickerVisible.value = false
+}
+
+const selectModelNode = async (node: any, columnIndex: number) => {
+    modelColumns.value[columnIndex].activeId = node.id
+    modelColumns.value = modelColumns.value.slice(0, columnIndex + 1)
+    if (isLeafNode(node)) {
+        chooseModelNode(node)
+        return
+    }
+    const children = await loadModelChildren(node.id)
+    modelColumns.value.push({ pid: node.id, items: children, activeId: '' })
+}
+
+const chooseModelNode = (node: any) => {
+    if (!isLeafNode(node)) return
+    editForm.value.model = String(node.node_name || '').trim() || getDeviceModelLeafName(node.model_full_name, '')
+    editForm.value.category_id = node.id || 0
+    editForm.value.category_path = resolveNodePath(node)
+    closeModelPicker()
+    // 换型号 → 重新解析质检模板与摘要字段（清掉上一型号的录入值）
+    editForm.value.summary_values = {}
+    loadSummaryFields()
+}
+
+const resolveNodePath = (node: any): Array<string | number> => {
+    if (Array.isArray(node?.category_path) && node.category_path.length) {
+        return node.category_path
+    }
+    const activePath = modelColumns.value
+        .map(column => column.activeId)
+        .filter(item => item !== undefined && item !== null && item !== '')
+    if (activePath.length && String(activePath[activePath.length - 1]) === String(node?.id)) {
+        return activePath
+    }
+    if (node?.model_full_name) {
+        return [node.id || 0].filter(Boolean)
+    }
+    return [node?.id || 0].filter(Boolean)
+}
+
+const normalizeCategoryPath = (value: any, categoryId: string | number = 0): Array<string | number> => {
+    if (Array.isArray(value)) {
+        return value.filter(item => item !== undefined && item !== null && item !== '')
+    }
+    if (typeof value === 'string' && value.trim()) {
+        try {
+            const parsed = JSON.parse(value)
+            if (Array.isArray(parsed)) {
+                return parsed.filter(item => item !== undefined && item !== null && item !== '')
+            }
+        } catch (error) {
+            return value.split(',').map(item => item.trim()).filter(Boolean)
+        }
+    }
+    return categoryId ? [categoryId] : []
+}
+
+const resolveInputValue = (event: any) => {
+    if (typeof event === 'string' || typeof event === 'number') {
+        return String(event)
+    }
+    return String(event?.detail?.value ?? event?.target?.value ?? event?.value ?? modelKeyword.value ?? '')
+}
+
+const handleModelKeywordInput = (event: any) => {
+    modelKeyword.value = resolveInputValue(event)
+}
+
+const searchModelKeyword = async () => {
+    const keyword = modelKeyword.value.trim()
+    if (!keyword) {
+        modelSearchList.value = []
+        return
+    }
+    modelSearching.value = true
+    try {
+        const res: any = await searchDeviceModelDictOptions({ keyword })
+        modelSearchList.value = normalizeModelTree(res.data || [])
+    } catch (error) {
+        console.error('搜索设备分类失败', error)
+        uni.showToast({ title: '分类搜索失败，请稍后重试', icon: 'none' })
+        modelSearchList.value = []
+    } finally {
+        modelSearching.value = false
+    }
+}
+
+const saveEdit = () => {
+    if (operationBusy.value) return
+    if (!requireAgentCustomer()) return
+    if (!requireAgentTotal()) return
+    if (isAgent.value && editingIndex.value === -1 && devices.value.length >= agentState.confirmedCount) {
+        uni.showToast({ title: `本单共 ${agentState.confirmedCount} 台，不能继续添加`, icon: 'none' })
+        return
+    }
+    if (summaryLoading.value || summaryError.value) {
+        uni.showToast({ title: summaryLoading.value ? '设备摘要正在加载，请稍候' : '设备摘要加载失败，请重新加载后再保存', icon: 'none' })
+        return
+    }
+    const error = deviceEntryError(editForm.value)
+    if (error) {
+        uni.showToast({ title: error, icon: 'none' })
+        return
+    }
+    if (devices.value.some((device, index) => index !== editingIndex.value && String(device.imei || '').toUpperCase() === editForm.value.imei.toUpperCase())) {
+        uni.showToast({ title: '本单已添加该串号，请勿重复录入', icon: 'none' })
+        return
+    }
+    // 必填摘要项校验
+    for (const field of editForm.value.summary_fields || []) {
+        if (Number(field.is_required) !== 1) continue
+        const v = editForm.value.summary_values?.[field.field_key]
+        const empty = Array.isArray(v) ? v.length === 0 : (v === undefined || v === null || v === '')
+        if (empty) {
+            uni.showToast({ title: `请填写「${field.field_name}」`, icon: 'none' })
+            return
+        }
+    }
+
+    const data = {
+        ...editForm.value
+    }
+
+    if (editingIndex.value === -1) {
+        devices.value.push(data)
+    } else {
+        devices.value[editingIndex.value] = { ...devices.value[editingIndex.value], ...data }
+    }
+    closeEdit()
+}
+
+const handleImeiScan = () => {
+    uni.showToast({ title: '已录入扫码结果', icon: 'success' })
+}
+
+const handleSubmit = async () => {
+    if (operationBusy.value) return
+    submitError.value = ''
+    if (isAgent.value) {
+        if (!requireAgentCustomer()) return
+        if (!requireAgentTotal()) return
+        const error = agentOrderError(Number(selectedMember.value?.member_id || 0), deliveryType.value, expressNo.value, devices.value)
+        if (error) { submitError.value = error; uni.showToast({ title: error, icon: 'none' }); return }
+    }
+    if (devices.value.length === 0) {
+        uni.showToast({ title: '请至少添加一台设备', icon: 'none' })
+        return
+    }
+    for (let i = 0; i < devices.value.length; i++) {
+        if (!devices.value[i].imei) {
+            uni.showToast({ title: `设备${i + 1}缺少IMEI`, icon: 'none' })
+            return
+        }
+    }
+
+    submitting.value = true
+    try {
+        const payload = devices.value.map(d => ({
+                id: d.id,
+                imei: d.imei,
+                model: d.model,
+                user_sn: d.user_sn || '',
+                initial_price: Number(d.initial_price) || 0,
+                initial_price_uid: Number(d.initial_price_uid || 0),
+                category_id: d.category_id || 0,
+                category_path: normalizeCategoryPath(d.category_path, d.category_id || 0),
+                // 质检模板 + 摘要(field_key: value)，后端落 sign_summary，质检时反显
+                check_template_id: Number(d.check_template_id || 0),
+                summary: collectSummaryValues(d.summary_fields || [], d.summary_values || {})
+            }))
+        let resultId = props.orderId
+        if (isAgent.value) {
+            resultId = await submitAgentOrder(agentState, { create: createAgentOrder, detail: getOrderDetail, sign: updateOrder }, {
+                memberId: Number(selectedMember.value?.member_id), deliveryType: deliveryType.value,
+                expressNo: expressNo.value, devices: payload, nextAssigneeUid: nextAssigneeUid.value
+            })
+        } else {
+            await updateOrder(props.orderId!, { action: 'order_sign', next_assignee_uid: nextAssigneeUid.value, devices: payload })
+        }
+        uni.showToast({ title: isAgent.value ? '下单并签收成功' : '签收成功' })
+        emit('success', resultId)
+        show.value = false
+        emit('update:visible', false)
+        if (isAgent.value) {
+            Object.assign(agentState, newAgentOrderState())
+            agentTotalInput.value = 1
+            selectedMember.value = null
+            devices.value = []
+            deliveryType.value = '2'
+            expressNo.value = ''
+            nextAssigneeUid.value = 0
+        }
+    } catch (error: any) {
+        submitError.value = agentState.creatingUnknown ? '创建结果未确认，请先核对订单列表，不要重复提交。' : (error?.msg || error?.message || '提交失败，请重试；已创建的订单不会重复创建')
+        uni.showToast({ title: submitError.value, icon: 'none' })
+    } finally {
+        submitting.value = false
+    }
+}
+onBeforeUnmount(() => { invalidateSummaryLoad(); if (modelSearchTimer) clearTimeout(modelSearchTimer) })
+</script>
+
+<style scoped lang="scss">
+.sign-popup,
+.edit-popup {
+    background: #fff;
+    max-height: 85vh;
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+}
+.sign-popup--agent { height: 90vh; max-height: 90vh; }
+.sign-popup--agent .device-list { min-height: 0; max-height: none; }
+.agent-customer { margin-bottom: 24rpx; padding: 0 20rpx; border: 1rpx solid #e8ebf0; border-radius: 14rpx; }
+.agent-customer__row, .agent-delivery { display: flex; align-items: center; gap: 16rpx; padding: 22rpx 0; }
+.agent-customer__row { border-bottom: 1rpx solid #f1f3f5; }
+.agent-customer__label { flex-shrink: 0; width: 132rpx; font-size: 26rpx; color: #697386; }
+.agent-required { color: #e34d59; }
+.agent-customer__main { flex: 1; min-width: 0; display: flex; flex-direction: column; font-size: 28rpx; overflow-wrap: anywhere; }
+.agent-customer__mobile { margin-top: 6rpx; color: #8590a2; font-size: 24rpx; }
+.agent-placeholder { color: var(--hsx-primary); }
+.agent-delivery__options { display: flex; gap: 16rpx; font-size: 26rpx; }
+.agent-delivery__options > view { padding: 12rpx 24rpx; border-radius: 10rpx; border: 1rpx solid #e2e6ec; }
+.agent-delivery__options .agent-delivery--active { color: var(--hsx-primary); border-color: var(--hsx-primary); background: #f0f5ff; }
+.agent-express { padding: 0 0 22rpx; }
+.agent-total { display: flex; align-items: center; gap: 16rpx; padding: 20rpx 0 12rpx; border-top: 1rpx solid #f1f3f5; }
+.agent-total__control { display: flex; align-items: center; gap: 14rpx; flex: 1; min-width: 0; }
+.agent-total__input { width: 128rpx; padding: 8rpx 0; flex-shrink: 0; border: 1rpx solid #dce2eb; border-radius: 8rpx; background: #fff; }
+.agent-total__input--locked { background: #f4f6f9; border-color: #edf0f4; }
+.agent-total__unit { font-size: 26rpx; color: #697386; }
+.agent-total__locked { font-size: 24rpx; color: #8590a2; }
+.agent-total__hint { padding-bottom: 20rpx; font-size: 22rpx; line-height: 1.6; color: #8590a2; }
+.agent-notice { padding: 18rpx 20rpx; margin-bottom: 20rpx; border-radius: 10rpx; font-size: 24rpx; line-height: 1.6; background: #f4f7fc; color: #697386; }
+.agent-notice--error { color: #c45656; background: #fff3f2; }
+.agent-retry { color: var(--hsx-primary); padding-top: 14rpx; }
+
+.popup-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 28rpx 30rpx;
+    border-bottom: 1rpx solid #f0f0f0;
+    flex-shrink: 0;
+}
+
+.popup-title {
+    font-size: 30rpx;
+    font-weight: 600;
+    color: #333;
+}
+
+.tip-bar {
+    padding: 16rpx 30rpx;
+    background: #fffbe6;
+    font-size: 24rpx;
+    color: #d48806;
+    flex-shrink: 0;
+}
+
+.device-list {
+    flex: 1;
+    padding: 20rpx 30rpx;
+    max-height: 55vh;
+    overflow-y: auto;
+    box-sizing: border-box;
+}
+
+.empty-state {
+    padding: 60rpx 0;
+    text-align: center;
+}
+
+.empty-text {
+    font-size: 26rpx;
+    color: #999;
+}
+
+.device-card {
+    background: #f8f9fa;
+    border-radius: 12rpx;
+    margin-bottom: 20rpx;
+    overflow: hidden;
+    box-sizing: border-box;
+}
+
+.card-top {
+    display: flex;
+    align-items: center;
+    padding: 16rpx 20rpx;
+    background: #f0f2f5;
+}
+
+.card-index {
+    width: 36rpx;
+    height: 36rpx;
+    line-height: 36rpx;
+    text-align: center;
+    background: var(--hsx-primary);
+    color: #fff;
+    border-radius: 50%;
+    font-size: 22rpx;
+    margin-right: 12rpx;
+    flex-shrink: 0;
+}
+
+.card-model {
+    flex: 1;
+    font-size: 28rpx;
+    font-weight: 500;
+    color: #333;
+}
+
+.card-actions {
+    display: flex;
+    gap: 24rpx;
+}
+
+.action-icon {
+    font-size: 28rpx;
+    color: #666;
+}
+
+.action-icon--danger {
+    color: #f56c6c;
+}
+
+.card-body {
+    padding: 16rpx 20rpx;
+}
+
+.card-row {
+    display: flex;
+    align-items: center;
+    padding: 6rpx 0;
+}
+
+.card-label {
+    font-size: 24rpx;
+    color: #999;
+    width: 120rpx;
+    flex-shrink: 0;
+}
+
+.card-value {
+    font-size: 24rpx;
+    color: #333;
+    flex: 1;
+}
+
+.card-value--mono {
+    font-family: 'Courier New', monospace;
+    letter-spacing: 1rpx;
+}
+
+.card-value--price {
+    color: #e6a23c;
+    font-weight: 500;
+}
+
+.add-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24rpx;
+    border: 2rpx dashed #ddd;
+    border-radius: 12rpx;
+    color: var(--hsx-primary);
+    font-size: 26rpx;
+    box-sizing: border-box;
+}
+.add-btn--disabled { color: #9aa4b3; border-color: #e1e5eb; background: #fafbfc; }
+
+.popup-footer {
+    display: flex;
+    padding: 20rpx 30rpx;
+    padding-bottom: calc(20rpx + env(safe-area-inset-bottom));
+    border-top: 1rpx solid #f0f0f0;
+    gap: 20rpx;
+    flex-shrink: 0;
+    box-sizing: border-box;
+}
+
+/* 编辑弹窗 */
+.edit-body {
+    flex: 1;
+    padding: 30rpx;
+    max-height: 60vh;
+    overflow-y: auto;
+    box-sizing: border-box;
+}
+
+.form-item {
+    margin-bottom: 28rpx;
+}
+
+.form-control {
+    width: 100%;
+    flex: 1;
+    min-width: 0;
+}
+
+.form-label {
+    font-size: 26rpx;
+    color: #333;
+    margin-bottom: 12rpx;
+    font-weight: 500;
+}
+
+.model-select {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    width: 100%;
+    box-sizing: border-box;
+    min-height: 64rpx;
+}
+
+.model-select__text {
+    flex: 1;
+    min-width: 0;
+    font-size: 24rpx;
+    color: #333;
+    text-align: right;
+    word-break: break-all;
+}
+
+.model-select__placeholder {
+    color: var(--text-color-light9);
+}
+
+.model-select__icon {
+    margin-left: 12rpx;
+    color: #999;
+    font-size: 24rpx;
+}
+
+.price-input-wrap {
+    display: flex;
+    align-items: center;
+    border: 1rpx solid #e0e0e0;
+    border-radius: 8rpx;
+    padding: 20rpx;
+    box-sizing: border-box;
+}
+
+.price-symbol {
+    color: #e6a23c;
+    font-size: 30rpx;
+    font-weight: 600;
+    margin-right: 8rpx;
+}
+
+.price-input-wrap .price-input {
+    border: none;
+    flex: 1;
+}
+
+.model-picker-popup {
+    background: #fff;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.model-empty {
+    min-width: 480rpx;
+    padding: 80rpx 48rpx;
+    color: #777;
+    font-size: 26rpx;
+    line-height: 1.6;
+    text-align: center;
+}
+
+.model-search {
+    margin: 18rpx 24rpx;
+    padding: 0 20rpx;
+    background: #f6f7f9;
+    border-radius: 12rpx;
+    box-sizing: border-box;
+    flex-shrink: 0;
+}
+
+.model-search-list {
+    height: 58vh;
+    min-height: 420rpx;
+    max-height: 620rpx;
+    border-top: 1rpx solid #f2f3f5;
+    box-sizing: border-box;
+}
+
+.model-search-item {
+    min-height: 82rpx;
+    padding: 0 28rpx;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    border-bottom: 1rpx solid #f2f3f5;
+    box-sizing: border-box;
+}
+
+.model-search-item__name {
+    font-size: 26rpx;
+    color: #333;
+    line-height: 1.35;
+    width: 100%;
+}
+
+.model-search-item__code {
+    width: 100%;
+    margin-top: 6rpx;
+    font-size: 22rpx;
+    color: #909399;
+    line-height: 1.2;
+}
+
+.model-loading {
+    padding: 60rpx 0;
+    color: #999;
+    font-size: 26rpx;
+    text-align: center;
+}
+
+.model-cascade {
+    flex: 1;
+    min-height: 0;
+    height: 0;
+    border-top: 1rpx solid #f2f3f5;
+    display: flex;
+    flex-direction: column;
+    background: #fff;
+    overflow: hidden;
+}
+
+.model-path {
+    min-height: 70rpx;
+    padding: 14rpx 24rpx 10rpx;
+    display: flex;
+    align-items: center;
+    overflow-x: auto;
+    border-bottom: 1rpx solid #eef0f4;
+    box-sizing: border-box;
+    background: #fff;
+    flex-shrink: 0;
+}
+
+.model-path__item {
+    flex: 0 0 auto;
+    max-width: 240rpx;
+    padding: 8rpx 14rpx;
+    border-radius: 999rpx;
+    background: rgba(58, 107, 255, .08);
+    color: var(--primary-color);
+    font-size: 22rpx;
+    line-height: 1.2;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.model-path__item + .model-path__item {
+    margin-left: 10rpx;
+}
+
+.model-column-row {
+    flex-shrink: 0;
+    height: 58vh;
+    min-height: 420rpx;
+    max-height: 560rpx;
+    display: flex;
+    overflow: hidden;
+}
+
+.model-column {
+    flex: 1 1 0;
+    width: 33.3333%;
+    min-width: 0;
+    height: 58vh;
+    min-height: 420rpx;
+    max-height: 560rpx;
+    border-right: 1rpx solid #f2f3f5;
+    background: #fafafa;
+    box-sizing: border-box;
+}
+
+.model-column:last-child {
+    border-right: none;
+    background: #fff;
+}
+
+.model-column__title {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    height: 58rpx;
+    padding: 0 16rpx;
+    display: flex;
+    align-items: center;
+    color: #6b7280;
+    font-size: 22rpx;
+    font-weight: 600;
+    background: #f6f7fb;
+    border-bottom: 1rpx solid #eef0f4;
+    box-sizing: border-box;
+}
+
+.model-option {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 84rpx;
+    padding: 12rpx 14rpx;
+    color: #333;
+    font-size: 24rpx;
+    line-height: 1.35;
+    word-break: break-all;
+    box-sizing: border-box;
+    border-bottom: 1rpx solid #f2f3f5;
+}
+
+.model-option__name {
+    flex: 1;
+    min-width: 0;
+    display: -webkit-box;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+}
+
+.model-option--active {
+    color: var(--primary-color);
+    background: #fff;
+    font-weight: 600;
+    box-shadow: inset 6rpx 0 0 var(--primary-color);
+}
+
+.model-option__leaf {
+    margin-left: 8rpx;
+    color: var(--primary-color);
+    font-size: 22rpx;
+    flex-shrink: 0;
+}
+
+.model-option__next {
+    margin-left: 8rpx;
+    color: #c0c4cc;
+    font-size: 22rpx;
+    flex-shrink: 0;
+}
+
+.summary-loading {
+    padding: 20rpx 0;
+    font-size: 24rpx;
+    color: #999;
+    text-align: center;
+}
+
+.summary-error {
+    display: flex;
+    flex-direction: column;
+    gap: 12rpx;
+    padding: 20rpx;
+    margin-top: 12rpx;
+    border: 1rpx solid #f4d7b5;
+    border-radius: 12rpx;
+    background: #fff8ee;
+    color: #8c5b24;
+    font-size: 24rpx;
+}
+.summary-error__title { font-weight: 600; }
+.summary-error__message { line-height: 1.6; overflow-wrap: anywhere; }
+.summary-error__tip { font-size: 22rpx; color: #8a7964; }
+.summary-empty { padding: 20rpx 0; color: #8590a2; font-size: 24rpx; line-height: 1.6; }
+
+.summary-section {
+    margin-top: 8rpx;
+    padding-top: 16rpx;
+    border-top: 1rpx dashed #eee;
+}
+
+.summary-section__title {
+    font-size: 26rpx;
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 12rpx;
+}
+
+.summary-section__tip {
+    font-size: 22rpx;
+    font-weight: 400;
+    color: #999;
+}
+
+.summary-field {
+    margin-bottom: 20rpx;
+}
+
+.summary-field__label {
+    font-size: 26rpx;
+    color: #606266;
+    margin-bottom: 10rpx;
+}
+
+.summary-required {
+    color: #fa3534;
+    margin-right: 4rpx;
+}
+
+.summary-unit {
+    color: #999;
+    font-size: 22rpx;
+}
+
+.summary-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14rpx;
+}
+
+.summary-chip {
+    padding: 10rpx 24rpx;
+    font-size: 26rpx;
+    color: #555;
+    background: #f4f5f7;
+    border: 1rpx solid #e6e8eb;
+    border-radius: 30rpx;
+}
+
+.summary-chip--active {
+    color: #2b6bff;
+    background: #eaf1ff;
+    border-color: #2b6bff;
+}
+</style>

@@ -3,7 +3,7 @@
         <el-card class="box-card !border-none" shadow="never">
 
             <div class="flex justify-between items-center">
-                <span class="text-page-title">{{ pageName }}</span>
+                <span class="text-page-title">{{pageName}}</span>
                 <el-button type="primary" @click="addEvent">
                     {{ t('addServe') }}
                 </el-button>
@@ -12,8 +12,7 @@
             <el-card class="box-card !border-none my-[10px] table-search-wrap" shadow="never">
                 <el-form :inline="true" :model="serveTable.searchParam" ref="searchFormRef">
                     <el-form-item :label="t('serviceName')" prop="service_name">
-                        <el-input v-model.trim="serveTable.searchParam.service_name"
-                            :placeholder="t('serviceNamePlaceholder')" />
+                        <el-input v-model.trim="serveTable.searchParam.service_name" :placeholder="t('serviceNamePlaceholder')" />
                     </el-form-item>
 
                     <el-form-item>
@@ -29,15 +28,25 @@
                         <span>{{ !serveTable.loading ? t('emptyData') : '' }}</span>
                     </template>
                     <el-table-column prop="service_name" :label="t('serviceName')" min-width="120" />
+<!--					<el-table-column :label="t('image')" min-width="120">-->
+<!--						<template #default="{ row }">-->
+<!--							<div class="h-[50px]">-->
+<!--							    <el-image class="w-[50px] h-[50px] " :src="img(row.image)" fit="contain">-->
+<!--							        <template #error>-->
+<!--							            <div class="image-slot">-->
+<!--							                &lt;!&ndash; <img class="w-[30px] h-[30px]" src="@/addon/phone_shop/assets/category_default.png" /> &ndash;&gt;-->
+<!--							            </div>-->
+<!--							        </template>-->
+<!--							    </el-image>-->
+<!--							</div>-->
+<!--						</template>-->
+<!--					</el-table-column>-->
                     <el-table-column prop="desc" :label="t('desc')" min-width="120" />
                     <el-table-column :label="t('operation')" fixed="right" align="right" min-width="120">
-                        <template #default="{ row }">
-                            <div v-if="userStore().siteInfo.site_id == row.site_id">
-                                <el-button type="primary" link @click="editEvent(row)">{{ t('edit') }}</el-button>
-                                <el-button type="primary" link @click="deleteEvent(row.service_id)">{{ t('delete')
-                                    }}</el-button>
-                            </div>
-                        </template>
+                       <template #default="{ row }">
+                           <el-button type="primary" link @click="editEvent(row)">{{ t('edit') }}</el-button>
+                           <el-button type="primary" link @click="deleteEvent(row.service_id)">{{ t('delete') }}</el-button>
+                       </template>
                     </el-table-column>
 
                 </el-table>
@@ -48,7 +57,7 @@
                 </div>
             </div>
 
-            <service-edit ref="editServeDialog" @complete="loadServeList" />
+            <service-edit ref="editServeDialog" @complete="loadServeList(getTablePageStorage(serveTable.searchParam).page)" />
         </el-card>
     </div>
 </template>
@@ -60,7 +69,7 @@ import { getServePageList, deleteServe } from '@/addon/phone_shop/api/goods'
 import { ElMessageBox, FormInstance } from 'element-plus'
 import ServiceEdit from '@/addon/phone_shop/views/goods/components/service-edit.vue'
 import { useRoute } from 'vue-router'
-import userStore from '@/stores/modules/user'
+import { setTablePageStorage, getTablePageStorage } from '@/utils/common'
 
 const route = useRoute()
 const pageName = route.meta.title
@@ -93,11 +102,12 @@ const loadServeList = (page: number = 1) => {
         serveTable.loading = false
         serveTable.data = res.data.data
         serveTable.total = res.data.total
+        setTablePageStorage(serveTable.page, serveTable.limit, serveTable.searchParam)
     }).catch(() => {
         serveTable.loading = false
     })
 }
-loadServeList()
+loadServeList(getTablePageStorage(serveTable.searchParam).page)
 
 const editServeDialog: Record<string, any> | null = ref(null)
 
@@ -130,7 +140,7 @@ const deleteEvent = (id: number) => {
         }
     ).then(() => {
         deleteServe(id).then(() => {
-            loadServeList()
+            loadServeList(getTablePageStorage(serveTable.searchParam).page)
         }).catch(() => {
         })
     })
@@ -143,4 +153,5 @@ const resetForm = (formEl: FormInstance | undefined) => {
 }
 </script>
 
-<style lang="scss" scoped></style>
+<style lang="scss" scoped>
+</style>

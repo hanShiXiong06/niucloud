@@ -1,0 +1,198 @@
+:root {
+    --hsx-color-primary: var(--el-color-primary, #2563eb);
+    --hsx-color-primary-soft: var(--el-color-primary-light-9, #eff6ff);
+    --hsx-bg-page: #f3f6fb;
+    --hsx-bg-surface: #ffffff;
+    --hsx-bg-elevated: #ffffff;
+    --hsx-bg-muted: #f8fafc;
+    --hsx-text-primary: #172033;
+    --hsx-text-regular: #475467;
+    --hsx-text-secondary: #7b8799;
+    --hsx-border-color: #e2e8f0;
+    --hsx-shadow-card: 0 12px 34px rgba(15, 35, 75, .08);
+    --hsx-shadow-floating: 0 22px 70px rgba(15, 35, 75, .16);
+    --hsx-shadow-surface: 0 1px 2px rgba(15, 23, 42, .04), 0 8px 24px rgba(15, 23, 42, .05);
+    --hsx-code-bg: #0c1426;
+    --hsx-code-color: #dce8ff;
+    --hsx-color-success: #16a34a;
+    --hsx-color-warning: #d97706;
+    --hsx-color-danger: #dc2626;
+    --hsx-border-strong: #cbd5e1;
+    --hsx-focus-ring: rgba(37, 99, 235, .28);
+    --hsx-skeleton-gradient: linear-gradient(90deg, #eef2f7 20%, #f8fafc 50%, #eef2f7 80%);
+
+    --hsx-space-1: 4px;
+    --hsx-space-2: 8px;
+    --hsx-space-3: 12px;
+    --hsx-space-4: 16px;
+    --hsx-space-5: 20px;
+    --hsx-space-6: 24px;
+    --hsx-space-8: 32px;
+    --hsx-space-10: 40px;
+    --hsx-space-12: 48px;
+    --hsx-space-16: 64px;
+    --hsx-radius-xs: 4px;
+    --hsx-radius-sm: 6px;
+    --hsx-radius-md: 10px;
+    --hsx-radius-lg: 14px;
+    --hsx-radius-xl: 20px;
+    --hsx-radius-full: 9999px;
+    --hsx-motion-fast: 120ms;
+    --hsx-motion-normal: 200ms;
+    --hsx-motion-slow: 320ms;
+    --hsx-ease-standard: cubic-bezier(.2, 0, 0, 1);
+    --hsx-ease-emphasized: cubic-bezier(.2, .8, .2, 1);
+    --hsx-z-sticky: 20;
+    --hsx-z-dropdown: 1000;
+    --hsx-z-overlay: 2000;
+    --hsx-z-toast: 3000;
+
+    --hsx-font-size-caption: 12px;
+    --hsx-font-size-body: 14px;
+    --hsx-font-size-subtitle: 16px;
+    --hsx-font-size-title: 20px;
+    --hsx-line-height-caption: 18px;
+    --hsx-line-height-body: 22px;
+    --hsx-line-height-title: 28px;
+    --hsx-control-height-sm: 28px;
+    --hsx-control-height: 32px;
+    --hsx-control-height-lg: 40px;
+    --hsx-page-gutter: 20px;
+    --hsx-page-gutter-compact: 16px;
+    --hsx-page-max-width: 1680px;
+    --hsx-surface-padding: 20px;
+}
+
+html.dark,
+.hsx-theme--dark {
+    --hsx-bg-page: #090e19;
+    --hsx-bg-surface: #111827;
+    --hsx-bg-elevated: #151f31;
+    --hsx-bg-muted: #0d1524;
+    --hsx-text-primary: #eef4ff;
+    --hsx-text-regular: #c0cada;
+    --hsx-text-secondary: #8794a8;
+    --hsx-border-color: #26344a;
+    --hsx-shadow-card: 0 14px 38px rgba(0, 0, 0, .26);
+    --hsx-shadow-floating: 0 24px 80px rgba(0, 0, 0, .42);
+    --hsx-shadow-surface: 0 1px 2px rgba(0, 0, 0, .22), 0 10px 30px rgba(0, 0, 0, .2);
+    --hsx-code-bg: #050913;
+    --hsx-code-color: #d8e6ff;
+    --hsx-border-strong: #3b4a61;
+    --hsx-focus-ring: rgba(91, 140, 255, .38);
+    --hsx-skeleton-gradient: linear-gradient(90deg, #182337 20%, #243149 50%, #182337 80%);
+}
+
+.hsx-theme {
+    color: var(--hsx-text-primary);
+    background: var(--hsx-bg-page);
+    color-scheme: light;
+}
+
+html.dark .hsx-theme,
+.hsx-theme.hsx-theme--dark {
+    color-scheme: dark;
+}
+
+.hsx-focusable:focus-visible {
+    outline: 2px solid var(--hsx-color-primary);
+    outline-offset: 2px;
+    box-shadow: 0 0 0 4px var(--hsx-focus-ring);
+}
+
+.hsx-surface {
+    box-sizing: border-box;
+    border: 1px solid var(--hsx-border-color);
+    border-radius: var(--hsx-radius-lg);
+    background: var(--hsx-bg-surface);
+    box-shadow: var(--hsx-shadow-surface);
+}
+
+.hsx-muted {
+    color: var(--hsx-text-secondary);
+}
+
+.hsx-scrollbar {
+    scrollbar-color: var(--hsx-border-strong) transparent;
+    scrollbar-width: thin;
+}
+
+.hsx-scrollbar::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+.hsx-scrollbar::-webkit-scrollbar-thumb {
+    border-radius: var(--hsx-radius-full);
+    background: var(--hsx-border-strong);
+}
+
+.hsx-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+@keyframes hsx-shimmer {
+    from { background-position: 180% 0; }
+    to { background-position: -80% 0; }
+}
+
+.hsx-motion {
+    transition-delay: var(--hsx-motion-delay, 0ms) !important;
+}
+
+.hsx-motion-fade-enter-active,
+.hsx-motion-fade-leave-active,
+.hsx-motion-fade-up-enter-active,
+.hsx-motion-fade-up-leave-active,
+.hsx-motion-scale-enter-active,
+.hsx-motion-scale-leave-active,
+.hsx-motion-slide-left-enter-active,
+.hsx-motion-slide-left-leave-active,
+.hsx-motion-slide-right-enter-active,
+.hsx-motion-slide-right-leave-active {
+    transition: opacity var(--hsx-motion-duration-custom, var(--hsx-motion-normal)) var(--hsx-ease-standard),
+        transform var(--hsx-motion-duration-custom, var(--hsx-motion-normal)) var(--hsx-ease-emphasized);
+}
+.hsx-motion-fade-enter-from, .hsx-motion-fade-leave-to { opacity: 0; }
+.hsx-motion-fade-up-enter-from, .hsx-motion-fade-up-leave-to { opacity: 0; transform: translateY(12px); }
+.hsx-motion-scale-enter-from, .hsx-motion-scale-leave-to { opacity: 0; transform: scale(.97); }
+.hsx-motion-slide-left-enter-from, .hsx-motion-slide-left-leave-to { opacity: 0; transform: translateX(-16px); }
+.hsx-motion-slide-right-enter-from, .hsx-motion-slide-right-leave-to { opacity: 0; transform: translateX(16px); }
+
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        scroll-behavior: auto !important;
+    }
+    .hsx-motion,
+    .hsx-motion-fade-enter-active,
+    .hsx-motion-fade-leave-active,
+    .hsx-motion-fade-up-enter-active,
+    .hsx-motion-fade-up-leave-active,
+    .hsx-motion-scale-enter-active,
+    .hsx-motion-scale-leave-active,
+    .hsx-motion-slide-left-enter-active,
+    .hsx-motion-slide-left-leave-active,
+    .hsx-motion-slide-right-enter-active,
+    .hsx-motion-slide-right-leave-active {
+        animation-duration: 1ms !important;
+        transition-duration: 1ms !important;
+        transition-delay: 0ms !important;
+    }
+}
+
+/* 1920×1080 在系统 150% 缩放下约等于 1280 CSS 像素。 */
+@media (max-width: 1366px) {
+    :root {
+        --hsx-page-gutter: 16px;
+        --hsx-page-gutter-compact: 12px;
+        --hsx-surface-padding: 16px;
+    }
+}
+
+@media (max-width: 768px) {
+    :root {
+        --hsx-page-gutter: 12px;
+        --hsx-page-gutter-compact: 10px;
+        --hsx-surface-padding: 14px;
+    }
+}

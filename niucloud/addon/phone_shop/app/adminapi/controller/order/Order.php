@@ -19,8 +19,10 @@ use addon\phone_shop\app\service\admin\order\OrderFinishService;
 use addon\phone_shop\app\service\admin\order\OrderService;
 use addon\phone_shop\app\service\admin\order\OrderCloseService;
 use addon\phone_shop\app\service\admin\order\OrderDeliveryService;
+use addon\phone_shop\app\service\admin\order\OfflineOrderService;
 use app\dict\common\ChannelDict;
 use app\dict\pay\PayDict;
+use app\service\core\notice\NoticeService;
 use core\base\BaseAdminController;
 use think\Response;
 
@@ -28,37 +30,83 @@ class Order extends BaseAdminController
 {
     /**
      * 订单列表
+     * @description 查看订单列表-分页
      * @return Response
      */
     public function lists()
     {
         $data = $this->request->params([
-            [ 'search_type', '' ],
-            [ 'search_name', '' ],
-            [ 'status', '' ],
-            [ 'pay_type', '' ],
-            [ 'order_from', '' ],
-            [ 'create_time', [] ],
-            [ 'pay_time', [] ],
-            [ 'activity_type', '' ],
-            [ 'keyword', '' ],
+            ['search_type', ''],
+            ['search_name', ''],
+            ['status', ''],
+            ['pay_type', ''],
+            ['order_from', ''],
+            ['create_time', []],
+            ['pay_time', []],
+            ['activity_type', ''],
+            ['keyword', ''],
+            ['payment_mode', ''],
+            ['order_channel', ''],
+            ['offline_workflow', 0],
+            ['offline_keyword', ''],
+            ['order_id', 0],
         ]);
-   
-        return success(( new OrderService() )->getPage($data));
+        return success((new OrderService())->getPage($data));
     }
 
     /**
      * 订单详情
+     * @description 查看订单详情
      * @param int $order_id
      * @return Response
      */
     public function detail(int $id)
     {
-        return success(( new OrderService() )->getDetail($id));
+        return success((new OrderService())->getDetail($id));
+    }
+
+    public function confirmDeviceReceived(int $id)
+    {
+        $data = $this->request->params([['received', false]]);
+        return success('设备已收回，商品恢复上架；未生成新账目', (new OrderService())->confirmDeviceReceived($id, in_array($data['received'], [true, 1, '1'], true)));
+    }
+
+    /**
+     * 获取线下收款可选 ERP 资金账户
+     */
+    public function offlineCapitalAccounts()
+    {
+        return success((new OfflineOrderService())->capitalAccountOptions());
+    }
+
+    /**
+     * 处理客户提交的线下支付订单
+     */
+    public function processOffline()
+    {
+        $data = $this->request->params([
+            ['order_id', 0],
+            ['action', ''],
+            ['capital_account_id', 0],
+            ['deal_total', null],
+            ['remark', ''],
+            ['voucher_urls', []],
+            ['close_reason', ''],
+            ['order_goods_ids', []],
+            ['received', false],
+            ['reason', ''],
+            ['preview_token', ''],
+            ['warehouse_id', 0],
+            ['location_id', 0],
+            ['items', []],
+            ['confirmed', false],
+        ]);
+        return success('操作成功', (new OfflineOrderService())->process($data));
     }
 
     /**
      * 获取订单状态
+     * @description 获取订单状态字典
      * @return Response
      */
     public function getOrderStatus()
@@ -68,6 +116,7 @@ class Order extends BaseAdminController
 
     /**
      * 获取订单类型
+     * @description 获取订单类型字典
      * @return Response
      */
     public function getOrderType()
@@ -77,96 +126,113 @@ class Order extends BaseAdminController
 
     /**
      * 订单关闭
+     * @description 关闭订单
      * @param $id
      * @return Response
      */
     public function orderClose($id)
     {
-        return success(( new OrderCloseService() )->close($id));
+        (new OrderCloseService())->close($id);
+        return success('SUCCESS');
     }
 
     /**
      * 订单完成
+     * @description 完成订单
      * @param $id
      * @return Response
      */
     public function orderFinish($id)
     {
-        ( new OrderFinishService() )->finish($id);
+        (new OrderFinishService())->finish($id);
         return success();
     }
 
     /**
      * 订单发货
+     * @description 订单发货
      * @param $id
      * @return Response
      */
     public function orderDelivery()
     {
         $data = $this->request->params([
-            [ 'order_id', 0 ],
-            [ 'order_goods_ids', [] ],
-            [ 'delivery_type', '' ],
-            [ 'express_company_id', '' ],
-            [ 'express_number', '' ],
-            [ 'local_deliver_id', 0 ],//配送员
-            [ 'remark', '' ],//配送员
+            ['order_id', 0],
+            ['delivery_ids', []],//修改
+            ['order_goods_ids', []],
+            ['delivery_type', ''],
+            ['delivery_way', ''], // 发货方式，manual_write：手动填写，electronic_sheet：电子面单
+            ['express_company_id', ''],
+            ['express_number', ''],
+            ['electronic_sheet_id', 0], // 电子面单
+            ['waybill_provider_key', ''], // 可选扩展面单，发货前校验仍有效
+            ['local_deliver_id', 0],//配送员
+            ['remark', ''],//配送员
+            ['local_delivery_type', ''],
+            ['goods_weight', 0],
+            ['store_id', ''],//提货点id
         ]);
-        return success("DELIVERY_SUCCESS", ( new OrderDeliveryService() )->delivery($data));
+        return success("DELIVERY_SUCCESS", (new OrderDeliveryService())->delivery($data));
     }
 
     /**
+     *
      * 获取订单配送方式
+     * @description 获取订单配送方式
      */
     public function getDeliveryType()
     {
         $data = $this->request->params([
-            [ 'delivery_type', '' ],
+            ['delivery_type', ''],
         ]);
-        return success(OrderDeliveryDict::getChildType($data[ 'delivery_type' ]));
+        return success(OrderDeliveryDict::getChildType($data['delivery_type']));
     }
 
     /**
      * 商家留言
+     * @description 设置商家留言
      * @return Response
      */
     public function setShopRemark()
     {
         $data = $this->request->params([
-            [ 'order_id', '' ],
-            [ 'shop_remark', '' ],
+            ['order_id', ''],
+            ['shop_remark', ''],
         ]);
-        ( new OrderService() )->shopRemark($data);
+        (new OrderService())->shopRemark($data);
         return success("SUCCESS");
     }
 
     /**
      * 订单包裹
+     * @description 查看订单包裹
      * @return Response
      */
     public function getOrderPackage()
     {
         $data = $this->request->params([
-            [ 'id', '' ],
-            [ 'mobile', '' ],
+            ['id', ''],
+            ['mobile', ''],
         ]);
-        return success(data: ( new OrderDeliveryService() )->getDeliveryPackage($data));
+        return success(data: (new OrderDeliveryService())->getDeliveryPackage($data));
     }
 
     /**
      * 订单包裹列表
+     * @description 查看订单包裹列表-分页
      * @return Response
      */
     public function getDeliveryPackageList()
     {
         $data = $this->request->params([
-            [ 'order_id', '' ],
+            ['order_id', ''],
         ]);
-        return success(( new OrderDeliveryService() )->getDeliveryPackageList($data));
+        return success((new OrderDeliveryService())->getDeliveryPackageList($data));
     }
 
     /**
      * 获取支付方式
+     * @description 获取订单支付方式字典
      * @return Response
      */
     public function getPayType()
@@ -176,126 +242,179 @@ class Order extends BaseAdminController
 
     /**
      * 获取订单来源
+     * @description 获取订单来源字典
      */
     public function getOrderFrom()
     {
-        return success(ChannelDict::getType());
+        return success((new OrderService())->getOrderFrom());
     }
 
     /**
      * 订单改价
+     * @description 修改订单价格
      * @return void
      */
     public function editPrice()
     {
         $data = $this->request->params([
-            [ 'order_id', 0 ],
-            [ 'delivery_money', 0 ],
-            [ 'order_goods_data', [] ],
+            ['order_id', 0],
+            ['delivery_money', 0],
+            ['order_goods_data', []],
         ]);
-        return success(data: ( new OrderService() )->editPrice($data));
+        return success(data: (new OrderService())->editPrice($data));
     }
 
     /**
      * 订单配送信息修改
+     * @description 修改订单配送信息
      */
     public function editDelivery()
     {
         $data = $this->request->params([
-            [ 'order_id', 0 ],
-            [ 'delivery_type', '' ],
-            [ 'take_store_id', 0 ],
-            [ 'taker_name', '' ],
-            [ 'taker_mobile', '' ],
-            [ 'taker_province', 0 ],
-            [ 'taker_city', 0 ],
-            [ 'taker_district', 0 ],
-            [ 'taker_address', '' ],
-            [ 'taker_full_address', '' ],
-            [ 'taker_longitude', '' ],
-            [ 'taker_latitude', '' ],
-            [ 'taker_store_id', 0 ],
+            ['order_id', 0],
+            ['delivery_type', ''],
+            ['take_store_id', 0],
+            ['taker_name', ''],
+            ['taker_mobile', ''],
+            ['taker_province', 0],
+            ['taker_city', 0],
+            ['taker_district', 0],
+            ['taker_address', ''],
+            ['taker_full_address', ''],
+            ['taker_longitude', ''],
+            ['taker_latitude', ''],
+            ['taker_store_id', 0],
         ]);
-        return success("SUCCESS", ( new OrderService() )->editDelivery($data));
+        return success("SUCCESS", (new OrderService())->editDelivery($data));
     }
 
     /**
      * 订单修改配送信息数据获取
+     * @description 修改订单配送信息
      */
     public function editDeliveryData()
     {
         $data = $this->request->params([
-            [ 'order_id', 0 ],
-            [ 'delivery_type', '' ],
-            [ 'take_store_id', 0 ],
-            [ 'taker_name', '' ],
-            [ 'taker_mobile', '' ],
-            [ 'taker_province', 0 ],
-            [ 'taker_city', 0 ],
-            [ 'taker_district', 0 ],
-            [ 'taker_address', '' ],
-            [ 'taker_full_address', '' ],
-            [ 'taker_longitude', '' ],
-            [ 'taker_latitude', '' ],
-            [ 'taker_store_id', 0 ],
+            ['order_id', 0],
+            ['delivery_type', ''],
+            ['take_store_id', 0],
+            ['taker_name', ''],
+            ['taker_mobile', ''],
+            ['taker_province', 0],
+            ['taker_city', 0],
+            ['taker_district', 0],
+            ['taker_address', ''],
+            ['taker_full_address', ''],
+            ['taker_longitude', ''],
+            ['taker_latitude', ''],
+            ['taker_store_id', 0],
         ]);
-        return success(data: ( new OrderService() )->getEditDeliveryData($data));
+        return success(data: (new OrderService())->getEditDeliveryData($data));
     }
 
     /**
      *获取订单批量操作记录
+     * @description 查看订单批量操作
      * @return Response
      */
     public function getOrderBatchDeliveryPage()
     {
         $data = $this->request->params([
-            [ 'status', '' ],
-            [ 'type', '' ],
-            [ 'main_id', '' ],
-            [ 'create_time', [] ],
+            ['status', ''],
+            ['type', ''],
+            ['main_id', ''],
+            ['create_time', []],
         ]);
-        return success(( new OrderBatchDeliveryService() )->getPage($data));
+        return success((new OrderBatchDeliveryService())->getPage($data));
     }
 
     /**
      * 记录详情
+     * @description 查看批量操作订单配送记录信息
      * @param $id
      * @return Response
      * @throws \think\db\exception\DbException
      */
     public function getOrderBatchDeliveryInfo($id)
     {
-        return success(( new OrderBatchDeliveryService() )->getInfo($id));
+        return success((new OrderBatchDeliveryService())->getInfo($id));
     }
 
     /**
      * 发布导入批量操作
+     * @description 批量订单发货
      * @return Response
      */
     public function addBatchOrderDelivery()
     {
         $data = $this->request->params([
-            [ 'data', [] ],//['path' => '', 'type' => 'order/order_goods']
+            ['data', []],//['path' => '', 'type' => 'order/order_goods']
         ]);
-        return success(data:( new OrderBatchDeliveryService() )->addBatchOrderDelivery($data));
+        return success(data: (new OrderBatchDeliveryService())->addBatchOrderDelivery($data));
     }
 
     /**
      * 获取操作类型
+     * @description 获取批量发送类型字典
      * @return Response
      */
     public function getBatchType()
     {
-        return success(data:OrderBatchDeliveryDict::getType());
+        return success(data: OrderBatchDeliveryDict::getType());
     }
 
     /**
      * 获取批量状态
+     * @description 获取订单批量发送状态字典
      * @return Response
      */
     public function getBatchStatus()
     {
-        return success(data:OrderBatchDeliveryDict::getStatus());
+        return success(data: OrderBatchDeliveryDict::getStatus());
+    }
+
+    /**
+     * 获取已选商品总重量
+     * @return \think\Response
+     */
+    public function getSelectOrderGoodsWeight()
+    {
+        $data = $this->request->params([
+            [ 'order_goods_ids', [] ], // 已选订单项id集合
+        ]);
+        return success(data:( new OrderService() )->getSelectOrderGoodsWeight($data));
+    }
+
+    /**
+     * 配送费用计算
+     */
+    public function getDeliveryFee()
+    {
+        $data = $this->request->params([
+            ['order_id', 0],
+            ['order_goods_ids', []],
+            ['delivery_type', ''],
+            ['delivery_way', ''],
+            ['local_delivery_type', ''],
+            ['goods_weight', 0],
+            ['store_id', 0],
+        ]);
+        return success(data:( new OrderDeliveryService() )->getDeliveryFee($data));
+    }
+
+    /**
+     * @description 删除订单
+     * @return Response
+     */
+    public function delete()
+    {
+        $params = $this->request->params([
+            ['order_ids', []]
+        ]);
+        $order_ids = $params['order_ids'];
+        $res = (new OrderService)->delete($order_ids);
+        return success("DELETE_SUCCESS");
+
     }
 
 }

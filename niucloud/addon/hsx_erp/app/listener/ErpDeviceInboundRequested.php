@@ -1,0 +1,845 @@
+<?php
+declare(strict_types=1);
+
+namespace addon\hsx_erp\app\listener;
+
+use addon\hsx_erp\app\model\ErpInboxEvent;
+use addon\hsx_erp\app\model\ErpPurchaseOrder;
+use addon\hsx_erp\app\service\admin\ErpConfigService;
+use addon\hsx_erp\app\service\admin\ErpCapitalAccountService;
+use addon\hsx_erp\app\service\admin\ErpConsignmentInboundService;
+use addon\hsx_erp\app\service\admin\ErpListingTaskService;
+use addon\hsx_erp\app\service\admin\ErpPurchaseService;
+use addon\hsx_erp\app\service\admin\ErpStockService;
+use addon\hsx_erp\app\support\ErpIdempotency;
+use addon\hsx_erp\app\support\RecycleInboundActor;
+use core\exception\CommonException;
+use think\facade\Db;
+use think\facade\Log;
+
+/**
+ * 消费回收插件的标准设备入库请求，并统一落为 ERP 采购、库存和设备级应付事实。
+ *
+ * HTTP 请求内默认使用当前站点；队列和定时补偿则必须通过 forSite()
+ * 显式锁定事件站点。两种路径都不修改全局 request 上下文，避免 SaaS 站点串数据。
+ */
+class ErpDeviceInboundRequested
+{
+    private int $forcedSiteId = 0;
+    private int $operatorUid = 0;
+    private string $operatorName = '系统补偿';
+
+    public static function forSite(int $siteId, int $operatorUid = 0, string $operatorName = '系统补偿'): self
+    {
+        if ($siteId <= 0) {
+            throw new CommonException('ERP入库补偿缺少有效站点');
+        }
+        $listener = new self();
+        $listener->forcedSiteId = $siteId;
+        $listener->operatorUid = $operatorUid;
+        $listener->operatorName = trim($operatorName) ?: '系统补偿';
+        return $listener;
+    }
+
+    public function handle($event): ?array
+    {
+        if (!is_array($event)) {
+            throw new CommonException('ERP入库事件格式不正确');
+        }
+
+        $targets = array_values(array_unique(array_filter(array_map('strval', (array)($event['targets'] ?? [])))));
+        if (!in_array('self_erp', $targets, true)) {
+            return null;
+        }
+
+        $source = (array)($event['source'] ?? []);
+        $sourcePlugin = trim((string)($source['plugin'] ?? $event['source_plugin'] ?? ''));
+        if ($sourcePlugin === '') {
+            throw new CommonException('ERP入库事件缺少来源插件');
+        }
+        $eventName = trim((string)($event['event_name'] ?? ''));
+        $legacyRecycleEvent = $eventName === 'recycle.device.inbound_requested';
+        if (!$legacyRecycleEvent && $eventName !== 'erp.device.inbound_requested') {
+            throw new CommonException('ERP不支持该设备入库事件');
+        }
+        if ((int)($event['event_version'] ?? 0) !== 1) {
+            throw new CommonException('ERP不支持该设备入库事件版本');
+        }
+        $sourceType = trim((string)($source['type'] ?? $event['source_type'] ?? ''));
+        if ($legacyRecycleEvent && $sourcePlugin === 'hsx_recycle') {
+            $sourceType = 'hsx_recycle.recycle_purchase';
+        } elseif ($sourceType === '') {
+            throw new CommonException('ERP入库事件缺少业务来源类型');
+        } elseif (!str_starts_with($sourceType, $sourcePlugin . '.') && !str_starts_with($sourceType, $sourcePlugin . '_')) {
+            $sourceType = $sourcePlugin . '.' . $sourceType;
+        }
+        $sourceOption = $this->resolveBusinessSource($sourceType);
+        if (!$legacyRecycleEvent && (!$sourceOption || (string)($sourceOption['direction'] ?? '') !== 'expense' || (string)($sourceOption['scene'] ?? '') !== 'purchase')) {
+            throw new CommonException('该插件未为当前站点注册可用的采购来源');
+        }
+        $event['_erp_source'] = [
+            'plugin' => $sourcePlugin,
+            'plugin_name' => trim((string)($source['plugin_name'] ?? $source['name'] ?? $sourceOption['plugin_name'] ?? '')) ?: $sourcePlugin,
+            'type' => $sourceType,
+            'name' => trim((string)($source['source_name'] ?? $sourceOption['name'] ?? '')) ?: '外部采购',
+        ];
+
+        $eventSiteId = (int)($event['site_id'] ?? 0);
+        $currentSiteId = $this->currentSiteId();
+        if ($eventSiteId <= 0 || $currentSiteId <= 0 || $eventSiteId !== $currentSiteId) {
+            throw new CommonException('入库事件站点与当前请求站点不一致，已拒绝处理');
+        }
+
+        $eventId = ErpIdempotency::normalize($event['event_id'] ?? '');
+        if ($eventId === '') {
+            throw new CommonException('ERP入库事件缺少event_id');
+        }
+
+        $devices = array_values(array_filter((array)($event['devices'] ?? []), 'is_array'));
+        if ($devices === []) {
+            throw new CommonException('ERP入库事件没有设备');
+        }
+
+        $requestPayload = $this->canonicalRequest($event);
+        $existing = $this->findInbox($currentSiteId, $eventId);
+        if ($existing !== null) {
+            $this->assertSameInboxRequest($existing, $requestPayload);
+            if ($this->isProcessedInbox($existing)) return $this->duplicateResult($existing);
+        }
+
+        try {
+            $result = $this->withinTransaction(function () use ($event, $devices, $eventId, $currentSiteId, $requestPayload): array {
+                $locked = $this->findInbox($currentSiteId, $eventId, true);
+                if ($locked !== null) {
+                    $this->assertSameInboxRequest($locked, $requestPayload);
+                    if ($this->isProcessedInbox($locked)) return $this->duplicateResult($locked);
+                    $inboxId = (int)$locked['id'];
+                    $this->markInboxProcessing($inboxId, $requestPayload);
+                } else {
+                    $inboxId = $this->createInbox($currentSiteId, $eventId, $event, $requestPayload);
+                }
+
+                // 顶层事务包住全部来源分组；任一采购失败时，所有采购、库存、应付和
+                // inbox 状态一起回滚，杜绝“一次推送只成功一半”。
+                $result = $this->processDevices($event, $devices, $eventId, $currentSiteId);
+                $this->completeInbox($inboxId, $requestPayload, $result);
+                return $result;
+            });
+        } catch (\Throwable $e) {
+            $processed = $this->findInbox($currentSiteId, $eventId);
+            if ($processed !== null) {
+                $this->assertSameInboxRequest($processed, $requestPayload);
+                if ($this->isProcessedInbox($processed)) return $this->duplicateResult($processed);
+            }
+            $this->recordFailedInbox($currentSiteId, $eventId, $event, $requestPayload, $e->getMessage());
+            throw $e;
+        }
+
+        // 上架待办属于入库后的可重建投影，不能反过来把已经提交成功的入库事件
+        // 伪装成 duplicate，也不能让采购、库存和应付事实失去真实返回结果。
+        $assetIds = array_values(array_unique(array_filter(array_map('intval', (array)($result['asset_ids'] ?? [])))));
+        if ($assetIds !== []) {
+            try {
+                $operator = (array)($event['operator'] ?? []);
+                $taskService = ErpListingTaskService::forSite(
+                    $currentSiteId,
+                    (int)($operator['id'] ?? 0),
+                    trim((string)($operator['name'] ?? '')) ?: '回收入库'
+                );
+                $stockService = ErpStockService::forSite(
+                    $currentSiteId,
+                    (int)($operator['id'] ?? 0),
+                    trim((string)($operator['name'] ?? '')) ?: '回收入库'
+                );
+                $publishFailures = [];
+                foreach ($assetIds as $assetId) {
+                    $publish = $stockService->autoPublishListingIfReady($assetId);
+                    if (!empty($publish['failed'])) {
+                        $publishFailures[] = [
+                            'asset_id' => $assetId,
+                            'message' => (string)($publish['message'] ?? '商城发布失败'),
+                        ];
+                    }
+                    $taskService->sync($assetId);
+                }
+                if ($publishFailures !== []) {
+                    $this->recordProjectionWarning('ERP入库成功，部分设备自动发布商城失败', [
+                        'site_id' => $currentSiteId,
+                        'event_id' => $eventId,
+                        'failures' => $publishFailures,
+                    ]);
+                    $result['warnings'][] = '库存已入库，部分商城发布失败，可在库存中心查看原因并重试';
+                }
+            } catch (\Throwable $e) {
+                $this->recordProjectionWarning('ERP入库成功，但自动发布或生成上架待办失败', [
+                    'site_id' => $currentSiteId,
+                    'event_id' => $eventId,
+                    'asset_ids' => $assetIds,
+                    'message' => $e->getMessage(),
+                ]);
+                $result['warnings'][] = '库存已入库，上架待办可在库存中心重新生成';
+            }
+        }
+        return $result;
+    }
+
+    /** 测试或命令行未完整初始化日志容器时，告警本身不能破坏已完成的业务事实。 */
+    protected function recordProjectionWarning(string $message, array $context): void
+    {
+        try {
+            Log::warning($message, $context);
+        } catch (\Throwable) {
+        }
+    }
+
+    protected function processDevices(array $event, array $devices, string $eventId, int $currentSiteId): array
+    {
+        $ownedDevices = [];
+        $consignedDevices = [];
+        foreach ($devices as $device) {
+            if ((string)($device['ownership_type'] ?? 'owned') === 'consign') {
+                $consignedDevices[] = $device;
+                continue;
+            }
+            $ownedDevices[] = $device;
+        }
+
+        $groups = $this->groupDevices($ownedDevices);
+        $orderIds = [];
+        $assetIds = [];
+        $createdCount = 0;
+        $existingCount = 0;
+        foreach ($groups as $groupKey => $group) {
+            $source = (array)($event['_erp_source'] ?? []);
+            $sourcePlugin = trim((string)($source['plugin'] ?? ''));
+            $sourceType = trim((string)($source['type'] ?? ''));
+            $sourceOrderNo = trim((string)($group['source_order_no'] ?? ''));
+            $requestId = $this->sourcePurchaseRequestId($currentSiteId, $sourcePlugin, $sourceType, $sourceOrderNo, (string)$groupKey);
+            $orderId = $this->existingSourceOrderId($currentSiteId, $sourcePlugin, $sourceType, $sourceOrderNo);
+            $pendingDevices = $orderId > 0
+                ? $this->filterMissingSourceDevices($currentSiteId, $orderId, (array)$group['devices'])
+                : (array)$group['devices'];
+            $existingCount += max(0, count((array)$group['devices']) - count($pendingDevices));
+
+            if ($orderId <= 0) {
+                $beforeCreateCount = count($pendingDevices);
+                $createGroup = $group;
+                $createGroup['devices'] = $pendingDevices;
+                $purchaseData = $this->buildPurchaseData($event, $createGroup, $requestId);
+                $orderId = $this->createPurchase($purchaseData);
+                // 并发事件可能同时没有查到采购单；稳定 request_id 会让其中一个复用
+                // 已创建采购单，此时继续补齐本事件尚未落库的设备，不能静默漏单。
+                $pendingDevices = $this->filterMissingSourceDevices($currentSiteId, $orderId, $pendingDevices);
+                $createdCount += max(0, $beforeCreateCount - count($pendingDevices));
+            }
+            if ($pendingDevices !== []) {
+                $beforeAppendCount = count($pendingDevices);
+                $appendGroup = $group;
+                $appendGroup['devices'] = $pendingDevices;
+                // 追加键固定 62 字符；来源已付核销再加 source-paid: 前缀后为 74 字符。
+                // 不直接在原采购键后叠加后缀，避免多台分次入库超过 80 字符；原采购键保持不变。
+                $appendRequestId = 'source-append:' . substr(hash('sha256', $requestId . '|' . $eventId . '|' . implode(',', array_map(
+                    static fn(array $device): string => (string)($device['source_device_id'] ?? ''),
+                    $pendingDevices
+                ))), 0, 48);
+                $appendData = $this->buildPurchaseData($event, $appendGroup, $appendRequestId);
+                $appendData['append_order_id'] = $orderId;
+                $this->createPurchase($appendData);
+                $remainingDevices = $this->filterMissingSourceDevices($currentSiteId, $orderId, $pendingDevices);
+                $createdCount += max(0, $beforeAppendCount - count($remainingDevices));
+                $existingCount += count($remainingDevices);
+            }
+            $orderIds[] = $orderId;
+        }
+
+        $source = (array)($event['_erp_source'] ?? []);
+        $sourcePlugin = trim((string)($source['plugin'] ?? ''));
+        $sourcePluginName = trim((string)($source['plugin_name'] ?? '')) ?: $sourcePlugin;
+        foreach ($consignedDevices as $device) {
+            $warehouseId = (int)($device['target_warehouse_id'] ?? 0);
+            $locationId = (int)($device['target_location_id'] ?? 0);
+            $item = $this->mapDeviceItem($device, $warehouseId, $locationId, 0, $sourcePlugin, $sourcePluginName);
+            $registered = $this->registerConsignment($event, $device, $item);
+            $assetIds[] = (int)$registered['asset_id'];
+            if (!empty($registered['created'])) $createdCount++;
+            else $existingCount++;
+        }
+
+        if ($orderIds !== []) {
+            $assetIds = array_merge($assetIds, $this->assetIdsForPurchaseOrders($currentSiteId, $orderIds));
+        }
+
+        return [
+            'consumer' => 'hsx_erp',
+            'target' => 'self_erp',
+            'status' => $createdCount > 0 ? 'processed' : 'duplicate',
+            'order_ids' => array_values(array_unique(array_map('intval', $orderIds))),
+            'consignment_asset_ids' => array_values(array_unique(array_filter(array_map('intval', $assetIds)))),
+            'asset_ids' => array_values(array_unique(array_filter(array_map('intval', $assetIds)))),
+            'created_count' => $createdCount,
+            'existing_count' => $existingCount,
+            'skipped_count' => 0,
+            'skipped' => [],
+        ];
+    }
+
+    /** 独立查询边界，便于契约测试替换持久层，并统一保证站点隔离。 */
+    protected function assetIdsForPurchaseOrders(int $siteId, array $orderIds): array
+    {
+        $orderIds = array_values(array_unique(array_filter(array_map('intval', $orderIds))));
+        if ($siteId <= 0 || $orderIds === []) return [];
+        return array_map('intval', \addon\hsx_erp\app\model\ErpAsset::where([
+            ['site_id', '=', $siteId],
+        ])->whereIn('purchase_order_id', $orderIds)->column('id'));
+    }
+
+    /**
+     * 独立封装代卖登记入口，避免没有代卖设备时初始化带请求上下文的后台服务，
+     * 同时允许契约测试替换持久化实现。
+     */
+    protected function registerConsignment(array $event, array $device, array $item): array
+    {
+        return ErpConsignmentInboundService::forSite(
+            $this->currentSiteId(),
+            $this->operatorUid,
+            $this->operatorName
+        )->register($event, $device, $item);
+    }
+
+    /** @return array<string,array{source_id:string,source_order_no:string,counterparty:array,devices:array}> */
+    protected function groupDevices(array $devices): array
+    {
+        $groups = [];
+        foreach ($devices as $device) {
+            $sourceId = trim((string)($device['source_id'] ?? ''));
+            $sourceOrderNo = trim((string)($device['source_order_no'] ?? ''));
+            $counterparty = (array)($device['counterparty'] ?? []);
+            $partyKey = implode(':', [
+                (string)($counterparty['source_plugin'] ?? ''),
+                (string)($counterparty['source_type'] ?? ''),
+                (string)($counterparty['source_id'] ?? ''),
+                (string)($counterparty['mobile'] ?? ''),
+                (string)($counterparty['name'] ?? ''),
+            ]);
+            $orderKey = $sourceId !== '' && $sourceId !== '0'
+                ? 'id:' . $sourceId
+                : ($sourceOrderNo !== '' ? 'no:' . $sourceOrderNo : 'device:' . trim((string)($device['source_device_id'] ?? '')));
+            $key = hash('sha256', $orderKey . '|' . $partyKey);
+            if (!isset($groups[$key])) {
+                $groups[$key] = [
+                    'source_id' => $sourceId,
+                    'source_order_no' => $sourceOrderNo,
+                    'counterparty' => $counterparty,
+                    'devices' => [],
+                ];
+            }
+            $groups[$key]['devices'][] = $device;
+        }
+        return $groups;
+    }
+
+    protected function buildPurchaseData(array $event, array $group, string $requestId): array
+    {
+        $source = (array)($event['_erp_source'] ?? []);
+        $sourcePlugin = trim((string)($source['plugin'] ?? ''));
+        $sourcePluginName = trim((string)($source['plugin_name'] ?? '')) ?: $sourcePlugin;
+        $sourceType = trim((string)($source['type'] ?? ''));
+        $sourceName = trim((string)($source['name'] ?? '')) ?: '外部采购';
+        $channel = (array)($event['channel'] ?? []);
+        $channelCode = trim((string)($channel['code'] ?? $channel['key'] ?? $event['channel_code'] ?? ''));
+        $channelName = trim((string)($channel['name'] ?? $channel['label'] ?? $event['channel_name'] ?? ''));
+        if ($channelName === '' && $sourcePlugin === 'hsx_recycle') $channelName = '手机回收';
+        if ($channelCode === '' && $sourcePlugin === 'hsx_recycle') $channelCode = 'hsx_recycle';
+        $counterparty = (array)($group['counterparty'] ?? []);
+        $partyName = trim((string)($counterparty['name'] ?? $counterparty['contact_name'] ?? ''));
+        if ($partyName === '') {
+            $partyName = trim((string)($counterparty['mobile'] ?? ''));
+        }
+        if ($partyName === '') {
+            $partyName = '来源客户#' . ((string)($counterparty['source_id'] ?? '') ?: (string)($group['source_id'] ?? '未知'));
+        }
+
+        $items = [];
+        $sourcePaidAmount = 0.0;
+        $acquiredAt = [];
+        foreach ((array)$group['devices'] as $index => $device) {
+            $warehouseId = (int)($device['target_warehouse_id'] ?? 0);
+            $locationId = (int)($device['target_location_id'] ?? 0);
+            $deviceLabel = trim((string)($device['imei'] ?? $device['sn'] ?? $device['model'] ?? '')) ?: ('第' . ($index + 1) . '台设备');
+            if ($warehouseId <= 0 || $locationId <= 0) {
+                throw new CommonException($deviceLabel . '缺少目标仓库或库位，不能入库');
+            }
+            $cost = round((float)($device['purchase_cost'] ?? 0), 2);
+            if ($cost <= 0) {
+                throw new CommonException($deviceLabel . '缺少有效回收成本，不能生成采购入库');
+            }
+            $devicePaidAmount = min($cost, round(max(0, (float)($device['paid_amount'] ?? 0)), 2));
+            $sourcePaidAmount = round($sourcePaidAmount + $devicePaidAmount, 2);
+            $time = (int)($device['acquired_at'] ?? 0);
+            if ($time > 0) {
+                $acquiredAt[] = $time;
+            }
+            $item = $this->mapDeviceItem($device, $warehouseId, $locationId, $cost, $sourcePlugin, $sourcePluginName);
+            $item['source_paid_amount'] = $devicePaidAmount;
+            $items[] = $item;
+        }
+
+        $sourceOrderNo = trim((string)($group['source_order_no'] ?? ''));
+        $sourceId = trim((string)($group['source_id'] ?? ''));
+        if ($sourceOrderNo === '') {
+            throw new CommonException('设备入库事件缺少来源订单号，已拒绝创建采购单');
+        }
+        $eventId = trim((string)($event['event_id'] ?? ''));
+        $operator = (array)($event['operator'] ?? []);
+        // 采购员属于采购事实，应取最终回收定价员，而不是客户确认请求的
+        // 当前登录人。事件顶层 operator 仅作兼容兜底，设备定价快照优先。
+        $purchaser = $this->resolvePricingPurchaser((array)($group['devices'] ?? []), $operator);
+        $remark = $sourceName . '入库';
+        if ($sourceOrderNo !== '') {
+            $remark .= '；原业务单 ' . $sourceOrderNo;
+        }
+        if ($sourcePaidAmount > 0) {
+            $remark .= '；来源系统已付 ¥' . number_format($sourcePaidAmount, 2, '.', '') . '，ERP已核销对应设备应付并记入“来源系统已付待核对”账户，禁止重复付款';
+        }
+
+        $sourcePaidAccount = $sourcePaidAmount > 0
+            ? $this->resolveSourcePaidAccount($this->currentSiteId())
+            : null;
+
+        return [
+            'party_id' => 0,
+            'party_name' => $partyName,
+            'member_id' => (int)($counterparty['member_id'] ?? (($counterparty['source_type'] ?? '') === 'member' ? ($counterparty['source_id'] ?? 0) : 0)),
+            'contact_name' => trim((string)($counterparty['contact_name'] ?? $partyName)),
+            'contact_mobile' => trim((string)($counterparty['mobile'] ?? '')),
+            'm_no' => trim((string)($counterparty['m_no'] ?? $counterparty['mobile'] ?? '')),
+            'purchase_channel' => $channelName,
+            'purchase_channel_key' => $channelCode,
+            'purchaser_uid' => $purchaser['uid'],
+            'purchaser_snapshot_name' => $purchaser['name'],
+            'allow_historical_purchaser' => 1,
+            'settle_mode' => $sourcePaidAmount > 0 ? 'cash' : 'credit',
+            'settle_method' => $sourcePaidAmount > 0 ? '来源系统已付' : '挂账',
+            'paid_amount' => $sourcePaidAmount,
+            'capital_account_id' => $sourcePaidAccount ? (int)$sourcePaidAccount->id : 0,
+            'source_paid_allocation' => $sourcePaidAmount > 0 ? 1 : 0,
+            'purchase_at' => $acquiredAt === [] ? (int)($event['occurred_at'] ?? time()) : min($acquiredAt),
+            'remark' => $remark,
+            'source_plugin' => $sourcePlugin,
+            'source_type' => $sourceType,
+            'source_id' => $sourceId,
+            'origin_plugin' => $sourcePlugin,
+            'origin_plugin_name' => $sourcePluginName,
+            'origin_type' => $sourceType,
+            'origin_name' => $sourceName,
+            'origin_id' => $sourceId,
+            'origin_no' => $sourceOrderNo,
+            'source_order_no' => $sourceOrderNo,
+            'origin_event_id' => $eventId,
+            'event_id' => $eventId,
+            'request_id' => $requestId,
+            'settlement_request_id' => 'source-paid:' . ($requestId !== '' ? $requestId : $eventId),
+            'items' => $items,
+        ];
+    }
+
+    /** @return array{uid:int,name:string,historical:bool} */
+    protected function resolvePricingPurchaser(array $devices, array $operator): array
+    {
+        foreach ($devices as $device) {
+            $pricing = (array)($device['pricing_snapshot'] ?? $device['recycle_pricing_snapshot'] ?? []);
+            $uid = (int)($pricing['price_uid'] ?? 0);
+            if ($uid > 0) {
+                $name = trim((string)($pricing['price_name'] ?? ''));
+                if ($name === '' && (int)($operator['id'] ?? 0) === $uid) {
+                    $name = trim((string)($operator['name'] ?? ''));
+                }
+                return [
+                    'uid' => $uid,
+                    'name' => $name !== '' ? $name : ('历史定价员#' . $uid),
+                    'historical' => !empty($pricing['historical_operator']) || !empty($operator['historical']),
+                ];
+            }
+        }
+
+        $uid = (int)($operator['id'] ?? 0);
+        if ($uid <= 0) {
+            throw new CommonException('回收入库设备缺少最终定价员，不能确定 ERP 采购员');
+        }
+        return [
+            'uid' => $uid,
+            'name' => trim((string)($operator['name'] ?? '')) ?: ('历史定价员#' . $uid),
+            'historical' => !empty($operator['historical']),
+        ];
+    }
+
+    protected function resolveSourcePaidAccount(int $siteId): object
+    {
+        return ErpCapitalAccountService::ensureSourcePaidClearingAccount($siteId);
+    }
+
+    protected function mapDeviceItem(array $device, int $warehouseId, int $locationId, float $cost, string $sourcePlugin, string $sourcePluginName): array
+    {
+        $check = (array)($device['check_snapshot'] ?? []);
+        $pricing = (array)($device['pricing_snapshot'] ?? $device['recycle_pricing_snapshot'] ?? []);
+        $qcSnapshot = $this->buildQcSnapshot($device, $check, $sourcePlugin);
+        $refurbishment = (array)($device['refurbishment'] ?? []);
+        $refurbishmentReason = mb_substr(trim((string)($refurbishment['reason'] ?? '')), 0, 500);
+        $refurbishmentItems = array_values(array_filter((array)($refurbishment['suggested_items'] ?? []), 'is_array'));
+        $sourceDeviceId = mb_substr(trim((string)($device['source_device_id'] ?? '')), 0, 80);
+        $sourceDeviceValue = ctype_digit($sourceDeviceId) ? (int)$sourceDeviceId : $sourceDeviceId;
+        $capacity = trim((string)($device['capacity'] ?? ''));
+        $color = trim((string)($device['color'] ?? ''));
+        $spec = implode(' ', array_values(array_filter([$capacity, $color])));
+        $health = $device['battery_health'] ?? '';
+        $battery = is_numeric($health) ? (int)max(0, min(100, round((float)$health))) : 0;
+        $warrantyText = trim((string)($device['warranty_info'] ?? ''));
+        $warranty = 0;
+        if (preg_match('~(\d{4})[-/](\d{1,2})[-/](\d{1,2})~', $warrantyText, $date)
+            && checkdate((int)$date[2], (int)$date[3], (int)$date[1])) {
+            $warranty = (int)strtotime(sprintf('%04d-%02d-%02d', $date[1], $date[2], $date[3]));
+        }
+        // 结构化质检只写qc_report。备注仅承接来源人员手填内容，避免长摘要挤占备注。
+        $humanRemark = trim((string)($check['human_remark'] ?? $check['check_remark'] ?? ''));
+        $images = '';
+        foreach (['check_images_buyer', 'check_images_seller', 'check_images'] as $imageField) {
+            $candidate = $check[$imageField] ?? '';
+            if ((is_array($candidate) && $candidate !== []) || (!is_array($candidate) && trim((string)$candidate) !== '')) {
+                $images = $candidate;
+                break;
+            }
+        }
+        if (is_array($images)) {
+            $images = json_encode(array_values($images), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '';
+        }
+        return [
+            'warehouse_id' => $warehouseId,
+            'location_id' => $locationId,
+            'imei' => trim((string)($device['imei'] ?? '')) ?: trim((string)($device['imei2'] ?? '')),
+            'sn' => trim((string)($device['sn'] ?? '')),
+            'model' => trim((string)($device['model'] ?? '')),
+            'spec' => $spec,
+            'spec_json' => [
+                'capacity' => $capacity,
+                'capacity_value' => $device['capacity_value'] ?? $capacity,
+                'color' => $color,
+                'color_value' => $device['color_value'] ?? $color,
+                'imei2' => trim((string)($device['imei2'] ?? '')),
+                'battery' => $battery,
+                'battery_cycle_count' => $device['battery_cycle_count'] ?? '',
+                'system_version' => (string)($device['system_version'] ?? ''),
+                'warranty_info' => $warrantyText,
+                'source_plugin' => $sourcePlugin,
+                'source_catalog' => is_array($device['source_catalog'] ?? null) ? $device['source_catalog'] : [],
+                'source_device_id' => $sourceDeviceValue,
+                'source_order_no' => trim((string)($device['source_order_no'] ?? '')),
+                'settlement_status' => trim((string)($device['settlement_status'] ?? '')),
+                'source_paid_amount' => round((float)($device['paid_amount'] ?? 0), 2),
+                // 设备级保留真实定价人，避免同一回收订单分批确认、多人定价时
+                // 只剩采购单头的单一负责人快照。
+                'pricing_operator' => [
+                    'uid' => (int)($pricing['price_uid'] ?? 0),
+                    'priced_at' => (int)($pricing['price_at'] ?? 0),
+                ] + ($sourcePlugin === 'hsx_recycle' ? [
+                    'source' => 'recycle_final_price',
+                    'name' => trim((string)($pricing['price_name'] ?? '')),
+                ] : []),
+                'payee_methods' => array_values(array_filter((array)($device['payment_methods'] ?? []), 'is_array')),
+                'consignment' => is_array($device['consignment'] ?? null) ? (array)$device['consignment'] : null,
+                'refurbishment_suggestion' => [
+                    'required' => (bool)($refurbishment['required'] ?? false),
+                    'reason' => $refurbishmentReason,
+                    'items' => $refurbishmentItems,
+                    'estimated_cost' => round((float)($refurbishment['estimated_cost'] ?? 0), 2),
+                    'decision_source' => trim((string)($refurbishment['decision_source'] ?? $sourcePlugin)),
+                ],
+            ] + ($sourcePlugin === 'hsx_recycle' && isset($device['inbound_operator']) ? ['inbound_operator' => $device['inbound_operator']] : []),
+            'color' => $color,
+            'battery' => $battery,
+            'warranty' => $warranty,
+            'catalog_product_id' => (int)($device['catalog_product_id'] ?? 0),
+            'estimate_sale_price' => round((float)($device['suggested_sale_price'] ?? 0), 2),
+            'retail_price' => round((float)($device['suggested_sale_price'] ?? 0), 2),
+            'image_urls' => trim((string)$images),
+            'quality_remark' => mb_substr($humanRemark, 0, 500),
+            'qc_template_id' => (int)($check['check_template_id'] ?? 0),
+            'qc_report' => json_encode($qcSnapshot, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '',
+            'purchase_cost' => $cost,
+            'refurbish_required' => (bool)($refurbishment['required'] ?? false),
+            'refurbish_reason' => $refurbishmentReason,
+            'remark' => '',
+            'remark_internal' => '',
+        ];
+    }
+
+    /**
+     * 把回收端事件中的模板、结果、图片和操作信息固化为 ERP 标准快照。
+     *
+     * 不修改回收插件表结构：安装回收插件时优先复用其公开增强服务补齐结构化
+     * result_items；服务不可用时仍完整保留事件原始字段，避免跨插件链路丢数据。
+     */
+    private function buildQcSnapshot(array $device, array $check, string $sourcePlugin): array
+    {
+        $sourceDeviceId = (int)($device['source_device_id'] ?? 0);
+        $report = [];
+        if ($sourcePlugin === 'hsx_recycle' && $sourceDeviceId > 0) {
+            $service = '\\addon\\hsx_recycle\\app\\service\\admin\\order\\RecycleDeviceService';
+            if (class_exists($service)) {
+                try {
+                    $candidate = (new $service())->enrichedCheckMetaForDevice($sourceDeviceId);
+                    if (is_array($candidate)) $report = $candidate;
+                } catch (\Throwable) {
+                    // 事件快照仍可用；回收插件读取失败不能阻断采购入库。
+                }
+            }
+        }
+        if ($report === []) {
+            foreach (['check_result_buyer', 'check_result_seller', 'check_result'] as $key) {
+                $candidate = $this->decodeSnapshotArray($check[$key] ?? null);
+                if ($candidate !== []) {
+                    $report = $candidate;
+                    break;
+                }
+            }
+        }
+
+        $readings = is_array($check['device_readings'] ?? null) ? $check['device_readings'] : [];
+        unset($check['device_readings']);
+        return [
+            'version' => 1,
+            'device_readings' => $readings,
+            'source_plugin' => $sourcePlugin,
+            'source_device_id' => $sourceDeviceId,
+            'template' => ['id' => (int)($check['check_template_id'] ?? 0)],
+            'report' => $report,
+            'raw' => $check,
+            'inspector' => [
+                'uid' => (int)($check['check_uid'] ?? 0),
+                'checked_at' => (int)($check['check_at'] ?? 0),
+            ],
+            'synced_at' => time(),
+        ];
+    }
+
+    private function decodeSnapshotArray($value): array
+    {
+        if (is_array($value)) return $value;
+        if (!is_string($value) || trim($value) === '') return [];
+        $decoded = json_decode($value, true);
+        return is_array($decoded) ? $decoded : [];
+    }
+
+    protected function currentSiteId(): int
+    {
+        return $this->forcedSiteId > 0 ? $this->forcedSiteId : (int)request()->siteId();
+    }
+
+    protected function existingOrderId(int $siteId, string $requestId): int
+    {
+        $order = ErpPurchaseOrder::where([
+            ['site_id', '=', $siteId],
+            ['request_id', '=', $requestId],
+        ])->findOrEmpty();
+        return $order->isEmpty() ? 0 : (int)$order->id;
+    }
+
+    protected function existingSourceOrderId(int $siteId, string $sourcePlugin, string $sourceType, string $sourceOrderNo): int
+    {
+        if ($siteId <= 0 || $sourcePlugin === '' || $sourceType === '' || $sourceOrderNo === '') return 0;
+        $order = ErpPurchaseOrder::where([
+            ['site_id', '=', $siteId],
+            ['origin_plugin', '=', $sourcePlugin],
+            ['origin_type', '=', $sourceType],
+            ['origin_no', '=', $sourceOrderNo],
+        ])->where('status', '<>', 'void')->order('id asc')->findOrEmpty();
+        return $order->isEmpty() ? 0 : (int)$order->id;
+    }
+
+    protected function sourcePurchaseRequestId(int $siteId, string $sourcePlugin, string $sourceType, string $sourceOrderNo, string $fallback): string
+    {
+        $businessKey = implode('|', [$siteId, $sourcePlugin, $sourceType, $sourceOrderNo !== '' ? $sourceOrderNo : $fallback]);
+        return 'source-purchase:' . substr(hash('sha256', $businessKey), 0, 48);
+    }
+
+    protected function filterMissingSourceDevices(int $siteId, int $orderId, array $devices): array
+    {
+        if ($siteId <= 0 || $orderId <= 0 || $devices === []) return $devices;
+        $existing = [];
+        $rows = \addon\hsx_erp\app\model\ErpAsset::where([
+            ['site_id', '=', $siteId],
+            ['purchase_order_id', '=', $orderId],
+        ])->field('spec_json')->select()->toArray();
+        foreach ($rows as $row) {
+            $snapshot = $this->decodeSnapshotArray($row['spec_json'] ?? '');
+            $sourceDeviceId = trim((string)($snapshot['source_device_id'] ?? ''));
+            if ($sourceDeviceId !== '' && $sourceDeviceId !== '0') $existing[$sourceDeviceId] = true;
+        }
+        return array_values(array_filter($devices, static function (array $device) use ($existing): bool {
+            $sourceDeviceId = trim((string)($device['source_device_id'] ?? ''));
+            return $sourceDeviceId === '' || $sourceDeviceId === '0' || !isset($existing[$sourceDeviceId]);
+        }));
+    }
+
+    protected function createPurchase(array $data): int
+    {
+        $fromRecycle = ($data['origin_plugin'] ?? '') === 'hsx_recycle' && ($data['origin_type'] ?? '') === 'hsx_recycle.recycle_purchase';
+        $actor = $fromRecycle ? RecycleInboundActor::fromItems($data['items']) : null;
+        return ErpPurchaseService::forSite(
+            $this->currentSiteId(),
+            $actor['uid'] ?? ($fromRecycle ? 0 : $this->operatorUid),
+            $actor['name'] ?? ($fromRecycle ? '系统入库' : $this->operatorName)
+        )->create($data);
+    }
+
+    protected function resolveBusinessSource(string $sourceType): ?array
+    {
+        return ErpConfigService::forSite($this->currentSiteId())->findBusinessSource($sourceType);
+    }
+
+    protected function findInbox(int $siteId, string $eventId, bool $lock = false): ?array
+    {
+        $query = ErpInboxEvent::where([['site_id', '=', $siteId], ['event_id', '=', $eventId]]);
+        if ($lock) $query->lock(true);
+        $row = $query->findOrEmpty();
+        return $row->isEmpty() ? null : $row->toArray();
+    }
+
+    protected function createInbox(int $siteId, string $eventId, array $event, array $requestPayload): int
+    {
+        $now = time();
+        $source = (array)($event['_erp_source'] ?? []);
+        $row = ErpInboxEvent::create([
+            'site_id' => $siteId,
+            'event_id' => $eventId,
+            'source_plugin' => (string)($source['plugin'] ?? ''),
+            'event_name' => (string)($event['event_name'] ?? 'erp.device.inbound_requested'),
+            'payload_json' => json_encode(['request' => $requestPayload], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            'status' => 'processing',
+            'occurred_at' => (int)($event['occurred_at'] ?? $now),
+            'create_at' => $now,
+            'update_at' => $now,
+        ]);
+        return (int)$row->id;
+    }
+
+    protected function markInboxProcessing(int $inboxId, array $requestPayload): void
+    {
+        $stored = json_decode((string)ErpInboxEvent::where('id', '=', $inboxId)->value('payload_json'), true);
+        $payload = ['request' => $requestPayload];
+        if (is_array($stored) && is_array($stored['_retry'] ?? null)) {
+            // 保留历史重试次数；否则每次进入 processing 都会将计数清零，
+            // 永远无法进入人工排障状态。
+            $payload['_retry'] = $stored['_retry'];
+        }
+        ErpInboxEvent::where('id', '=', $inboxId)->update([
+            'payload_json' => json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            'status' => 'processing',
+            'update_at' => time(),
+        ]);
+    }
+
+    protected function completeInbox(int $inboxId, array $requestPayload, array $result): void
+    {
+        ErpInboxEvent::where('id', '=', $inboxId)->update([
+            'payload_json' => json_encode(['request' => $requestPayload, 'result' => $result], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            'status' => 'processed',
+            'update_at' => time(),
+        ]);
+    }
+
+    protected function recordFailedInbox(int $siteId, string $eventId, array $event, array $requestPayload, string $message): void
+    {
+        $existing = $this->findInbox($siteId, $eventId);
+        if ($existing !== null && $this->isProcessedInbox($existing)) return;
+        $existingPayload = $existing !== null
+            ? json_decode((string)($existing['payload_json'] ?? ''), true)
+            : [];
+        $attempts = (int)($existingPayload['_retry']['attempts'] ?? 0) + 1;
+        $payload = json_encode([
+            'request' => $requestPayload,
+            'error' => mb_substr(trim($message), 0, 500),
+            '_retry' => [
+                'attempts' => $attempts,
+                'last_at' => time(),
+                'last_error' => mb_substr(trim($message), 0, 500),
+            ],
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $values = ['payload_json' => $payload, 'status' => 'failed', 'update_at' => time()];
+        try {
+            if ($existing !== null) {
+                ErpInboxEvent::where([['site_id', '=', $siteId], ['id', '=', (int)$existing['id']]])->update($values);
+                return;
+            }
+            $source = (array)($event['_erp_source'] ?? []);
+            $now = time();
+            ErpInboxEvent::create(array_merge($values, [
+                'site_id' => $siteId,
+                'event_id' => $eventId,
+                'source_plugin' => (string)($source['plugin'] ?? ''),
+                'event_name' => (string)($event['event_name'] ?? 'erp.device.inbound_requested'),
+                'occurred_at' => (int)($event['occurred_at'] ?? $now),
+                'create_at' => $now,
+            ]));
+        } catch (\Throwable) {
+            // 并发消费者可能已写入成功结果；失败记录不能覆盖 processed 事实。
+        }
+    }
+
+    protected function withinTransaction(callable $callback): array
+    {
+        return Db::transaction($callback);
+    }
+
+    protected function duplicateResult(array $inbox): array
+    {
+        $stored = json_decode((string)($inbox['payload_json'] ?? ''), true);
+        $result = is_array($stored) && is_array($stored['result'] ?? null) ? $stored['result'] : [];
+        $existingCount = (int)($result['created_count'] ?? 0) + (int)($result['existing_count'] ?? 0);
+        return array_merge($result, [
+            'consumer' => 'hsx_erp',
+            'target' => 'self_erp',
+            'status' => 'duplicate',
+            'created_count' => 0,
+            'existing_count' => $existingCount,
+        ]);
+    }
+
+    protected function assertSameInboxRequest(array $inbox, array $requestPayload): void
+    {
+        $stored = json_decode((string)($inbox['payload_json'] ?? ''), true);
+        $request = is_array($stored) && is_array($stored['request'] ?? null) ? $stored['request'] : null;
+        if ($request === null) return;
+        // _erp_source 是消费端临时解析的展示快照，配置改名不应被误判为业务事实冲突。
+        unset($request['_erp_source'], $requestPayload['_erp_source']);
+        $request = $this->canonicalize($request);
+        $requestPayload = $this->canonicalize($requestPayload);
+        $storedHash = hash('sha256', json_encode($request, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '');
+        $currentHash = hash('sha256', json_encode($requestPayload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '');
+        if (!hash_equals($storedHash, $currentHash)) {
+            throw new CommonException('event_id已被不同设备入库事实占用，请修正插件幂等键');
+        }
+    }
+
+    protected function isProcessedInbox(array $inbox): bool
+    {
+        return in_array((string)($inbox['status'] ?? ''), ['processed', 'done'], true);
+    }
+
+    /** 固化用于幂等碰撞校验的规范请求，排除 ERP 内部临时元数据。 */
+    protected function canonicalRequest(array $event): array
+    {
+        unset($event['_delivery'], $event['_erp_source']);
+        return $this->canonicalize($event);
+    }
+
+    private function canonicalize(array $value): array
+    {
+        $isList = $value === [] || array_keys($value) === range(0, count($value) - 1);
+        foreach ($value as $key => $item) {
+            if (is_array($item)) $value[$key] = $this->canonicalize($item);
+        }
+        if (!$isList) ksort($value);
+        return $value;
+    }
+
+}

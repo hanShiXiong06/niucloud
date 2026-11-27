@@ -4,6 +4,7 @@ import useMemberStore from '@/stores/member'
 import useSystemStore from '@/stores/system'
 import useConfigStore from '@/stores/config'
 import { getNeedLoginPages } from '@/utils/pages'
+import manifestJson from "@/manifest.json";
 
 /**
  * 跳转页面
@@ -90,7 +91,6 @@ export const redirect = (redirect: any) => {
     if (newLogin) {
         uni.setStorage({ key: 'loginBack', data: { url: originalUrl } });
     }
-
     switch (mode) {
         case 'switchTab':
             uni.switchTab({
@@ -287,7 +287,17 @@ export function urlDeconstruction(url: string) {
  * @returns
  */
 export function isUrl(str: string): boolean {
-    return str && (str.indexOf('http://') != -1 || str.indexOf('https://') != -1) || false
+    const value = normalizeResourcePath(str)
+    return /^(https?:)?\/\//i.test(value) || /^(data|blob):/i.test(value)
+}
+
+/**
+ * 统一清理接口、Excel 导入等来源中的资源地址。
+ * 避免完整 URL 前后的空白字符被浏览器当成相对路径的一部分。
+ */
+export function normalizeResourcePath(path: unknown): string {
+    if (typeof path != 'string') return ''
+    return path.trim().replace(/^(?:%20)+(?=https?:\/\/)/i, '')
 }
 
 /**
@@ -304,9 +314,10 @@ export function img(path: string): string {
     let imgDomain = import.meta.env.VITE_IMG_DOMAIN
     // #endif
 
-    if (typeof path == 'string' && path.startsWith('/')) path = path.replace(/^\//, '')
+    path = normalizeResourcePath(path)
+    if (path.startsWith('/')) path = path.replace(/^\//, '')
     if (typeof imgDomain == 'string' && imgDomain.endsWith('/')) imgDomain = imgDomain.slice(0, -1)
-    return isUrl(path) ? path : `${imgDomain}/${path}`
+    return isUrl(path) ? path : `${ imgDomain }/${ path }`
 }
 
 /**
@@ -323,10 +334,11 @@ export function getUrl(path: string): string {
     let urlDomain = import.meta.env.VITE_IMG_DOMAIN
     // #endif
 
-    if (typeof path == 'string' && path.startsWith('/')) path = path.replace(/^\//, '')
+    path = normalizeResourcePath(path)
+    if (path.startsWith('/')) path = path.replace(/^\//, '')
     if (typeof urlDomain == 'string' && urlDomain.endsWith('/')) urlDomain = urlDomain.slice(0, -1)
 
-    return isUrl(path) ? path : `${urlDomain}/${path}`
+    return isUrl(path) ? path : `${ urlDomain }/${ path }`
 }
 
 /**
@@ -661,7 +673,7 @@ export function deepClone(obj: any) {
  * @param delay
  * @returns
  */
-export function debounce(fn: (args?: any) => any, delay: number = 300) {
+export function debounce(fn: (args ?: any) => any, delay: number = 300) {
     let timer: null | number = null
     return function (...args) {
         if (timer != null) {
@@ -691,10 +703,12 @@ export function pxToRpx(px: any) {
 // 返回上一页
 export function goback(data: any) {
     let { url, mode, param, title } = data
-    uni.showToast({
-        title: title,
-        icon: 'none'
-    });
+    if (title) {
+        uni.showToast({
+            title: title,
+            icon: 'none'
+        });
+    }
     setTimeout(() => {
         if (getCurrentPages().length > 1) {
             uni.navigateBack({
@@ -707,7 +721,7 @@ export function goback(data: any) {
                 mode: mode || 'redirectTo'
             });
         }
-    }, 600);
+    }, title ? 600 : 0);
 }
 
 
@@ -742,10 +756,10 @@ export function getValidTime(minutes: any = 1) {
  * 设置插件应用的主色调
  * @param path
  */
-export function setThemeColor (path: string) {
+export function setThemeColor(path: string) {
     let pathArr = path.split('/')
-	let index = !pathArr[0] ? 1 : 0;
-    let route = pathArr[index] == 'addon' ? pathArr[(index+1)] : 'app';
+    let index = !pathArr[0] ? 1 : 0;
+    let route = pathArr[index] == 'addon' ? pathArr[(index + 1)] : 'app';
 
     // 设置底部导航
     const configStore = useConfigStore()
@@ -754,44 +768,44 @@ export function setThemeColor (path: string) {
     }
 
     // 设置插件应用的主色调，排除系统
-	const theme_color_list = uni.getStorageSync('theme_color_list');
-	const current_theme_color = uni.getStorageSync('current_theme_color');
-	let currTheme = {};
+    const theme_color_list = uni.getStorageSync('theme_color_list');
+    const current_theme_color = uni.getStorageSync('current_theme_color');
+    let currTheme = {};
     if (route != 'app') {
         try {
-			currTheme = theme_color_list[route];
-			if(currTheme && currTheme.theme){
-				configStore.themeColor = themeColorToHex(currTheme.theme)
-				uni.setStorageSync('current_theme_color', JSON.stringify(themeColorToHex(currTheme.theme)));
-			}else if( !currTheme && current_theme_color){
-				configStore.themeColor = ''
-			}else{
-				currTheme = theme_color_list.app || Object.values(theme_color_list)[0];
-				configStore.themeColor = themeColorToHex(currTheme.theme)
-				uni.setStorageSync('current_theme_color', JSON.stringify(themeColorToHex(currTheme.theme)));
-			}
+            currTheme = theme_color_list[route];
+            if (currTheme && currTheme.theme) {
+                configStore.themeColor = themeColorToHex(currTheme.theme)
+                uni.setStorageSync('current_theme_color', JSON.stringify(themeColorToHex(currTheme.theme)));
+            } else if (!currTheme && current_theme_color) {
+                configStore.themeColor = ''
+            } else {
+                currTheme = theme_color_list.app || Object.values(theme_color_list)[0];
+                configStore.themeColor = themeColorToHex(currTheme.theme)
+                uni.setStorageSync('current_theme_color', JSON.stringify(themeColorToHex(currTheme.theme)));
+            }
         } catch (e) {
             // 设置插件应用的主色调发生错误，若不存在则使用最后有效的主色调
-			if(!current_theme_color && theme_color_list  && Object.keys(theme_color_list).length > 0){
-				currTheme = theme_color_list.app || Object.values(theme_color_list)[0];
-				configStore.themeColor = themeColorToHex(currTheme.theme)
-				uni.setStorageSync('current_theme_color', JSON.stringify(themeColorToHex(currTheme.theme)));
-			}else{
-				configStore.themeColor = '';
-			}
+            if (!current_theme_color && theme_color_list && Object.keys(theme_color_list).length > 0) {
+                currTheme = theme_color_list.app || Object.values(theme_color_list)[0];
+                configStore.themeColor = themeColorToHex(currTheme.theme)
+                uni.setStorageSync('current_theme_color', JSON.stringify(themeColorToHex(currTheme.theme)));
+            } else {
+                configStore.themeColor = '';
+            }
         }
 
-    }else if (!current_theme_color && theme_color_list && Object.keys(theme_color_list).length > 0) {
-      currTheme = theme_color_list.app || Object.values(theme_color_list)[0]
-      configStore.themeColor = themeColorToHex(currTheme.theme)
-      uni.setStorageSync("current_theme_color", JSON.stringify(themeColorToHex(currTheme.theme)))
+    } else if (!current_theme_color && theme_color_list && Object.keys(theme_color_list).length > 0) {
+        currTheme = theme_color_list.app || Object.values(theme_color_list)[0]
+        configStore.themeColor = themeColorToHex(currTheme.theme)
+        uni.setStorageSync("current_theme_color", JSON.stringify(themeColorToHex(currTheme.theme)))
     }
 }
 
-export function themeColorToHex (param: any) {
+export function themeColorToHex(param: any) {
     const hexRegex = /^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/
     const rgbaRegex = /^rgba?\((\d+),\s*(\d+),\s*(\d+)(,\s*\d*\.?\d+)?\)$/
-    for(let key in param){
+    for (let key in param) {
         if (rgbaRegex.test(param[key])) {
             const values = param[key].replace('rgba(', '').replace(')', '').split(',');
             // 提取 r, g, b, a 值，并将它们转换为合适的类型
@@ -799,14 +813,14 @@ export function themeColorToHex (param: any) {
             const g = parseInt(values[1].trim(), 10); // Green 分量
             const b = parseInt(values[2].trim(), 10); // Blue 分量
             const a = parseFloat(values[3].trim());   // Alpha 分量
-            param[key] = rgbaToHex(r,g,b,a)
+            param[key] = rgbaToHex(r, g, b, a)
         }
     }
     return param
 }
 
 // rgba转十六进制颜色
-export function rgbaToHex (r, g, b, a) {
+export function rgbaToHex(r, g, b, a) {
     // 计算混合后的RGB值，假设背景是白色 (255, 255, 255)
     let rBlend = Math.round((1 - a) * 255 + a * r)
     let gBlend = Math.round((1 - a) * 255 + a * g)
@@ -829,4 +843,41 @@ export function getTopFixedStatusName(data: any = {}) {
     if (data.site_id) name += '_' + data.site_id
     if (data.type) name += '_' + data.type
     return name
+}
+
+// 距离显示
+
+export function distance(distance: string | number): string {
+    const dist = typeof distance === 'string' ? parseFloat(distance) : distance;
+    if (isNaN(dist)) return distance.toString();
+    return dist < 1 ? parseInt((dist * 1000).toString()) + 'm' : dist.toFixed(1) + 'km'
+}
+
+/**
+ * 打开地图选择器
+ * @param backurl 回调URL
+ * @param params 参数
+ */
+export function openMapSelector(backurl: string, params = '') {
+    const configStore = useSystemStore();
+    const mapType = configStore.mapConfig?.map_type || 'tencent';
+    if (mapType === 'tencent') {
+        const url = `https://apis.map.qq.com/tools/locpicker?search=1&type=0&backurl=${ encodeURIComponent(backurl) }&key=${ manifestJson.h5.sdkConfigs.maps.qqmap.key }&referer=myapp`;
+        window.location.href = url;
+    } else if (mapType === 'tianditu') {
+        // 打开天地图选择器
+        const tiandituKey = configStore.mapConfig?.tianditu_map_web_key || '';
+        if (!tiandituKey) {
+            uni.showToast({
+                title: '天地图密钥未配置',
+                icon: 'none'
+            });
+            return;
+        }
+        // 天地图的位置选择器URL
+        // 注意：天地图的位置选择器API可能与腾讯地图不同，需要根据实际API文档调整
+        const baseUrl = (import.meta.env.VITE_APP_BASE_URL || `${ location.origin }`).replace(/\/api\/$/, '')
+        const url = baseUrl + `/tianmap/index.html?search=1&type=0&backurl=${ encodeURIComponent(backurl) }&key=${ tiandituKey }` + (params ? '&' + params : '')
+        window.location.href = url;
+    }
 }

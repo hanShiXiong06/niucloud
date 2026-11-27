@@ -2,7 +2,7 @@
     <div class="main-container" v-loading="loading">
 
         <el-card class="card !border-none" shadow="never">
-            <el-page-header :content="pageName" :icon="ArrowLeft" @back="$router.back()" />
+            <el-page-header :content="pageName" :icon="ArrowLeft" @back="back()" />
         </el-card>
 
         <el-form class="page-form mt-[15px]" :model="formData" label-width="100px" ref="formRef" label-position="left" v-if="Object.keys(formData).length">
@@ -121,7 +121,6 @@
                         </template>
                     </el-table-column>
                     <el-table-column prop="active_goods_order_money" :label="t('paymentAmount')" min-width="100" />
-                    
                     <el-table-column prop="active_goods_order_num" :label="t('orderCount')" min-width="100" />
                     <el-table-column prop="active_goods_member_num" :label="t('activeMemberNum')" min-width="100" />
                     <el-table-column prop="active_goods_success_num" :label="t('activeSuccessNum')" min-width="100" />
@@ -134,7 +133,6 @@
             </div>
             <div v-if="activeName == 'orderList'">
                 <el-form :inline="true" :model="orderParams.searchParam" ref="orderSearchFormRef">
-
                     <el-form-item :label="t('orderInfo')" prop='search_name'>
                         <el-input class="input-item" v-model.trim="orderParams.searchParam.search_name" />
                     </el-form-item>
@@ -247,6 +245,10 @@ const route = useRoute()
 const router = useRouter()
 const pageName = route.meta.title
 
+const back = () => {
+    router.push('/phone_shop/marketing/discount/list')
+}
+
 const formData:Record<string, any> = ref({})
 const loading = ref(false)
 const activeName = ref('goodsList')
@@ -277,7 +279,7 @@ const goodsParams = reactive({
         active_id: route.query.id
     }
 })
-const getActiveDiscountGoodsPageListFn= (page: number = 1)=>{
+const getActiveDiscountGoodsPageListFn = (page: number = 1)=>{
     goodsParams.loading = true
     goodsParams.page = page
     getActiveDiscountGoodsPageList({
@@ -341,7 +343,7 @@ const orderResetForm = (formEl: FormInstance | undefined) => {
     getActiveDiscountOrderPageListFn()
 }
 //活动会员
-const memberParams =  reactive({
+const memberParams = reactive({
     page: 1,
     limit: 10,
     total: 0,

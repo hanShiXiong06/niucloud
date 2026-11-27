@@ -1,6 +1,6 @@
 <template>
     <view class="min-h-[100vh] !bg-[var(--page-bg-color)]" :style="themeColor()" v-if="memberStore.info">
-        <view class="fixed w-full z-2  !bg-[var(--page-bg-color)]">
+        <view class="fixed w-full z-2  !bg-[var(--page-bg-color)] container">
             <view class="pb-[190rpx] text-[#fff] w-full" :style="headerStyle">
                 <!-- #ifdef MP-WEIXIN || APP-PLUS -->
                 <top-tabbar :data="param" class="top-header" />
@@ -16,7 +16,7 @@
                 class="sidebar-margin pt-[50rpx] pb-[40rpx] bg-[#fff] rounded-[var(--rounded-big)] px-[40rpx] box-border mt-[-112rpx]">
                 <view class="flex flex-col items-center w-full"
                       @click="redirect({ url: '/app/pages/member/detailed_account', param: { type : 'money' } })"
-                      :class="{'pt-[12rpx]': !Object.keys(cashOutConfigObj).length || (Object.keys(cashOutConfigObj).length && !systemStore.siteAddons.includes('recharge') && cashOutConfigObj.is_open != 1)}">
+                      :class="{'pt12': !Object.keys(cashOutConfigObj).length || (Object.keys(cashOutConfigObj).length && !systemStore.siteAddons.includes('recharge') && cashOutConfigObj.is_open != 1)}">
                     <view class=" text-[var(--text-color-light9)] text-[26rpx] leading-[34rpx] mb-[12rpx]">{{ t('money') }}</view>
                     <view class="text-[#333] inline-block">
                         <text class="text-[36rpx] mr-[6rpx] price-font">￥</text>
@@ -32,7 +32,7 @@
                                 @click="redirect({url: '/addon/recharge/pages/recharge'})">充值</button>
                     </template>
                     <view v-if="cashOutConfigObj.is_open == 1"
-                          :class="{'!w-[340rpx]': !systemStore.siteAddons.includes('recharge')}"
+                          :class="{'imp-w340': !systemStore.siteAddons.includes('recharge')}"
                           class="text-center w-[250rpx] h-[70rpx] rounded-[40rpx] text-[26rpx] !text-[#fff] flex-center font-500 !m-0"
                           style="background: linear-gradient( 94deg, #FB7939 0%, #FE120E 99%), #EF000C;"
                           @click="applyCashOut">提现</view>
@@ -50,12 +50,10 @@
         </view>
         <mescroll-body ref="mescrollRef" @init="mescrollInit" :down="{ use: false }" height="auto" @up="getListFn" :top="mescrollTop">
             <view class="sidebar-margin pt-[10rpx] body-bottom" v-if="list.length">
-                <view v-for="(item,index) in list" :key="item.id"
-                      class="w-full h-[140rpx] flex justify-between items-center box-border card-template"
-                      :class="{'mt-[var(--top-m)]':index>0}">
+                <view v-for="(item,index) in list" :key="item.id" class="card-template" :class="{'mt-var':index>0}">
                     <view class="flex items-center">
                         <view class="w-[80rpx] h-[80rpx] text-center rounded-[40rpx] text-[40rpx] font-500 leading-[80rpx] text-[#fff]"
-                            :class="{'bg-[#EF000C]' :item.account_data > 0&&item.account_type!='money', 'bg-[#03B521]':item.account_data <= 0&&item.account_type!='money','bg-[#1379FF]':item.account_type=='money'}">{{ item.account_type == 'money' ? '提' : item.account_data > 0 ? '收' : '支' }}</view>
+                            :class="{'bg-money-red' :item.account_data > 0 && item.account_type!='money', 'bg-money-green':item.account_data <= 0&&item.account_type!='money','bg-money-blue':item.account_type=='money'}">{{ item.account_type == 'money' ? '提' : item.account_data > 0 ? '收' : '支' }}</view>
                         <view class="flex flex-col ml-[20rpx]">
                             <view class="text-[#333] text-[28rpx] leading-[36rpx]">{{ item.from_type_name }}</view>
                             <view class="text-[var(--text-color-light9)] text-[24rpx] mt-[12rpx]">{{ item.create_time }}</view>
@@ -63,7 +61,7 @@
                     </view>
                     <view class="text-right">
                         <view class="text-[36rpx] leading-[40rpx] price-font"
-                              :class="{'text-[#EF000C]' :item.account_data > 0&&item.account_type!='money', 'text-[#03B521]':item.account_data <= 0&&item.account_type!='money'}">{{ item.account_data > 0 ? '+' + item.account_data : item.account_data }}</view>
+                              :class="{'text-money-red' :item.account_data > 0 && item.account_type!='money', 'text-money-green':item.account_data <= 0&&item.account_type!='money'}">{{ item.account_data > 0 ? '+' + item.account_data : item.account_data }}</view>
                     </view>
                 </view>
             </view>
@@ -125,7 +123,7 @@ onShow(() => {
         for (let key in res.data) {
             cashOutConfigObj[key] = res.data[key];
         }
-
+        setTimeout(() => calculateMescrollTop(), 200);
     })
     if (systemStore.siteAddons.includes('recharge')) {
         rechargeConfig().then((res: any) => {
@@ -145,24 +143,38 @@ const headerStyle = computed(() => {
     }
 })
 
-const mescrollTop = computed(() => {
-    if ((cashOutConfigObj.is_open == 1 || rechargeConfigObj.is_use == 1)) {
-        if (Object.keys(systemStore.menuButtonInfo).length) {
-            return (pxToRpx(Number(systemStore.menuButtonInfo.height)) + pxToRpx(systemStore.menuButtonInfo.top) + pxToRpx(8) + 700) + 'rpx'
+// 定义ref指向头部容器
+const mescrollTop = ref('0rpx');
+
+// 仅在页面渲染完成后计算一次高度
+const calculateMescrollTop = () => {
+    const query = uni.createSelectorQuery()
+    query.select('.container').boundingClientRect(rect => {
+        if (rect) {
+            // 直接用头部实际高度
+            const topVal =  pxToRpx(rect.height) 
+            mescrollTop.value = topVal + 'rpx';
         } else {
-            return '718rpx'
+            // 兜底用原有固定值
+            if ((cashOutConfigObj.is_open == 1 || rechargeConfigObj.is_use == 1)) {
+                if (Object.keys(systemStore.menuButtonInfo).length) {
+                    mescrollTop.value =  (pxToRpx(Number(systemStore.menuButtonInfo.height)) + pxToRpx(systemStore.menuButtonInfo.top) + pxToRpx(8) + 700) + 'rpx'
+                } else {
+                    mescrollTop.value =  '718rpx'
+                }
+            } else {
+                // #ifdef APP-PLUS
+                mescrollTop.value =  (pxToRpx(Number(systemStore.systemInfo.statusBarHeight)) + pxToRpx(8) + 632) + 'rpx'
+                // #endif
+                if (Object.keys(systemStore.menuButtonInfo).length) {
+                    mescrollTop.value =  (pxToRpx(Number(systemStore.menuButtonInfo.height)) + pxToRpx(systemStore.menuButtonInfo.top) + pxToRpx(8) + 632) + 'rpx'
+                } else {
+                    mescrollTop.value =  '650rpx'
+                }
+            }
         }
-    } else {
-        // #ifdef APP-PLUS
-        return (pxToRpx(Number(systemStore.systemInfo.statusBarHeight)) + pxToRpx(8) + 632) + 'rpx'
-        // #endif
-        if (Object.keys(systemStore.menuButtonInfo).length) {
-            return (pxToRpx(Number(systemStore.menuButtonInfo.height)) + pxToRpx(systemStore.menuButtonInfo.top) + pxToRpx(8) + 632) + 'rpx'
-        } else {
-            return '650rpx'
-        }
-    }
-})
+    }).exec();
+};
 
 //获取数据来源类型
 const accountTypeList = ref([
@@ -250,5 +262,37 @@ const confirmFn = (data: any) => {
 .pl-20rpx {
     padding-left: 20rpx;
 }
+.pt12 {
+    padding-top: 12rpx;
+}
+.imp-w340{
+    width: 340rpx !important;
+}
+.card-template {
+    width: 100%;
+    height: 140rpx;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-sizing: border-box;
 
+    .mt-var {
+        margin-top: var(--top-m);
+    }
+}
+.bg-money-red {
+    background-color: #EF000C;
+}
+.bg-money-green {
+    background-color: #03B521;
+}
+.bg-money-blue {
+    background-color: #1379FF;
+}
+.text-money-red {
+    color: #EF000C;
+}
+.text-money-green {
+    color: #03B521;
+}
 </style>

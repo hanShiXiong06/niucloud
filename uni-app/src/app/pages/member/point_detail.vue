@@ -1,9 +1,9 @@
 <template>
     <view class="bg-[var(--page-bg-color)] min-h-[100vh]" :style="themeColor()">
-        <view class="fixed left-0 right-0 top-0 z-10085">
+        <view class="fixed left-0 right-0 top-0 z-10085 container">
             <view class="bg-[#f6f6f6] px-[30rpx] h-[88rpx] pt-[10rpx] flex-center relative z-10084">
                 <view class="search-input bg-[#fff]">
-                    <view class="flex-1 text-[24rpx] leading-[60rpx] text-[var(--text-color-light9)]" :class="{'!text-[#333]':from_type}" @click="typePopup = true">{{ from_type_name || '请选择来源用途' }}</view>
+                    <view class="from-type-name" :class="{'selected':from_type}" @click="typePopup = true">{{ from_type_name || '请选择来源用途' }}</view>
                     <text class="nc-iconfont nc-icon-shangV6xx-1 !text-[26rpx] ml-[18rpx] !text-[var(--text-color-light6)]" v-if="typePopup" @click="typePopup = false"></text>
                     <text class="nc-iconfont nc-icon-xiaV6xx !text-[26rpx] ml-[18rpx] !text-[var(--text-color-light6)]" v-else @click="typePopup = true"></text>
                 </view>
@@ -11,18 +11,15 @@
             <view class="type-class">
                 <u-popup :show="typePopup" mode="top" @close="typePopup = false">
                     <view @touchmove.prevent.stop class="py-[22rpx]">
-                        <view class="leading-[80rpx] text-[26rpx] text-[#333] px-[50rpx]"
-                              :class="{'bg-[var(--primary-color-light)] !text-primary font-500' : from_type == ''}" @click="searchTypeFn()">全部</view>
-                        <view class="leading-[80rpx] text-[26rpx] text-[#333] px-[50rpx]"
-                              :class="{'bg-[var(--primary-color-light)] !text-primary font-500' : from_type == index}"
+                        <view class="type-item-wrap" :class="{'selected' : from_type == ''}" @click="searchTypeFn()">全部</view>
+                        <view class="type-item-wrap" :class="{'selected' : from_type == index}"
                               v-for="(item,index) in pointType" @click="searchTypeFn(index,item)">{{ item.name }}</view>
                     </view>
                 </u-popup>
             </view>
             <view class="px-[var(--sidebar-m)] pb-[20rpx] pt-[20rpx] bg-[#f6f6f6] flex items-center justify-between">
                 <view class="flex items-center">
-                    <view class="px-[30rpx]  bg-[#fff] rounded-[30rpx] text-[24rpx] leading-[54rpx] mr-[20rpx] text-[#333]"
-                        :class="{'!text-[var(--primary-color)] font-500':amount_type == item.status}"
+                    <view class="amount-type-item-wrap" :class="{'selected':amount_type == item.status}"
                         v-for="(item,index) in typeList" :key="index" @click="loadTypeFn(item.status)">{{ item.name }}</view>
                 </view>
                 <view class="flex items-center" @click="handleSelect">
@@ -31,7 +28,7 @@
                 </view>
             </view>
         </view>
-        <mescroll-body ref="mescrollRef" @init="mescrollInit" :down="{ use: false }" @up="getPointListFn" top="185rpx">
+        <mescroll-body ref="mescrollRef" @init="mescrollInit" :down="{ use: false }" @up="getPointListFn" :top="mescrollTop">
             <view v-for="(item,index) in pointList" :key="index"
                   class="sidebar-margin card-template  mt-[var(--top-m)]">
                 <view class="flex justify-between items-center">
@@ -52,12 +49,12 @@
                                 <image v-if="subItem.account_data > 0" :src="img('static/resource/images/member/point/detail/point_add.png')" class="w-[60rpx] h-[60rpx]"/>
                                 <image v-else :src="img('static/resource/images/member/point/detail/point_min.png')" class="w-[60rpx] h-[60rpx]"/>
                             </view>
-                            <view class="flex-1  flex items-center ml-[20rpx]  box-border py-[30rpx] border-0" :class="{'border-solid border-t-[2rpx]  border-[#F0F2F8]' : subIndex}">
+                            <view class="from-type-name-wrap" :class="{'border-style' : subIndex}">
                                 <view class="flex-1">
                                     <view class="text-[26rpx] text-[#333]">{{ subItem.from_type_name }}</view>
                                     <view class="text-[24rpx] text-[var(--text-color-light9)] mt-[16rpx]">{{ subItem.create_time }}</view>
                                 </view>
-                                <view class="text-[36rpx] font-500 text-[#03B521] price-font" :class="{ '!text-primary' : subItem.account_data > 0 }">{{ subItem.account_data > 0 ? '+' + subItem.account_data : subItem.account_data }}</view>
+                                <view class="account-data-wrap price-font" :class="{ '!text-primary' : subItem.account_data > 0 }">{{ subItem.account_data > 0 ? '+' + subItem.account_data : subItem.account_data }}</view>
                             </view>
                         </view>
                     </template>
@@ -73,7 +70,7 @@
 <script setup lang="ts">
 import { reactive, ref } from 'vue'
 import { t } from '@/locale'
-import { redirect, img } from '@/utils/common';
+import { redirect, img ,pxToRpx} from '@/utils/common';
 import { getPointList, getPointType } from '@/app/api/member';
 import MescrollBody from '@/components/mescroll/mescroll-body/mescroll-body.vue';
 import MescrollEmpty from '@/components/mescroll/mescroll-empty/mescroll-empty.vue';
@@ -96,6 +93,21 @@ const typeList = ref([
     { name: '支出', status: 'disburse' }
 ])
 
+const mescrollTop = ref('0rpx');
+// 仅在页面渲染完成后计算一次高度
+const calculateMescrollTop = () => {
+    const query = uni.createSelectorQuery()
+    query.select('.container').boundingClientRect(rect => {
+        if (rect) {
+            // 直接用头部实际高度
+            const topVal =  pxToRpx(rect.height) 
+            mescrollTop.value = topVal + 'rpx';
+        } else {
+            // 兜底用原有固定值
+            mescrollTop.value = '185rpx';
+        }
+    }).exec();
+};
 const getPointListFn = (mescroll: any) => {
     let data = {
         page: mescroll.num,
@@ -129,6 +141,7 @@ const getPointTypeFn = () => {
     getPointType('point').then((res: any) => {
         pointType.value = res.data
     })
+    setTimeout(() => calculateMescrollTop(), 200);
 }
 getPointTypeFn()
 // 关键词搜索条件搜索
@@ -163,5 +176,62 @@ const confirmFn = (data: any) => {
 <style lang="scss" scoped>
 :deep(.type-class .u-popup .u-transition) {
     top: 86rpx !important;
+}
+.from-type-name {
+    flex: 1;
+    font-size: 24rpx;
+    line-height: 60rpx;
+    color: var(--text-color-light9);
+
+    &.selected {
+        color: #333 !important;
+    }
+}
+.type-item-wrap {
+    line-height: 80rpx;
+    font-size: 26rpx;
+    color: #333;
+    padding-left: 50rpx;
+    padding-right: 50rpx;
+
+    &.selected {
+        background-color: var(--primary-color-light);
+        color: var(--primary-color) !important;
+        font-weight: 500;
+    }
+}
+.amount-type-item-wrap {
+    padding-left: 30rpx;
+    padding-right: 30rpx;
+    background-color: #fff;
+    border-radius: 30rpx;
+    font-size: 24rpx;
+    line-height: 54rpx;
+    margin-right: 20rpx;
+    color: #333;
+
+    &.selected {
+        color: var(--primary-color) !important;
+        font-weight: 500;
+    }
+}
+.from-type-name-wrap {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    margin-left: 20rpx;
+    box-sizing: border-box;
+    padding-top: 30rpx;
+    padding-bottom: 30rpx;
+    border: none;
+
+    &.border-style {
+        border: 2px solid #F0F2F8;
+    }
+}
+.account-data-wrap{
+    font-size: 36rpx;
+    font-weight: 500;
+    color: #03B521;
 }
 </style>

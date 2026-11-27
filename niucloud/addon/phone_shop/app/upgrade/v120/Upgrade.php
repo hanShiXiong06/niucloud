@@ -1,8 +1,8 @@
 <?php
 
-namespace addon\shop\app\upgrade\v120;
+namespace addon\phone_shop\app\upgrade\v120;
 
-use addon\shop\app\model\goods\Goods;
+use addon\phone_shop\app\model\goods\Goods;
 use app\model\site\Site;
 use app\model\sys\Poster;
 use app\service\admin\diy\DiyService;
@@ -29,7 +29,7 @@ class Upgrade
         $site_model = new Site();
         $site_list = $site_model->where([
             [ 'app_type', '=', 'site' ],
-            [ 'app', 'like', '%"shop"%' ],
+            [ 'app', 'like', '%"phone_shop"%' ],
         ])->field('site_id,site_name')->select()->toArray();
 
         if (!empty($site_list)) {
@@ -41,11 +41,11 @@ class Upgrade
             foreach ($site_list as $k => $v) {
 
                 // 删除旧模板
-                $poster_model->where([ [ 'site_id', '=', $v[ 'site_id' ] ], [ 'addon', '=', 'shop' ] ])->delete();
+                $poster_model->where([ [ 'site_id', '=', $v[ 'site_id' ] ], [ 'addon', '=', 'phone_shop' ] ])->delete();
 
                 // 创建默认商品海报
-                $template = $poster->getTemplateList('shop', 'shop_goods')[ 0 ];
-                $poster->add($v[ 'site_id' ], 'shop', [
+                $template = $poster->getTemplateList('phone_shop', 'phone_shop_goods')[ 0 ];
+                $poster->add($v[ 'site_id' ], 'phone_shop', [
                     'name' => $template[ 'name' ],
                     'type' => $template[ 'type' ],
                     'value' => $template[ 'data' ],
@@ -54,8 +54,8 @@ class Upgrade
                 ]);
 
                 // 创建默认积分商品海报
-                $template = $poster->getTemplateList('shop', 'shop_point_goods')[ 0 ];
-                $poster->add($v[ 'site_id' ], 'shop', [
+                $template = $poster->getTemplateList('phone_shop', 'shop_point_goods')[ 0 ];
+                $poster->add($v[ 'site_id' ], 'phone_shop', [
                     'name' => $template[ 'name' ],
                     'type' => $template[ 'type' ],
                     'value' => $template[ 'data' ],
@@ -65,7 +65,7 @@ class Upgrade
 
                 // 创建 积分商城 微页面
                 $addon_flag = 'DIY_SHOP_POINT_INDEX';
-                $addon_index_template = $diy_service->getFirstPageData($addon_flag, 'shop');
+                $addon_index_template = $diy_service->getFirstPageData($addon_flag, 'phone_shop');
                 $diy_service->add([
                     'site_id' => $v[ 'site_id' ],
                     'page_title' => $addon_index_template[ 'title' ],

@@ -3,12 +3,12 @@
         <scroll-view :scroll-y="true" class="w-screen h-screen bg-[var(--page-bg-color)]" v-if="!pageLoading && config.is_open == 1">
             <view class="sidebar-margin pt-[var(--top-m)]">
                 <view class="card-template">
-                    <view class="font-500 text-[30rpx] text-[#333] leading-[42rpx]">最小提现金额为</view>
+                    <view class="font-500 text-[30rpx] text-[#333] leading-[42rpx]">提现金额</view>
                     <view class="flex pt-[30rpx] pb-[8rpx] items-center border-0 border-b-[2rpx] border-solid border-[#F1F2F5]">
                         <text class="pt-[4rpx] text-[44rpx] text-[#333] iconfont iconrenminbiV6xx price-font "></text>
                         <input type="digit" class="h-[76rpx] leading-[76rpx] pl-[10rpx] flex-1 font-500 text-[54rpx] bg-[#fff]"
                                v-model="applyData.apply_money" maxlength="7"
-                               :placeholder="applyData.apply_money?'':('最小提现金额为' + t('currency') + moneyFormat(config.min))"
+                               :placeholder="applyData.apply_money ? '' : (Number(config.min) > 0 ? '最低申请 ' + minimumCashOutText : '请输入提现金额')"
                                placeholder-class="apply-price" :adjust-position="false" />
                         <text v-if="Number(serviceMoney)" class="text-[24rpx] text-[var(--text-color-light6)] mr-[20rpx]">手续费{{ serviceMoney }}
                         </text>
@@ -21,14 +21,31 @@
                         </view>
                         <view class="text-[24rpx] text-primary leading-[36rpx]" @click="allMoney">全部提现</view>
                     </view>
+                    <view v-if="Number(applyData.apply_money) > 0" class="cash-out-estimate">
+                        <text>本次手续费 {{ t('currency') }}{{ serviceMoney }}</text>
+                        <text>预计到账 {{ t('currency') }}{{ expectedReceived }}</text>
+                    </view>
                 </view>
+
+                <!-- 关键规则默认展开，申请前即可查看，不附加阅读或勾选门槛。 -->
+                <view class="mt-[20rpx] card-template cash-out-rule-summary">
+                    <view class="cash-out-rules__heading">提现规则</view>
+                    <view class="cash-out-rule-summary__list">
+                        <view v-for="rule in cashOutRuleSummary" :key="rule.key" class="cash-out-rule-summary__row">
+                            <text class="cash-out-rule-summary__label">{{ rule.label }}</text>
+                            <text class="cash-out-rule-summary__value">{{ rule.value }}</text>
+                        </view>
+                    </view>
+                    <view class="cash-out-rule-summary__note">提交成功不代表已经到账。微信零钱如需确认收款，请按提现详情提示操作；超过上述时间仍未到账，请通过下方“联系商家”核查。</view>
+                </view>
+                <!-- /cash-out-rule-summary -->
 
                 <view class="mt-[20rpx] card-template">
                     <view class="font-500 text-[30rpx] text-[#333] leading-[42rpx] mb-[30rpx]">到账方式</view>
                     <!-- 提现到微信 -->
                     <view class="p-[20rpx] mb-[20rpx] flex items-center rounded-[var(--rounded-mid)] border-[1rpx] border-solid border-[#eee]"
                         v-if="config.transfer_type.includes('wechatpay') && openId"
-                        :class="{'border-[#00C800] bg-[#ECF9EF]': applyData.transfer_type == 'wechatpay'}"
+                        :class="{'wechat-wrap': applyData.transfer_type == 'wechatpay'}"
                         @click="transferWeixin">
                         <view>
                             <image class="h-[60rpx] w-[60rpx] align-middle" :src="img('static/resource/images/member/apply_withdrawal/wechat.png')" mode="widthFix" />
@@ -42,7 +59,7 @@
                     <!-- 提现到微信收款码 -->
                     <view class="p-[20rpx] mb-[20rpx] flex items-center rounded-[var(--rounded-mid)] border-[1rpx] border-solid border-[#eee]"
                         v-if="config.transfer_type.includes('wechat_code')"
-                        :class="{'border-[#00C800] bg-[#ECF9EF]': applyData.transfer_type == 'wechat_code' && wechatCodeInfo}">
+                        :class="{'wechat-wrap': applyData.transfer_type == 'wechat_code' && wechatCodeInfo}">
                         <view @click="transferWechatCode">
                             <image class="h-[60rpx] w-[60rpx] align-middle" :src="img('static/resource/images/member/apply_withdrawal/wechat_code.png')" mode="widthFix" />
                         </view>
@@ -68,7 +85,7 @@
                     <!-- 提现到支付宝 -->
                     <view class="p-[20rpx] mb-[20rpx] flex items-center rounded-[var(--rounded-mid)] border-[1rpx] border-solid border-[#eee]"
                         v-if="config.transfer_type.includes('alipay')"
-                        :class="{'border-[#009FE8] bg-[#EEF8FC]': applyData.transfer_type == 'alipay' && alipayAccountInfo}">
+                        :class="{'alipay-wrap': applyData.transfer_type == 'alipay' && alipayAccountInfo}">
                         <view @click="transferAlipay">
                             <image class="h-[60rpx] w-[60rpx] align-middle" :src="img('static/resource/images/member/apply_withdrawal/alipay-icon.png')" mode="widthFix" />
                         </view>
@@ -94,7 +111,7 @@
                     <!-- 提现到银行卡 -->
                     <view class="p-[20rpx] flex items-center rounded-[var(--rounded-mid)] border-[1rpx] border-solid border-[#eee]"
                         v-if="config.transfer_type.includes('bank')"
-                        :class="{'border-[#089C98] bg-[#F6FFFF]': applyData.transfer_type == 'bank' && bankAccountInfo}">
+                        :class="{'bank-wrap': applyData.transfer_type == 'bank' && bankAccountInfo}">
                         <view @click="transferBank">
                             <image class="h-[42rpx] w-[60rpx] align-middle" :src="img('static/resource/images/member/apply_withdrawal/bank-icon.png')" mode="widthFix" />
                         </view>
@@ -114,6 +131,33 @@
                                     @click="redirect({ url: '/app/pages/member/account', param: { type: 'bank', mode: 'select' }, mode: 'redirectTo' })">添加</button>
                             <text v-else class="nc-iconfont nc-icon-youV6xx text-[28rpx] text-[var(--text-color-light9)] p-[10rpx]"
                                   @click.stop="redirect({ url: '/app/pages/member/account', param: { type: 'bank', mode: 'select' }, mode: 'redirectTo' })"></text>
+                        </view>
+                    </view>
+                </view>
+
+                <!-- 规则跟随本站真实配置，不另设勾选、阅读倒计时等提现门槛。 -->
+                <view class="mt-[20rpx] card-template cash-out-rules">
+                    <button class="cash-out-rules__toggle" hover-class="none" :aria-expanded="showRuleDetails" @click="showRuleDetails = !showRuleDetails">
+                        <text>更多提现说明</text>
+                        <text class="cash-out-rules__toggle-state">{{ showRuleDetails ? '收起' : '展开' }}</text>
+                    </button>
+                    <view v-if="showRuleDetails">
+                        <view class="cash-out-rules__intro">以下说明用于核对账户、收款方式、审核进度及异常处理；金额与方式跟随本站当前配置。</view>
+                        <view v-for="section in cashOutRules" :key="section.key" class="cash-out-rules__section">
+                            <view class="cash-out-rules__title">{{ section.title }}</view>
+                            <view v-for="(paragraph, paragraphIndex) in section.paragraphs" :key="paragraphIndex" class="cash-out-rules__paragraph">{{ paragraph }}</view>
+                        </view>
+                    </view>
+                    <view class="cash-out-rules__help">
+                        <view class="cash-out-rules__title">需要查询进度或核对小额余额？</view>
+                        <view class="cash-out-rules__paragraph">请提供提现单号或提交时间，联系本站商家核实，不要向客服提供支付密码或验证码。</view>
+                        <view class="cash-out-rules__actions">
+                            <view class="cash-out-rules__action" @click="redirect({ url: '/app/pages/member/cash_out' })">查看提现记录</view>
+                            <view class="cash-out-rules__action">
+                                <nc-contact send-message-title="提现进度与余额核对" send-message-path="/app/pages/member/apply_cash_out">
+                                    <view>联系商家</view>
+                                </nc-contact>
+                            </view>
                         </view>
                     </view>
                 </view>
@@ -144,9 +188,11 @@ import { moneyFormat, redirect, getToken, img, deepClone, getWinxinOpenId } from
 import useMemberStore from '@/stores/member'
 import { cashOutConfig, cashOutApply, getFirstCashOutAccountInfo, getCashoutAccountInfo } from '@/app/api/member'
 import { onLoad, onShow } from '@dcloudio/uni-app'
+import { buildCashOutRules, buildCashOutRuleSummary } from '@/app/utils/cash-out-rules'
 
 const pageLoading = ref(true)
 const loading = ref(false)
+const showRuleDetails = ref(false)
 const memberStore = useMemberStore()
 
 // 申请提现数据
@@ -190,6 +236,19 @@ const config = reactive<AnyObject>({
     rate: 0, // 手续费比率
     transfer_type: [] // 提现方式
 })
+
+const minimumCashOutText = computed(() => Number(config.min) > 0
+    ? `${t('currency')}${moneyFormat(config.min)}` : '未设置额外最低金额')
+const cashOutRuleOptions = computed(() => ({
+    min: config.min,
+    rate: config.rate,
+    isAutoVerify: config.is_auto_verify,
+    transferTypes: config.transfer_type,
+    accountType: applyData.account_type,
+    availableMoney: cashOutMoney.value
+}))
+const cashOutRules = computed(() => buildCashOutRules(cashOutRuleOptions.value))
+const cashOutRuleSummary = computed(() => buildCashOutRuleSummary(cashOutRuleOptions.value))
 
 let query: any = {}
 let openId = ''
@@ -254,6 +313,8 @@ const serviceMoney = computed(() => {
     }
     return money.toFixed(2);
 })
+const expectedReceived = computed(() => moneyFormat(Math.max(0,
+    (Number(applyData.apply_money) || 0) - Number(serviceMoney.value))))
 
 //全部提现
 const allMoney = () => {
@@ -425,6 +486,39 @@ const transferWechatCode = () => {
 </script>
 
 <style lang="scss" scoped>
+.cash-out-estimate {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 12rpx;
+    padding-top: 16rpx;
+    font-size: 24rpx;
+    line-height: 36rpx;
+    color: var(--text-color-light6);
+}
+.cash-out-rules {
+    color: #333;
+    word-break: break-word;
+    &__heading { font-size: 30rpx; font-weight: 600; line-height: 44rpx; }
+    &__toggle { display: flex; align-items: center; justify-content: space-between; width: 100%; margin: 0; padding: 0; border: 0; border-radius: 0; background: transparent; text-align: left; font-size: 28rpx; font-weight: 500; line-height: 48rpx; color: #333; }
+    &__toggle::after { border: 0; }
+    &__toggle-state { flex-shrink: 0; margin-left: 20rpx; font-size: 24rpx; font-weight: 400; color: var(--primary-color); }
+    &__intro, &__paragraph { font-size: 24rpx; line-height: 40rpx; color: var(--text-color-light6); }
+    &__intro { margin-top: 24rpx; }
+    &__section { margin-top: 30rpx; }
+    &__title { font-size: 26rpx; font-weight: 600; line-height: 40rpx; }
+    &__paragraph { margin-top: 10rpx; }
+    &__help { margin-top: 30rpx; padding-top: 24rpx; border-top: 1rpx solid #eee; }
+    &__actions { display: flex; flex-wrap: wrap; gap: 20rpx; margin-top: 20rpx; }
+    &__action { flex: 1; min-width: 180rpx; padding: 16rpx 12rpx; border: 1rpx solid var(--primary-color); border-radius: var(--rounded-small); color: var(--primary-color); text-align: center; font-size: 24rpx; line-height: 36rpx; }
+}
+.cash-out-rule-summary {
+    &__list { margin-top: 12rpx; }
+    &__row { display: flex; align-items: flex-start; padding: 16rpx 0; font-size: 24rpx; line-height: 36rpx; border-bottom: 1rpx solid #f1f2f5; }
+    &__label { flex: 0 0 176rpx; color: #666; }
+    &__value { flex: 1; min-width: 0; color: #333; word-break: break-word; }
+    &__note { margin-top: 20rpx; color: #666; font-size: 24rpx; line-height: 38rpx; }
+}
 :deep(.apply-price) {
     color: var(--text-color-light9);
     font-size: 26rpx;
@@ -440,5 +534,17 @@ const transferWechatCode = () => {
 .tab-bar {
     padding-bottom: calc(constant(safe-area-inset-bottom) + 30rpx);
     padding-bottom: calc(env(safe-area-inset-bottom) + 30rpx);
+}
+.wechat-wrap {
+    border-color: #00C800;
+    background-color: #ECF9EF;
+}
+.alipay-wrap {
+    border-color: #009FE8;
+    background-color: #EEF8FC;
+}
+.bank-wrap {
+    border-color: #089C98;
+    background-color: #F6FFFF;
 }
 </style>

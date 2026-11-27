@@ -36,8 +36,12 @@ class AfterShopOrderRefundAuditApply
         ]);
 
         //消息发送
-        // $message_key = $refund_data[ 'status' ] == OrderRefundDict::STORE_REFUSE_REFUND_GOODS_APPLY_WAIT_BUYER ? 'shop_refund_refuse' : 'shop_refund_agree';
-        // ( new NoticeService() )->send($refund_data[ 'site_id' ], $message_key, [ 'order_refund_no' => $refund_data[ 'order_refund_no' ] ]);
+        $message_key = $refund_data[ 'status' ] == OrderRefundDict::STORE_REFUSE_REFUND_GOODS_APPLY_WAIT_BUYER ? 'shop_refund_refuse' : 'shop_refund_agree';
+
+        ( new NoticeService() )->send($refund_data[ 'site_id' ], $message_key, [ 'order_refund_no' => $refund_data[ 'order_refund_no' ] ]);
+        if($message_key == 'shop_refund_agree'){
+            ( new NoticeService() )->send($refund_data[ 'site_id' ], 'admin_shop_refund_agree', [ 'order_refund_no' => $refund_data[ 'order_refund_no' ] ]);
+        }
         if ($refund_data[ 'status' ] == OrderRefundDict::STORE_AGREE_REFUND_WAIT_TRANSFER) {
             if ($refund_data[ 'money' ] > 0) {
                 //订单到达待付款

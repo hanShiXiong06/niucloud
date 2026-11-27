@@ -15,7 +15,7 @@ use core\loader\Storage;
 
 /**
  * Class BaseElectronicSheetSearch
- * @package addon\shop\app\service\core\delivery\electronic_sheet
+ * @package addon\phone_shop\app\service\core\delivery\electronic_sheet
  */
 abstract class BaseElectronicSheetSearch extends Storage
 {

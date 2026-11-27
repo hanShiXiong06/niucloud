@@ -15,10 +15,12 @@ use addon\phone_shop\app\dict\goods\GoodsDict;
 use addon\phone_shop\app\dict\order\OrderDeliveryDict;
 use addon\phone_shop\app\dict\order\OrderGoodsDict;
 use addon\phone_shop\app\model\goods\Goods;
+use addon\phone_shop\app\model\goods\GoodsSku;
 use app\dict\sys\FileDict;
 use app\model\member\Member;
 use core\base\BaseModel;
 use Exception;
+use think\model\concern\SoftDelete;
 use think\model\relation\HasOne;
 
 /**
@@ -26,7 +28,7 @@ use think\model\relation\HasOne;
  */
 class OrderGoods extends BaseModel
 {
-
+    use SoftDelete;
     /**
      * 数据表主键
      * @var string
@@ -52,6 +54,14 @@ class OrderGoods extends BaseModel
     protected $jsonAssoc = true;
 
     /**
+     * 定义软删除标记字段.
+     * @var string
+     */
+    protected $deleteTime = 'delete_time';
+
+    protected $defaultSoftDelete = 0;
+
+    /**
      * 包裹
      * @return HasOne
      */
@@ -67,6 +77,14 @@ class OrderGoods extends BaseModel
     public function goods()
     {
         return $this->hasOne(Goods::class, 'goods_id', 'goods_id');
+    }
+    /**
+     * 商品
+     * @return HasOne
+     */
+    public function sku()
+    {
+        return $this->hasOne(GoodsSku::class, 'sku_id', 'sku_id');
     }
 
     /**
@@ -85,6 +103,13 @@ class OrderGoods extends BaseModel
     public function member()
     {
         return $this->hasOne(Member::class, 'member_id', 'member_id');
+    }  /**
+     * 会员
+     * @return HasOne
+     */
+    public function deliveryInfo()
+    {
+        return $this->hasOne(OrderDelivery::class, 'id', 'delivery_id')->append(['express_company_name']);
     }
 
     /**
@@ -133,6 +158,21 @@ class OrderGoods extends BaseModel
     }
 
     /**
+     * 缩略图生成-中图
+     * @param $value
+     * @param $data
+     * @return array|mixed
+     * @throws Exception
+     */
+    public function getSkuImageThumbMidAttr($value, $data)
+    {
+        if (!empty($data['sku_image'])) {
+            return get_thumb_images($data['site_id'], $data['sku_image'], FileDict::MID);
+        }
+        return '';
+    }
+
+    /**
      * 转化发货状态
      */
     public function getDeliveryStatusNameAttr($value, $data)
@@ -148,6 +188,8 @@ class OrderGoods extends BaseModel
      */
     public function getStatusNameAttr($value, $data)
     {
+        $extend = \addon\phone_shop\app\service\core\order\ErpDeviceSnapshot::decode($data['extend'] ?? []);
+        if (isset($extend['erp_return'])) return !empty($extend['erp_return']['received']) ? '设备已退回（原记录保留）' : '已退款，待确认设备收回';
         if (!empty($data['status'])) {
             return OrderGoodsDict::getRefundStatus($data['status']);
         }
@@ -164,4 +206,17 @@ class OrderGoods extends BaseModel
         }
         return '';
     }
+
+    public function getImpulseBuyInfoAttr($value, $data)
+    {
+        if(!empty($data['extend']) && isset($data['extend']['is_impulse_buy']) && $data['extend']['is_impulse_buy'] == 1){
+            $impulse_buy_price = $data['extend']['impulse_buy_price']/$data['extend']['impulse_buy_goods_num'];
+            $is_impulse_buy = 1;
+        }
+        return [
+            'is_impulse_buy'=>$is_impulse_buy ?? 0 ,
+            'impulse_buy_price'=>$impulse_buy_price ?? 0 ,
+        ];
+    }
+
 }

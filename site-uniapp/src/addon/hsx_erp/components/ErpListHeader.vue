@@ -1,0 +1,341 @@
+<!--
+  ErpListHeader - ERP 列表页统一头部（对齐 phone_shop top-bar 风格）
+
+  用法：
+    <ErpListHeader
+      v-model="keyword"
+      :tabs="[{label:'全部',value:''},{label:'待付款',value:'pending'}]"
+      v-model:activeTab="activeTab"
+      @search="reload"
+    />
+-->
+<template>
+    <view class="erp-top-bar" :class="{ 'erp-top-bar--compact-mp': useCompactMp }">
+        <!-- 小程序紧凑模式：将搜索框放进自定义导航区域，避免“原生标题 + 搜索框”占两行。 -->
+        <!-- #ifdef MP -->
+        <view v-if="useCompactMp" class="compact-mp-nav" :style="compactNavStyle">
+            <view class="compact-mp-back" @tap="handleNavAction">
+                <u-icon :name="canGoBack ? 'arrow-left' : 'home'" color="#0f172a" size="22" />
+            </view>
+            <view v-if="showSearch" class="search-pill search-pill--compact">
+                <u-icon name="search" color="#9098A3" size="17" />
+                <input
+                    class="search-input-text search-input-text--compact"
+                    v-model="localKeyword"
+                    :placeholder="placeholder"
+                    placeholder-class="search-ph search-ph--compact"
+                    confirm-type="search"
+                    @confirm="onSearch"
+                />
+                <u-icon v-if="localKeyword" name="close-circle-fill" color="#c4c4c4" size="17"
+                    @click="localKeyword = ''; onSearch()" />
+                <view v-if="showScan" class="scan-btn scan-btn--compact" @click="onScan">
+                    <u-icon name="scan" color="#3b6ef5" size="19" />
+                </view>
+                <view v-if="showFilter" class="filter-btn filter-btn--compact" :class="{ 'filter-btn--on': filterCount > 0 }" @click="emit('filter')">
+                    <u-icon name="list" :color="filterCount > 0 ? '#3b6ef5' : '#64748b'" size="19" />
+                    <text v-if="filterCount > 0" class="filter-badge">{{ filterCount > 9 ? '9+' : filterCount }}</text>
+                </view>
+            </view>
+        </view>
+        <!-- #endif -->
+
+        <template v-if="!useCompactMp">
+        <!-- 标题行（可选，有标题时显示标题+右侧slot） -->
+        <view v-if="title" class="title-row">
+            <text class="title-text">{{ title }}</text>
+            <slot name="right" />
+        </view>
+
+        <!-- 搜索框（胶囊式，对齐 phone_shop） -->
+        <view v-if="showSearch" class="search-pill">
+            <u-icon name="search" color="#9098A3" size="18" />
+            <input
+                class="search-input-text"
+                v-model="localKeyword"
+                :placeholder="placeholder"
+                placeholder-class="search-ph"
+                confirm-type="search"
+                @confirm="onSearch"
+            />
+            <u-icon v-if="localKeyword" name="close-circle-fill" color="#c4c4c4" size="18"
+                @click="localKeyword = ''; onSearch()" />
+            <view v-if="showScan" class="scan-btn" @click="onScan">
+                <u-icon name="scan" color="#3b6ef5" size="20" />
+            </view>
+            <view v-if="showFilter" class="filter-btn" :class="{ 'filter-btn--on': filterCount > 0 }" @click="emit('filter')">
+                <u-icon name="list" :color="filterCount > 0 ? '#3b6ef5' : '#64748b'" size="20" />
+                <text v-if="filterCount > 0" class="filter-badge">{{ filterCount > 9 ? '9+' : filterCount }}</text>
+            </view>
+        </view>
+        </template>
+
+        <!-- 状态 Tab（胶囊式，对齐 phone_shop .tab） -->
+        <view v-if="tabs && tabs.length" class="tab-row">
+            <view
+                v-for="tab in tabs"
+                :key="tab.value"
+                class="erp-tab"
+                :class="{ 'erp-tab--on': localTab === tab.value }"
+                @click="onTab(tab.value)"
+            >{{ tab.label }}</view>
+            <slot name="tab-extra" />
+        </view>
+
+        <view v-else-if="slots.below" class="below-row">
+            <slot name="below" />
+        </view>
+    </view>
+
+    <!-- 占位高度（防止内容被 fixed 头部遮住） -->
+    <view :style="{ height: placeholderHeight }" />
+</template>
+
+<script setup lang="ts">
+import { ref, computed, watch, useSlots } from 'vue'
+import { scanErpCode } from '@/addon/hsx_erp/hooks/useErpScan'
+import { getErpListHeaderHeightRpx, getErpNavbarMetrics } from '@/addon/hsx_erp/utils/navbar'
+
+const props = withDefaults(defineProps<{
+    modelValue?: string        // keyword v-model
+    activeTab?: string         // active tab v-model
+    placeholder?: string
+    tabs?: { label: string; value: string }[]
+    title?: string
+    showSearch?: boolean
+    showScan?: boolean
+    showFilter?: boolean
+    filterCount?: number
+    compactMp?: boolean
+}>(), {
+    modelValue: '',
+    activeTab: '',
+    placeholder: '搜索',
+    tabs: () => [],
+    title: '',
+    showSearch: true,
+    showScan: true,
+    showFilter: false,
+    filterCount: 0,
+    compactMp: false,
+})
+
+const emit = defineEmits<{
+    (e: 'update:modelValue', v: string): void
+    (e: 'update:activeTab', v: string): void
+    (e: 'search'): void
+    (e: 'tab-change', v: string): void
+    (e: 'scan', v: string): void
+    (e: 'filter'): void
+}>()
+
+const slots = useSlots()
+const navbarMetrics = getErpNavbarMetrics()
+const useCompactMp = ref(false)
+
+// #ifdef MP
+useCompactMp.value = props.compactMp
+// #endif
+
+const compactNavStyle = computed(() => [
+    `height:${navbarMetrics.navbarHeightPx}px`,
+    `padding-top:${navbarMetrics.statusTopPx}px`,
+    `padding-bottom:${navbarMetrics.bottomGapPx}px`,
+    `padding-right:${navbarMetrics.sideWidthRpx}rpx`,
+].join(';') + ';')
+
+// 与 useListHeader 使用同一公式，避免 fixed 工具区与 z-paging 各算一套高度。
+const placeholderHeight = computed(() => useCompactMp.value
+    ? `calc(${navbarMetrics.navbarHeightPx}px + 74rpx)`
+    : `${getErpListHeaderHeightRpx({
+        title: !!props.title,
+        search: props.showSearch,
+        tabs: !!props.tabs?.length || !!slots.below,
+    })}rpx`)
+
+const localKeyword = ref(props.modelValue)
+const localTab = ref(props.activeTab)
+
+watch(() => props.modelValue, v => { localKeyword.value = v })
+watch(() => props.activeTab, v => { localTab.value = v })
+watch(localKeyword, v => emit('update:modelValue', v))
+
+function onSearch() {
+    emit('update:modelValue', localKeyword.value)
+    emit('search')
+}
+
+async function onScan() {
+    try {
+        localKeyword.value = await scanErpCode()
+        emit('update:modelValue', localKeyword.value)
+        emit('scan', localKeyword.value)
+        emit('search')
+    } catch (e: any) {
+        if (e?.errMsg?.includes('cancel')) return
+        uni.showToast({ title: e?.message || '扫码失败', icon: 'none' })
+    }
+}
+
+function onTab(val: string) {
+    localTab.value = val
+    emit('update:activeTab', val)
+    emit('tab-change', val)
+}
+
+const canGoBack = computed(() => getCurrentPages().length > 1)
+function handleNavAction() {
+    if (!canGoBack.value) {
+        uni.reLaunch({ url: '/app/pages/index/index' })
+        return
+    }
+    uni.navigateBack({ delta: 1, fail: () => uni.reLaunch({ url: '/app/pages/index/index' }) })
+}
+</script>
+
+<style scoped lang="scss">
+.erp-top-bar {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    z-index: 100;
+    background: var(--page-bg-color, #f3f4f6);
+    padding: 16rpx 24rpx;
+    box-sizing: border-box;
+}
+.erp-top-bar--compact-mp {
+    padding: 0 18rpx 12rpx;
+    background: #fff;
+    border-bottom: 1rpx solid #eef2f7;
+    box-shadow: 0 4rpx 14rpx rgba(15, 23, 42, 0.04);
+}
+.compact-mp-nav {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 8rpx;
+    box-sizing: border-box;
+}
+.compact-mp-back {
+    width: 56rpx;
+    height: 56rpx;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8rpx 0 16rpx;
+}
+.title-text {
+    font-size: 36rpx;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.search-pill {
+    height: 72rpx;
+    background: #fff;
+    border-radius: 36rpx;
+    display: flex;
+    align-items: center;
+    padding: 0 28rpx;
+    gap: 12rpx;
+    box-shadow: 0 2rpx 8rpx rgba(0,0,0,0.04);
+}
+.search-pill--compact {
+    height: 60rpx;
+    min-width: 0;
+    flex: 1;
+    padding: 0 16rpx;
+    gap: 8rpx;
+    background: #f5f7fa;
+    border-radius: 30rpx;
+    box-shadow: none;
+}
+.search-input-text--compact { font-size: 24rpx; }
+.search-ph--compact { font-size: 24rpx; }
+.search-input-text {
+    flex: 1;
+    font-size: 28rpx;
+    color: #0f172a;
+    background: transparent;
+}
+.scan-btn {
+    width: 48rpx;
+    height: 48rpx;
+    border-radius: 50%;
+    background: #eff3ff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+.scan-btn--compact,
+.filter-btn--compact {
+    width: 42rpx;
+    height: 42rpx;
+}
+.filter-btn {
+    position: relative;
+    width: 48rpx;
+    height: 48rpx;
+    border-radius: 50%;
+    background: #f8fafc;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+.filter-btn--on {
+    background: #eff3ff;
+}
+.filter-badge {
+    position: absolute;
+    top: -8rpx;
+    right: -8rpx;
+    min-width: 28rpx;
+    height: 28rpx;
+    padding: 0 6rpx;
+    border-radius: 14rpx;
+    background: #ef4444;
+    color: #fff;
+    font-size: 18rpx;
+    line-height: 28rpx;
+    text-align: center;
+    box-sizing: border-box;
+}
+.search-ph { color: #c4c8cf; font-size: 28rpx; }
+
+.tab-row {
+    display: flex;
+    align-items: center;
+    gap: 14rpx;
+    margin-top: 16rpx;
+    overflow-x: auto;
+    white-space: nowrap;
+}
+.below-row {
+    margin-top: 16rpx;
+}
+.erp-top-bar--compact-mp .below-row { margin-top: 10rpx; }
+.erp-tab {
+    padding: 8rpx 26rpx;
+    font-size: 26rpx;
+    color: #666;
+    background: #fff;
+    border-radius: 28rpx;
+    border: 2rpx solid transparent;
+    flex-shrink: 0;
+    transition: all 0.15s;
+}
+.erp-tab--on {
+    color: var(--primary-color, #3b6ef5);
+    background: var(--primary-color-light, #eff3ff);
+    border-color: var(--primary-color, #3b6ef5);
+    font-weight: 600;
+}
+</style>

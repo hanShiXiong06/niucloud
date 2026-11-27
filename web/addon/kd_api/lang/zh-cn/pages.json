@@ -1,0 +1,9 @@
+{
+    "pages": {
+        "kd_api": {
+            "hello_world": {
+                "index": "hello_world"
+            }
+        }
+    }
+}

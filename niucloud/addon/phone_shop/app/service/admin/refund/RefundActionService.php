@@ -11,9 +11,11 @@
 
 namespace addon\phone_shop\app\service\admin\refund;
 
+use addon\phone_shop\app\dict\order\OrderRefundDict;
 use addon\phone_shop\app\dict\order\OrderRefundLogDict;
 use addon\phone_shop\app\model\order\OrderRefund;
 use addon\phone_shop\app\service\core\refund\CoreRefundActionService;
+use addon\phone_shop\app\service\core\refund\CoreRefundService;
 use core\base\BaseAdminService;
 
 /**
@@ -54,7 +56,8 @@ class RefundActionService extends BaseAdminService
         (new CoreRefundActionService())->auditRefundGoods($data);
         return true;
     }
- /**
+
+    /**
      * 商家主动退款
      * @param $data
      * @return true
@@ -81,5 +84,19 @@ class RefundActionService extends BaseAdminService
             'refund_money' => round($refund_money_array[ 'refund_money' ] ?? 0, 2)
         ];
     }
-    
+
+    /**
+     * 商家主动关闭售后
+     * @param $order_refund_no
+     * @return void
+     */
+    public function closeRefund($order_refund_no)
+    {
+        $data[ 'main_type' ] = OrderRefundLogDict::STORE;
+        $data[ 'main_id' ] = $this->uid;
+        $data[ 'site_id' ] = $this->site_id;
+        $data[ 'order_refund_no' ] =$order_refund_no;
+        (new CoreRefundActionService())->close($data,OrderRefundDict::SHOP_ACTIVE_CLOSE_REFUND);
+    }
+
 }

@@ -1,0 +1,27 @@
+{
+    "version": 1,
+    "replaced_directories": {
+        "goods-coupon": "phone-goods-coupon",
+        "goods-list": "phone-goods-list",
+        "many-goods-list": "phone-many-goods-list",
+        "shop-exchange-goods": "phone-shop-exchange-goods",
+        "shop-exchange-info": "phone-shop-exchange-info",
+        "shop-goods-detail-attr": "phone-shop-goods-detail-attr",
+        "shop-goods-detail-basic-info": "phone-shop-goods-detail-basic-info",
+        "shop-goods-detail-bottom": "phone-shop-goods-detail-bottom",
+        "shop-goods-detail-desc": "phone-shop-goods-detail-desc",
+        "shop-goods-detail-evaluate": "phone-shop-goods-detail-evaluate",
+        "shop-goods-detail-purchase-service": "phone-shop-goods-detail-purchase-service",
+        "shop-goods-detail-qc": "phone-shop-goods-detail-qc",
+        "shop-goods-detail-sow": "phone-shop-goods-detail-sow",
+        "shop-goods-hot": "phone-shop-goods-hot",
+        "shop-goods-ranking": "phone-shop-goods-ranking",
+        "shop-goods-recommend": "phone-shop-goods-recommend",
+        "shop-member-barcode": "phone-shop-member-barcode",
+        "shop-member-info": "phone-shop-member-info",
+        "shop-newcomer": "phone-shop-newcomer",
+        "shop-order-info": "phone-shop-order-info",
+        "shop-search": "phone-shop-search",
+        "single-recommend": "phone-single-recommend"
+    }
+}

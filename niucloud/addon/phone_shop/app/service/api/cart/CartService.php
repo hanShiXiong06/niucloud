@@ -12,11 +12,18 @@
 namespace addon\phone_shop\app\service\api\cart;
 
 use addon\phone_shop\app\model\cart\Cart;
-use addon\phone_shop\app\service\api\goods\GoodsService;
+use addon\phone_shop\app\model\goods\Goods;
+use addon\phone_shop\app\model\goods\GoodsSku;
+use addon\phone_shop\app\service\api\marketing\ManjianService;
+use addon\phone_shop\app\service\core\goods\CoreGoodsActivePriceService;
+use addon\phone_shop\app\service\core\goods\CoreGoodsCartNumService;
+use addon\phone_shop\app\service\core\goods\CoreGoodsStatService;
+use addon\phone_shop\app\service\core\goods\CoreGoodsLimitBuyService;
 use app\dict\member\MemberDict;
 use app\service\core\member\CoreMemberService;
 use core\base\BaseApiService;
-use core\exception\CommonException;
+use core\exception\ApiException;
+use addon\phone_shop\app\service\core\marketing\CoreManjianService;
 
 /**
  * 购物车服务层
@@ -40,8 +47,9 @@ class CartService extends BaseApiService
     {
         $member_info = ( new CoreMemberService() )->getInfoByMemberId($this->site_id, $this->member_id, 'status');
 
-        if (empty($member_info)) throw new CommonException('SHOP_ORDER_BUYER_NOT_FOUND');//无效的账号
-        if ($member_info['status'] == MemberDict::OFF) throw new CommonException('SHOP_ORDER_BUYER_LOCKED');//账号被锁定
+        if (empty($member_info)) throw new ApiException('SHOP_ORDER_BUYER_NOT_FOUND');//无效的账号
+        if ($member_info[ 'status' ] == MemberDict::OFF) throw new ApiException('SHOP_ORDER_BUYER_LOCKED');//账号被锁定
+
         $data[ 'member_id' ] = $this->member_id;
         $data[ 'site_id' ] = $this->site_id;
         $info = $this->model->where([
@@ -51,14 +59,39 @@ class CartService extends BaseApiService
             [ 'site_id', '=', $this->site_id ],
         ])->field('id,num')->findOrEmpty()->toArray();
 
+//        $other_sku_num = $this->model->where([
+//            [ 'member_id', '=', $this->member_id ],
+//            [ 'site_id', '=', $this->site_id ],
+//            [ 'goods_id', '=', $data[ 'goods_id' ] ],
+//            [ 'sku_id', '<>', $data[ 'sku_id' ] ]
+//        ])->sum('num');
+
+        $goods_info = ( new Goods() )->where([
+            [ 'goods_id', '=', $data[ 'goods_id' ] ],
+            [ 'site_id', '=', $this->site_id ]
+        ])->field('goods_id,goods_name,stock,is_limit,limit_type,max_buy,min_buy')->findOrEmpty()->toArray();
+        if (empty($goods_info)) throw new ApiException("SHOP_GOODS_NOT_EXIST");
+        // 商品加入购物车统计
+        CoreGoodsStatService::addStat([ 'site_id' => $this->site_id, 'goods_id' => $data[ 'goods_id' ], 'cart_num' => $data[ 'num' ] ]);
+        ( new CoreGoodsCartNumService() )->inc([ 'goods_id' => $data[ 'goods_id' ], 'cart_num' => $data[ 'num' ] ]);
+
+//        $core_goods_limit_buy_service = new CoreGoodsLimitBuyService();
         if (!empty($info)) {
             // 存在，更新数量
             $update = [
                 'num' => $info[ 'num' ] + $data[ 'num' ]
             ];
+            // 检测限购
+//            $goods_info[ 'num' ] = $other_sku_num + $update[ 'num' ];
+//            $error = $core_goods_limit_buy_service->checkGoodsLimitBuy($this->member_id, [ $goods_info ]);
+//            if (!empty($error)) throw new ApiException($error);
             $this->model->where([ [ 'id', '=', $info[ 'id' ] ] ])->update($update);
             return $info[ 'id' ];
         } else {
+            // 检测限购
+//            $goods_info[ 'num' ] = $other_sku_num + $data[ 'num' ];
+//            $error = $core_goods_limit_buy_service->checkGoodsLimitBuy($this->member_id, [ $goods_info ]);
+//            if (!empty($error)) throw new ApiException($error);
             // 添加
             $res = $this->model->create($data);
             return $res->id;
@@ -72,13 +105,18 @@ class CartService extends BaseApiService
      */
     public function edit($data)
     {
+        $member_info = ( new CoreMemberService() )->getInfoByMemberId($this->site_id, $this->member_id, 'status');
+
+        if (empty($member_info)) throw new ApiException('SHOP_ORDER_BUYER_NOT_FOUND');//无效的账号
+        if ($member_info[ 'status' ] == MemberDict::OFF) throw new ApiException('SHOP_ORDER_BUYER_LOCKED');//账号被锁定
+
         $data[ 'member_id' ] = $this->member_id;
         $data[ 'site_id' ] = $this->site_id;
         $info = $this->model->where([
             [ 'id', '=', $data[ 'id' ] ],
             [ 'member_id', '=', $data[ 'member_id' ] ],
             [ 'site_id', '=', $data[ 'site_id' ] ],
-        ])->field('sku_id')->findOrEmpty()->toArray();
+        ])->field('sku_id, goods_id, num')->findOrEmpty()->toArray();
 
         if (empty($info)) return false;
 
@@ -99,7 +137,32 @@ class CartService extends BaseApiService
             }
         }
 
+        $goods_info = ( new Goods() )->where([
+            [ 'goods_id', '=', $info[ 'goods_id' ] ],
+            [ 'site_id', '=', $this->site_id ]
+        ])->field('goods_id,goods_name,stock,is_limit,limit_type,max_buy,min_buy')->findOrEmpty()->toArray();
+        if (empty($goods_info)) throw new ApiException("SHOP_GOODS_NOT_EXIST");
+
+//        $other_sku_num = $this->model->where([
+//            [ 'member_id', '=', $this->member_id ],
+//            [ 'site_id', '=', $this->site_id ],
+//            [ 'goods_id', '=', $info[ 'goods_id' ] ],
+//            [ 'sku_id', '<>', $info[ 'sku_id' ] ]
+//        ])->sum('num');
+
+        // 检测限购
+//        if ($data[ 'num' ] > $info['num']) {
+//            $goods_info[ 'num' ] = $other_sku_num + $update[ 'num' ];
+//            $error = ( new CoreGoodsLimitBuyService() )->checkGoodsLimitBuy($this->member_id, [ $goods_info ]);
+//            if (!empty($error)) throw new ApiException($error);
+//        }
+
         $this->model->where([ [ 'id', '=', $data[ 'id' ] ] ])->update($update);
+
+        // 商品加入购物车统计
+        CoreGoodsStatService::addStat([ 'site_id' => $this->site_id, 'goods_id' => $info[ 'goods_id' ], 'cart_num' => ( $data[ 'num' ] - $info[ 'num' ] ) ]);
+        ( new CoreGoodsCartNumService() )->inc([ 'goods_id' => $info[ 'goods_id' ], 'cart_num' => ( $data[ 'num' ] - $info[ 'num' ] ) ]);
+
         return true;
     }
 
@@ -132,25 +195,36 @@ class CartService extends BaseApiService
     public function getList($data)
     {
         $data[ 'member_id' ] = $this->member_id;
-        $field = 'id, member_id, goods_id, site_id, sku_id, num, market_type, market_type_id, status, invalid_remark';
+        $field = 'id, member_id, goods_id, sku_id, num, status, invalid_remark';
         $order = "create_time desc";
         $list = $this->model->where([ [ 'site_id', '=', $this->site_id ] ])->withSearch([ "member_id" ], $data)->field($field)
             ->with([
-                'goodsSku' => function($query) {
-                    $query->withField('sku_id, site_id, sku_image, price, sale_price, stock,member_price');
+                'goods' => function ($query) {
+                    $query->withField('goods_id, site_id, goods_name, goods_cover, unit, stock, status, delete_time, member_discount')
+                        ->append([ 'goods_cover_thumb_mid' ]);
                 },
-                'goods' => function($query) {
-                    $query->withField('goods_id, site_id, status,delete_time,member_discount,is_discount');
-                },
+                'goodsSku' => function ($query) {
+                    $query->withField('site_id,sku_id,goods_id, sku_name, sku_image, sku_spec_format, price, market_price, sale_price, member_price, stock')->append([ 'sku_image_thumb_mid' ]);
+                }
             ])->order($order)->select()->toArray();
 
-        $goods_service = new GoodsService();
-        $member_info = $goods_service->getMemberInfo();
+        array_multisort(array_column($list, 'id'), SORT_ASC, $list);
+        $goods_active_price_service = ( new CoreGoodsActivePriceService() );
         foreach ($list as $k => &$v) {
-            if(!empty($v[ 'goodsSku' ])) {
-                $v[ 'goodsSku' ][ 'member_price' ] = $goods_service->getMemberPrice($member_info, $v[ 'goods' ][ 'member_discount' ], $v[ 'goodsSku' ][ 'member_price' ], $v[ 'goodsSku' ][ 'price' ], $v[ 'goodsSku' ][ 'market_price' ]);
+            if (!empty($v[ 'goodsSku' ])) {
+                $v[ 'goodsSku' ][ 'member_discount' ] = $v[ 'goods' ][ 'member_discount' ] ?? '';
+                //获取展示活动价格
+                $show_price_data = $goods_active_price_service->getActivePrice($v[ 'goodsSku' ], $this->site_id, $this->member_id);
+                $v[ 'goodsSku' ][ 'show_price' ] = $show_price_data[ 'show_price' ];
+                $v[ 'goodsSku' ][ 'show_type' ] = $show_price_data[ 'show_type' ];
+            }
+            if (!empty($v[ 'goods' ])) {
+                // 限购查询当前会员已购数量
+                $has_buy = ( new CoreGoodsLimitBuyService() )->getGoodsHasBuyNumber($this->site_id, $this->member_id, $v[ 'goods' ][ 'goods_id' ]);
+                $v[ 'goods' ][ 'has_buy' ] = $has_buy;
             }
         }
+        array_multisort(array_column($list, 'id'), SORT_DESC, $list);
         return $list;
     }
 
@@ -162,30 +236,147 @@ class CartService extends BaseApiService
     public function getGoodsList($data)
     {
         $data[ 'member_id' ] = $this->member_id;
-        $field = 'id, member_id, goods_id, sku_id, num, market_type, market_type_id, status, invalid_remark';
+        $field = 'id, goods_id, sku_id, num, status, invalid_remark';
         $order = "create_time desc";
         $list = $this->model->where([ [ 'site_id', '=', $this->site_id ] ])->withSearch([ "member_id" ], $data)->field($field)
             ->with([
-                'goods' => function($query) {
-                    $query->withField('goods_id, site_id, goods_name, goods_type, sub_title, goods_cover, unit, stock, sale_num + virtual_sale_num as sale_num, status,delete_time,member_discount,is_discount');
+                'goods' => function ($query) {
+                    $query->withField('goods_id, site_id, goods_name, goods_cover, unit, stock, status, delete_time, label_ids, member_discount')
+                        ->append([ 'goods_label_name', 'goods_cover_thumb_mid' ]);
                 },
-                'goodsSku' => function($query) {
-                    $query->withField('sku_id, site_id, sku_name, sku_image, sku_no, goods_id, sku_spec_format, price, market_price, sale_price, stock, weight, volume, is_default,member_price');
-                },
-                // 商品规格项/规格值列表
-                'goodsSpec' => function($query) {
-                    $query->field('spec_id, goods_id, spec_name, spec_values');
+                'goodsSku' => function ($query) {
+                    $query->withField('site_id,sku_id,goods_id, sku_name, sku_image, sku_spec_format, price, market_price, sale_price, member_price, stock')->append([ 'sku_image_thumb_mid' ]);
                 },
             ])->order($order)->select()->toArray();
 
-        $goods_service = new GoodsService();
-        $member_info = $goods_service->getMemberInfo();
+
+        array_multisort(array_column($list, 'id'), SORT_ASC, $list);
+        $goods_active_price_service = ( new CoreGoodsActivePriceService() );
+        $gift_goods = [];
         foreach ($list as $k => &$v) {
-            if(!empty($v[ 'goodsSku' ])) {
-                $v[ 'goodsSku' ][ 'member_price' ] = $goods_service->getMemberPrice($member_info, $v[ 'goods' ][ 'member_discount' ], $v[ 'goodsSku' ][ 'member_price' ], $v[ 'goodsSku' ][ 'price' ]);
+            if (!empty($v[ 'goodsSku' ])) {
+                $v[ 'goodsSku' ][ 'member_discount' ] = $v[ 'goods' ][ 'member_discount' ] ?? '';
+                //获取展示活动价格
+                $show_price_data = $goods_active_price_service->getActivePrice($v[ 'goodsSku' ], $this->site_id, $this->member_id);
+                $v[ 'goodsSku' ][ 'show_price' ] = $show_price_data[ 'show_price' ];
+                $v[ 'goodsSku' ][ 'show_type' ] = $show_price_data[ 'show_type' ];
+            }
+            if (!empty($v[ 'goods' ])) {
+                // 限购查询当前会员已购数量
+                $has_buy = ( new CoreGoodsLimitBuyService() )->getGoodsHasBuyNumber($this->site_id, $this->member_id, $v[ 'goods' ][ 'goods_id' ]);
+                $v[ 'goods' ][ 'has_buy' ] = $has_buy;
+            }
+
+            $manjian_info = ( new ManjianService() )->getManjianInfo([ 'goods_id' => $v[ 'goods_id' ], 'sku_id' => $v[ 'sku_id' ], 'gift_goods' => $gift_goods ]);
+            if (!empty($manjian_info[ 'gift_goods' ])) {
+                $gift_goods = array_merge($gift_goods, $manjian_info[ 'gift_goods' ]);
+            }
+            $v[ 'manjian_info' ] = $manjian_info;
+        }
+        array_multisort(array_column($list, 'id'), SORT_DESC, $list);
+        return $list;
+    }
+
+    /**
+     * 购物车计算
+     * @param $data
+     * @return array
+     */
+    public function calculate($data)
+    {
+        //获取商品信息
+        $data = $this->getSelectGoods($data);
+        //满减
+        $data = ( new CoreManjianService() )->manjianPromotion($data, $this->site_id, $this->member_id);
+        $promotion_money = $data[ 'promotion_money' ] ?? 0;
+        $order_money = max($data[ 'goods_money' ] - $promotion_money, 0);
+        $data[ 'order_money' ] = $order_money;
+
+        $good_list = $data[ 'goods_list' ];
+        $match_list = [];
+        foreach ($good_list as $k => $v) {
+            $match_list[ $k ][ 'goods_id' ] = $v[ 'goods_id' ];
+            $match_list[ $k ][ 'sku_id' ] = $v[ 'sku_id' ];
+            foreach ($v[ 'promotion' ] as $kk => $vv) {
+//                dd($vv);
+                switch ($kk) {
+                    case 'manjian':
+                        foreach ($vv as $item){
+                            if ($item[ 'discount_array' ][ 'level' ] >= 0) {
+                                $match_list[ $k ][$kk][] = [
+                                    'manjian_id' => $item[ 'manjian_id' ],
+                                    'level'  => $item[ 'discount_array' ][ 'level' ]
+                                ];
+                            }
+                        }
+                        break;
+                    default:
+                        break;
+                }
             }
         }
-        return $list;
+        return [
+            'goods_money' => $data[ 'goods_money' ],
+            'promotion_money' => $promotion_money,
+            'order_money' => $order_money,
+            'match_list' => $match_list
+        ];
+    }
+
+    /**
+     * 获取购物车商品列表信息
+     * @param $data
+     * @return mixed
+     */
+    public function getSelectGoods($data)
+    {
+        $site_id = $this->site_id;
+        $member_id = $this->member_id;
+
+        $sku_ids = $data[ 'sku_ids' ] ?? [];
+        $sku_id_list = array_column($sku_ids, 'sku_id');
+        $sku_num_list = array_column($sku_ids, 'num', 'sku_id');
+        //组装商品列表
+        $field = 'goodsSku.sku_id, goodsSku.sku_name,  goodsSku.price, goodsSku.stock, goodsSku.goods_id, cart.id as cart_id,cart.num, goodsSku.member_price, goods.member_discount, goodsSku.sale_price';
+        $condition = [
+            [ 'goodsSku.sku_id', 'in', $sku_id_list ],
+            [ 'goodsSku.site_id', '=', $site_id ]
+        ];
+        $goods_list = ( new GoodsSku() )
+            ->alias('goodsSku')
+            ->field($field)
+            ->where($condition)
+            ->join((new Cart())->getTable() . ' cart', 'cart.sku_id = goodsSku.sku_id and cart.member_id = ' . $member_id)
+            ->join((new Goods())->getTable() . ' goods', 'goods.goods_id = goodsSku.goods_id')
+            ->with(['goods'])
+            ->select()
+            ->toArray();
+
+        $data[ 'goods_num' ] = 0;
+        $data[ 'goods_money' ] = 0;
+        $data[ 'goods_list' ] = [];
+        $data[ 'coupon_money' ] = 0; //优惠券金额
+        $data[ 'promotion_money' ] = 0; //优惠金额
+        $goods_active_price_service = ( new CoreGoodsActivePriceService() );
+        if (!empty($goods_list)) {
+            foreach ($goods_list as $k => $v) {
+                //获取展示活动价格
+                $v['member_discount'] = $v['goods']['member_discount'];
+                $show_price_data = $goods_active_price_service->getActivePrice($v, $this->site_id, $this->member_id);
+                $v[ 'show_price' ] = $show_price_data[ 'show_price' ];
+                $v[ 'show_type' ] = $show_price_data[ 'show_type' ];
+                $item_num = $sku_num_list[ $v[ 'sku_id' ] ];
+                $price = $v[ 'show_price' ];
+                $v[ 'goods_money' ] = $price * $item_num;
+                $v[ 'real_goods_money' ] = $v[ 'goods_money' ];
+                $v[ 'promotion' ] = [];
+
+                $data[ 'goods_num' ] += $item_num;
+                $data[ 'goods_money' ] += $v[ 'goods_money' ];
+                $data[ 'goods_list' ][] = $v;
+            }
+        }
+        return $data;
     }
 
     /**

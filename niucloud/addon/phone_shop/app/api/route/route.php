@@ -14,16 +14,20 @@ use app\api\middleware\ApiCheckToken;
 use app\api\middleware\ApiLog;
 use think\facade\Route;
 
-
+// 第三方配送
+Route::any('delivery/notify/:site_id/:type/:order_no/:action', 'addon\phone_shop\app\api\controller\delivery\Order@notify');
 /**
  * 商城系统
  */
-Route::group('phone_shop', function() {
+Route::group('phone_shop', function () {
 
     /***************************************************** 商品 ****************************************************/
 
     // 获取商品列表
     Route::get('goods/pages', 'addon\phone_shop\app\api\controller\goods\Goods@pages');
+    Route::get('goods/filter/options', 'addon\phone_shop\app\api\controller\goods\Goods@filterOptions');
+    Route::get('goods/subscription/capability', 'addon\phone_shop\app\api\controller\goods\GoodsSubscription@capability');
+    Route::get('goods/warehouses', 'addon\phone_shop\app\api\controller\goods\Goods@warehouses'); // 仓库切换选项(本地仓/代理仓)
 
     // 获取商品详情
     Route::get('goods/detail', 'addon\phone_shop\app\api\controller\goods\Goods@detail');
@@ -40,14 +44,17 @@ Route::group('phone_shop', function() {
     // 获取商品分类列表
     Route::get('goods/category/list', 'addon\phone_shop\app\api\controller\goods\GoodsCategory@lists');
 
-    // 获取商品详情
-    Route::get('goods/category/:id', 'addon\phone_shop\app\api\controller\goods\GoodsCategory@getInfo');
+    // 获取商品服务列表
+    Route::get('goods/service', 'addon\phone_shop\app\api\controller\goods\GoodsService@all');
+
+    // 获取推荐商品列表
+    Route::get('goods/recommend', 'addon\phone_shop\app\api\controller\goods\Goods@recommend');
 
     // 获取商品列表供组件调用
     Route::get('goods/components', 'addon\phone_shop\app\api\controller\goods\Goods@components');
-    
-    //商品品牌列表
-    Route::get('goods/brand/list', 'addon\phone_shop\app\api\controller\goods\Brand@lists');
+
+      //商品品牌列表
+    Route::get('goods/brand/list', 'addon\shop\app\api\controller\goods\Brand@lists');
 
     /***************************************************** 评价 ****************************************************/
     // 获取 评价设置
@@ -67,6 +74,8 @@ Route::group('phone_shop', function() {
 
     // 添加 商品评价
     Route::post('goods/evaluate', 'addon\phone_shop\app\api\controller\goods\Evaluate@add');
+    // 获取商品搜索配置
+    Route::get('goods/config/search', 'addon\phone_shop\app\api\controller\goods\Config@getSearchConfig');
 
     // 评价 （订单页）
     Route::get('order/evaluate/:id', 'addon\phone_shop\app\api\controller\goods\Evaluate@getEvaluate');
@@ -113,18 +122,45 @@ Route::group('phone_shop', function() {
     //获取用户当前积分数供组件调用
     Route::get('exchange/point', 'addon\phone_shop\app\api\controller\exchange\Exchange@getPointInfo');
 
-    //积分商城订单计算
-    Route::get('exchange_order/calculate', 'addon\phone_shop\app\api\controller\exchange\OrderCreate@calculate');
 
-    //积分商城订单创建
-    Route::post('exchange_order/create', 'addon\phone_shop\app\api\controller\exchange\OrderCreate@create');
+    /***************************************************** 新人专享 ****************************************************/
 
+    // 新人专享商品列表
+    Route::get('newcomer/goods', 'addon\phone_shop\app\api\controller\marketing\Newcomer@pages');
+
+    // 新人专享组件商品列表
+    Route::get('newcomer/goods/components', 'addon\phone_shop\app\api\controller\marketing\Newcomer@componentsList');
+
+    // 新人专享活动配置
+    Route::get('newcomer/config', 'addon\phone_shop\app\api\controller\marketing\Newcomer@config');
+
+    /***************************************************** 商品榜单 ****************************************************/
+
+    // 商品榜单列表
+    Route::get('rank', 'addon\phone_shop\app\api\controller\goods\Rank@pages');
+
+    // 榜单商品列表
+    Route::get('rank/goods', 'addon\phone_shop\app\api\controller\goods\Rank@goods');
+
+    // 商品排行榜组件列表
+    Route::get('rank/components', 'addon\phone_shop\app\api\controller\goods\Rank@components');
+
+    Route::get('rank/getRankConfig', 'addon\phone_shop\app\api\controller\goods\Rank@getRankConfig');
+
+    /***************************************************** 满减送 ****************************************************/
+
+    // 获取商品满减优惠信息
+    Route::get('manjian/info', 'addon\phone_shop\app\api\controller\marketing\Manjian@info');
+
+
+    // 获取同城配送轨迹
+    Route::get('delivery/track_of_local', 'addon\phone_shop\app\api\controller\delivery\Order@getTrackOfLocalDeliveryOrder');
 })->middleware(ApiChannel::class)
     ->middleware(ApiCheckToken::class)//false表示不验证登录
     ->middleware(ApiLog::class);
 
 
-Route::group('phone_shop', function() {
+Route::group('phone_shop', function () {
 
     /***************************************************** 购物车 ****************************************************/
 
@@ -149,6 +185,9 @@ Route::group('phone_shop', function() {
     // 购物车数量
     Route::get('cart/sum', 'addon\phone_shop\app\api\controller\cart\Cart@sum');
 
+    // 购物车计算
+    Route::get('cart/calculate', 'addon\phone_shop\app\api\controller\cart\Cart@calculate');
+
     /***************************************************** 订单 ****************************************************/
 
     //列表
@@ -156,6 +195,9 @@ Route::group('phone_shop', function() {
 
     //数量
     Route::get('order/num', 'addon\phone_shop\app\api\controller\order\Order@getNum');
+
+    //详情
+    Route::post('order/offline/voucher/:order_id', 'addon\phone_shop\app\api\controller\order\Order@submitOfflineVoucher');
 
     //详情
     Route::get('order/:order_id', 'addon\phone_shop\app\api\controller\order\Order@detail');
@@ -177,6 +219,7 @@ Route::group('phone_shop', function() {
 
     // 查询自提点
     Route::get('order_create/store', 'addon\phone_shop\app\api\controller\order\OrderCreate@getStore');
+    Route::get('order_create/local', 'addon\phone_shop\app\api\controller\order\OrderCreate@getLocalDeliveryConfig');
 
     //获取订单确认数据
     Route::get('confirm', 'addon\phone_shop\app\api\controller\order\OrderCreate@confirm');
@@ -184,11 +227,21 @@ Route::group('phone_shop', function() {
     // 订单关闭
     Route::put('order/close/:id', 'addon\phone_shop\app\api\controller\order\Order@orderClose');
 
+    //订单删除
+    Route::delete('order/delete/:id', 'addon\phone_shop\app\api\controller\order\Order@delete');
+
     // 订单完成
     Route::put('order/finish/:id', 'addon\phone_shop\app\api\controller\order\Order@orderFinish');
 
     //物流跟踪
     Route::get('order/logistics', 'addon\phone_shop\app\api\controller\order\Order@getPackage');
+    //发票相关
+    Route::get('order/invoice/list', 'addon\phone_shop\app\api\controller\order\Invoice@list');
+    Route::get('order/invoice/:id', 'addon\phone_shop\app\api\controller\order\Invoice@info');
+    Route::post('order/invoice/apply', 'addon\phone_shop\app\api\controller\order\Invoice@apply');
+    Route::post('order/invoice/edit/:id', 'addon\phone_shop\app\api\controller\order\Invoice@edit');
+    Route::delete('order/invoice/cancel/:id', 'addon\phone_shop\app\api\controller\order\Invoice@cancel');
+    Route::post('order/invoice/calculate', 'addon\phone_shop\app\api\controller\order\Invoice@calculate');
 
     //添加优惠券
     Route::post('coupon', 'addon\phone_shop\app\api\controller\marketing\Coupon@receive');
@@ -209,12 +262,31 @@ Route::group('phone_shop', function() {
     Route::post('goods/collect/:goods_id', 'addon\phone_shop\app\api\controller\goods\GoodsCollect@addGoodsCollect');
 
     //商品取消收藏
-    Route::delete('goods/collect/:goods_id', 'addon\phone_shop\app\api\controller\goods\GoodsCollect@cancelGoodsCollect');
+    Route::put('goods/collect', 'addon\phone_shop\app\api\controller\goods\GoodsCollect@cancelGoodsCollect');
 
-    //订单维权 列表
+    //商品筛选订阅
+    Route::get('goods/subscription', 'addon\phone_shop\app\api\controller\goods\GoodsSubscription@lists');
+    Route::post('goods/subscription/status', 'addon\phone_shop\app\api\controller\goods\GoodsSubscription@status');
+    Route::post('goods/subscription', 'addon\phone_shop\app\api\controller\goods\GoodsSubscription@add');
+    Route::put('goods/subscription/cancel', 'addon\phone_shop\app\api\controller\goods\GoodsSubscription@cancel');
+
+    // 同行商品转发权益：查询权限、提交万能表单申请
+    Route::get('forward/access', 'addon\phone_shop\app\api\controller\member\ForwardApplication@access');
+    Route::post('forward/apply', 'addon\phone_shop\app\api\controller\member\ForwardApplication@apply');
+
+    //商品足迹
+    Route::get('goods/browse', 'addon\phone_shop\app\api\controller\goods\GoodsBrowse@getMemberGoodsBrowseList');
+
+    //商品足迹添加
+    Route::post('goods/browse', 'addon\phone_shop\app\api\controller\goods\GoodsBrowse@addGoodsBrowse');
+
+    //商品足迹删除
+    Route::delete('goods/browse', 'addon\phone_shop\app\api\controller\goods\GoodsBrowse@deleteGoodsBrowse');
+
+    //订单售后 列表
     Route::get('order/refund', 'addon\phone_shop\app\api\controller\refund\Refund@lists');
 
-    //订单维权 列表
+    //订单售后 列表
     Route::get('order/refund/:order_refund_no', 'addon\phone_shop\app\api\controller\refund\Refund@detail');
 
     // 查询订单项可退款信息
@@ -223,19 +295,19 @@ Route::group('phone_shop', function() {
     // 查询订单项退款信息
     Route::get('refund/refund_data_by_no', 'addon\phone_shop\app\api\controller\refund\Refund@getRefundDataByOrderRefundNo');
 
-    // 申请维权
+    // 申请售后
     Route::post('refund/apply', 'addon\phone_shop\app\api\controller\refund\Refund@apply');
 
     // 修改退款申请
     Route::put('refund/:order_refund_no', 'addon\phone_shop\app\api\controller\refund\Refund@edit');
 
-    // 维权退货
+    // 售后退货
     Route::post('refund/delivery/:order_refund_no', 'addon\phone_shop\app\api\controller\refund\Refund@delivery');
 
-    // 修改维权退货信息
+    // 修改售后退货信息
     Route::put('refund/delivery/:order_refund_no', 'addon\phone_shop\app\api\controller\refund\Refund@editDelivery');
 
-    // 取消维权
+    // 取消售后
     Route::put('refund/close/:order_refund_no', 'addon\phone_shop\app\api\controller\refund\Refund@close');
 
     // 退款原因
@@ -243,17 +315,22 @@ Route::group('phone_shop', function() {
 
     // 退款方式
     Route::get('order/refund/type', 'addon\phone_shop\app\api\controller\refund\Refund@getRefundType');
-    // 操作员上下架
-    Route::get('goods/operation/:goods_id', 'addon\phone_shop\app\api\controller\goods\Goods@operationGoods');
-    // 添加商品
-    Route::post('goods/add', 'addon\phone_shop\app\api\controller\goods\Goods@add');
 
-    // 修改商品
-    Route::put('goods/:goods_id', 'addon\phone_shop\app\api\controller\goods\Goods@put');
-  // 获取内存列表
-  Route::get('goods/memory/list', 'addon\phone_shop\app\api\controller\goods\Goods@getMemoryList');
-  
+    //积分商城订单计算
+    Route::get('exchange_order/calculate', 'addon\phone_shop\app\api\controller\exchange\OrderCreate@calculate');
+
+    //积分商城订单创建
+    Route::post('exchange_order/create', 'addon\phone_shop\app\api\controller\exchange\OrderCreate@create');
+
+    // 发票列表
+    Route::get('invoice', 'addon\phone_shop\app\api\controller\order\Invoice@lists');
+
+    // 发票详情
+    Route::get('invoice/:id', 'addon\phone_shop\app\api\controller\order\Invoice@info');
+
 
 })->middleware(ApiChannel::class)
     ->middleware(ApiCheckToken::class, true)//表示验证登录
     ->middleware(ApiLog::class);
+
+

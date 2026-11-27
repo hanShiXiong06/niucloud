@@ -2,10 +2,7 @@
 
 namespace addon\phone_shop\app\upgrade\v132;
 
-use app\model\site\Site;
-use app\model\sys\Poster;
-use app\service\admin\diy\DiyService;
-use app\service\core\poster\CorePosterService;
+use app\model\diy\Diy;
 
 class Upgrade
 {
@@ -20,44 +17,28 @@ class Upgrade
      */
     private function handleData()
     {
+        $diy_model = new Diy();
+        $where = [
+            [ 'value', '<>', '' ]
+        ];
+        $field = 'id,site_id,name,title,template,value';
+        $list = $diy_model->where($where)->field($field)->select()->toArray();
 
-        $site_model = new Site();
-        $site_list = $site_model->where([
-            [ 'app_type', '=', 'site' ],
-            [ 'app', 'like', '%"shop"%' ],
-        ])->field('site_id,site_name')->select()->toArray();
+        if (!empty($list)) {
+            foreach ($list as $k => $v) {
+                $diy_data = json_decode($v[ 'value' ], true);
 
-        if (!empty($site_list)) {
+                foreach ($diy_data[ 'value' ] as $ck => $cv) {
+                    if ($cv[ 'componentName' ] == 'ShopMemberInfo') {
+                        if (!isset($diy_data[ 'value' ][ $ck ][ 'isShowAccount' ])) {
+                            $diy_data[ 'value' ][ $ck ][ 'isShowAccount' ] = true;
+                        }
 
-            $poster = new CorePosterService();
-            $diy_service = new DiyService();
-            $poster_model = new Poster();
+                    }
+                }
 
-            foreach ($site_list as $k => $v) {
-
-                // 删除旧模板
-                $poster_model->where([ [ 'site_id', '=', $v[ 'site_id' ] ], [ 'addon', '=', 'shop' ] ])->delete();
-
-                // 创建默认商品海报
-                $template = $poster->getTemplateList('shop', 'shop_goods')[ 0 ];
-                $poster->add($v[ 'site_id' ], 'shop', [
-                    'name' => $template[ 'name' ],
-                    'type' => $template[ 'type' ],
-                    'value' => $template[ 'data' ],
-                    'status' => 1,
-                    'is_default' => 1
-                ]);
-
-                // 创建默认积分商品海报
-                $template = $poster->getTemplateList('shop', 'shop_point_goods')[ 0 ];
-                $poster->add($v[ 'site_id' ], 'shop', [
-                    'name' => $template[ 'name' ],
-                    'type' => $template[ 'type' ],
-                    'value' => $template[ 'data' ],
-                    'status' => 1,
-                    'is_default' => 1
-                ]);
-
+                $diy_data = json_encode($diy_data);
+                $diy_model->where([ [ 'id', '=', $v[ 'id' ] ] ])->update([ 'value' => $diy_data ]);
             }
         }
 

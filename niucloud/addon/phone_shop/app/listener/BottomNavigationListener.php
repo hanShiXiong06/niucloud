@@ -47,8 +47,8 @@ class BottomNavigationListener
                     [
                         "text" => "首页",
                         "link" => [
-                            "parent" => "SHOP_LINK",
-                            "name" => "SHOP_INDEX",
+                            "parent" => "PHONE_SHOP_LINK",
+                            "name" => "PHONE_SHOP_INDEX",
                             "title" => get_lang('dict_diy.shop_link_index'),
                             "url" => "/addon/phone_shop/pages/index"
                         ],
@@ -58,8 +58,8 @@ class BottomNavigationListener
                     [
                         "text" => "商品分类",
                         "link" => [
-                            "parent" => "SHOP_LINK",
-                            "name" => "SHOP_GOODS_CATEGORY",
+                            "parent" => "PHONE_SHOP_LINK",
+                            "name" => "PHONE_SHOP_GOODS_CATEGORY",
                             "title" => "商品分类",
                             "url" => "/addon/phone_shop/pages/goods/category"
                         ],
@@ -69,8 +69,8 @@ class BottomNavigationListener
                     [
                         "text" => "购物车",
                         "link" => [
-                            "parent" => "SHOP_LINK",
-                            "name" => "SHOP_GOODS_CART",
+                            "parent" => "PHONE_SHOP_LINK",
+                            "name" => "PHONE_SHOP_GOODS_CART",
                             "title" => "购物车",
                             "url" => "/addon/phone_shop/pages/goods/cart"
                         ],
@@ -80,8 +80,8 @@ class BottomNavigationListener
                     [
                         "text" => "我的",
                         "link" => [
-                            "parent" => "SHOP_LINK",
-                            "name" => "SHOP_MEMBER_INDEX",
+                            "parent" => "PHONE_SHOP_LINK",
+                            "name" => "PHONE_SHOP_MEMBER_INDEX",
                             "title" => get_lang('dict_diy.member_index'),
                             "url" => "/addon/phone_shop/pages/member/index"
                         ],

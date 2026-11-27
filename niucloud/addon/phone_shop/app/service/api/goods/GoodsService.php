@@ -11,25 +11,38 @@
 
 namespace addon\phone_shop\app\service\api\goods;
 
+use addon\phone_shop\app\support\GoodsRecentActivity;
+
+use addon\phone_shop\app\dict\active\ActiveDict;
+use addon\phone_shop\app\dict\goods\GoodsDict;
 use addon\phone_shop\app\model\coupon\CouponGoods;
 use addon\phone_shop\app\model\goods\Brand;
+use addon\phone_shop\app\model\goods\Category;
 use addon\phone_shop\app\model\goods\Goods;
 use addon\phone_shop\app\model\goods\GoodsCollect;
+use addon\phone_shop\app\model\goods\GoodsGrade;
 use addon\phone_shop\app\model\goods\Label;
+use addon\phone_shop\app\model\goods\LabelGroup;
 use addon\phone_shop\app\model\goods\Service;
 use addon\phone_shop\app\model\goods\GoodsSku;
-use addon\phone_shop\app\model\site\Site;
-use addon\phone_shop\app\model\site\SiteAgent;
 use addon\phone_shop\app\service\api\marketing\DiscountService;
-use addon\phone_shop\app\model\goods\Memory;
-use addon\phone_shop\app\model\goods\MemoryGroup;
-use addon\phone_shop\app\model\goods\Category;
+use addon\phone_shop\app\service\api\marketing\NewcomerService;
+use addon\phone_shop\app\service\core\goods\CoreGoodsAccessNumService;
+use addon\phone_shop\app\service\core\goods\CoreGoodsActivePriceService;
+use addon\phone_shop\app\service\core\goods\CoreGoodsConfigService;
+use addon\phone_shop\app\service\core\goods\CoreDeviceAttributeService;
+use addon\phone_shop\app\service\core\goods\CoreMemoryFilterService;
+use addon\phone_shop\app\service\core\goods\CoreModelSpecFacetService;
+use addon\phone_shop\app\service\core\goods\CoreGoodsDescriptionService;
+use addon\phone_shop\app\service\core\goods\CoreGoodsStatService;
+use addon\phone_shop\app\service\core\goods\CoreGoodsLimitBuyService;
+use addon\phone_shop\app\service\core\goods\CoreMemberDiscountPriceService;
+use addon\phone_shop\app\service\core\goods\CoreMemberPriceService;
+use addon\phone_shop\app\service\core\order\CoreOrderConfigService;
 use app\model\member\Member;
+use app\service\api\diy\DiyService;
 use core\base\BaseApiService;
-use think\facade\Log;
-use think\facade\Db;
 use core\exception\CommonException;
- 
 
 /**
  *  商品服务层
@@ -49,170 +62,413 @@ class GoodsService extends BaseApiService
      */
     public function getPage(array $where = [])
     {
-        // 修改字段，与admin端保持一致
-        $field = 'goods_id,sub_title,site_id,goods_name,goods_type,brand_id,memory_ids,source,goods_cover,stock,sale_num,status,sort,create_time,update_time,member_discount,is_proxy';
-
-        // 获取当前站点信息
-        $site_info = (new Site())->where([['site_id', '=', $this->site_id]])->find();
-      
-        // 基础SKU查询条件
-        if($where['status'] == 'all'){
-             $sku_where = [
-                 ['goodsSku.is_default', '=', 1],
-                ['goodsSku.site_id', 'in', "$this->site_id,100005"]
-                
-            ];
-        }else{
-             $sku_where = [
-                ['goodsSku.is_default', '=', 1],
-                ['goodsSku.site_id', 'in', "$this->site_id,100005"],['status', '=', 1]
-                
-            ];
-        }
-        // unset($where['status'] );
-        //
-       
-        
-        // 根据client类型设置站点查询条件
-        // if ($site_info['client'] == 1  ) {
-        //     // 代理商，查询自己的商品
-        //     $sku_where[] = ['goods.site_id', '=', $this->site_id];
-            
-        // } else {
-            
-        //     // 被代理方，查询自己的商品和代理商的可代理商品
-        //     $agent_sites = (new SiteAgent())->where([
-        //         ['agent_site_id', '=', $this->site_id],
-        //         ['status', '=', 1]
-        //     ])->column('site_id');
-            
-        //     if (!empty($agent_sites)) {
-        //         $sku_where[] = function ($query) use ($agent_sites) {
-        //             $query->where([
-        //                 ['goods.site_id', 'in', "$this->site_id,100005"]
-        //             ])->whereOr([
-        //                 ['goods.site_id', 'in', $agent_sites],
-        //                 ['goods.is_proxy', '=', 1]
-        //             ]);
-        //         };
-        //     } else {
-                // $sku_where[] =  ['goods.site_id', 'in', "$this->site_id,100005"];
-        //     }
-        // }
-
-        // if($where['status'] !== '') {
-        //     $sku_where[] = ['status', '=', 1];
-        // }
-
-        // 价格区间查询
-        if (!empty($where['start_price']) && !empty($where['end_price'])) {
-            $money = [$where['start_price'], $where['end_price']];
-            sort($money);
-            $sku_where[] = ['goodsSku.price', 'between', $money];
-        } else if (!empty($where['start_price'])) {
-            $sku_where[] = ['goodsSku.price', '>=', $where['start_price']];
-        } else if (!empty($where['end_price'])) {
-            $sku_where[] = ['goodsSku.price', '<=', $where['end_price']];
-        }
-        // 内存筛选 memory_id 
-        if (!empty($where['memory_id'])) {
-            $sku_where[] = ['memory_ids', '=', $where['memory_id']];
-        }
-
-
-        // 关键词搜索
-        if (!empty($where['keyword'])) {
-            if (strpos($where['keyword'], '#') === 0) {
-                $sku_where[] = ['goodsSku.sku_no', 'like', '%' . substr($where['keyword'], 1) . '%'];
-            } else {
-                $sku_where[] = ['goods_name|sub_title|goodsSku.sku_no', 'like', '%' . $where['keyword'] . '%'];
+        $now = time();
+        $newArrival = (string)($where['new_arrival'] ?? '') === '1';
+        foreach ([ 'goods_category', 'label_ids', 'service_ids', 'brand_id' ] as $multi_key) {
+            $normalized = $this->normalizeMultiValue($where[$multi_key] ?? '');
+            if (!empty($normalized)) {
+                $where[$multi_key] = count($normalized) === 1 ? $normalized[0] : $normalized;
             }
         }
-        
-        // SKU编号查询
-        if (!empty($where['sku_no'])) {
-            $sku_where[] = ['goods_name|goodsSku.sku_no', 'like', '%' . $where['sku_no'] . '%'];
-            // $skuNoTrimmed = trim($where['sku_no']);
-            // if (strpos($skuNoTrimmed, ' ') !== false) {
-            //     $skuNoArray = explode(' ', $skuNoTrimmed);
-            //     $sku_where[] = function ($query) use ($skuNoArray) {
-            //         $query->whereIn('goodsSku.sku_no', $skuNoArray);
-            //     };
-            // } else {
-            //     $sku_where[] = ['goodsSku.sku_no', '=', $skuNoTrimmed];
-            // }
+
+        $field = 'site_id,goods_id,source,is_proxy,goods_name,sub_title,goods_type,goods_cover,unit,sale_num + goods.virtual_sale_num as sale_num,is_limit,limit_type,max_buy,min_buy,member_discount,virtual_receive_type,label_ids,brand_id,stock,status,sale_status,is_online_sellable,memory_group,condition_grade,device_color,battery_health,warranty_expire_time,qc_report';
+
+        $master_site_id = ( new \addon\phone_shop\app\service\core\agent\AgentConfigService() )->getMasterSiteId();
+        // 使用数字时间戳，避免客户端时区/字符串日期解析影响标签。
+        $field .= ',create_time as created_at,price_changed_at';
+        $is_agent_site = $this->site_id !== $master_site_id;
+        $sku_where = [
+            [ 'goodsSku.is_default', '=', 1 ],
+            [ 'goods.site_id', '=', $this->site_id ],
+            [ 'goods.is_gift', '=', GoodsDict::NOT_IS_GIFT ],
+            [ 'goods.status', '=', 1 ],
+            [ 'goods.sale_status', '=', 'available' ]
+        ];
+
+        // 无论自营还是代理，只有明确允许线上销售的商品才能进入小程序列表。
+        // 跟随同步会把主站当前可售副本设置为 1，不能再用来源字段绕过该事实。
+        $sku_where[] = [ 'goods.is_online_sellable', '=', 1 ];
+        if ($newArrival) $sku_where = array_merge($sku_where, GoodsRecentActivity::recentWhere($now));
+        if (!empty($where['arrival_batch_id'])) {
+            $batchIds = (new \addon\phone_shop\app\service\core\goods\CoreGoodsArrivalService())->batchGoodsIds((int)$this->site_id, (int)$where['arrival_batch_id']);
+            $sku_where[] = ['goods.goods_id', 'in', $batchIds ?: [0]];
         }
 
-        // 24小时内上传的商品
-        if (!empty($where['create_time'])) {
-            $current_time = time();
-            $twenty_four_hours_ago = $current_time - 86400;
-            $sku_where[] = ['goods.create_time', 'between', [$twenty_four_hours_ago, $current_time]];
+        if (isset($where['brand_id']) && is_array($where['brand_id'])) {
+            $sku_where[] = [ 'goods.brand_id', 'in', $where['brand_id'] ];
+            unset($where['brand_id']);
         }
 
-        // 优惠券商品
-        if (!empty($where['coupon_id'])) {
+        $keyword = trim((string)($where['keyword'] ?? ''));
+        if ($keyword !== '') {
+            // 商城前台统一搜索：商品名称、副标题或 SKU 编码。
+            // 二手机的一机一码 IMEI 保存在 sku_no，必须通过已关联的默认 SKU 查询。
+            $sku_where[] = [
+                'goods.goods_name|goods.sub_title|goodsSku.sku_no',
+                'like',
+                '%' . $keyword . '%'
+            ];
+        }
+
+        // 二手机:内存 / 成色等级 筛选(支持数组或逗号串)
+        if (!empty($where[ 'memory_group' ])) {
+            $catalog = new CoreMemoryFilterService();
+            $siteId = (int)$this->site_id;
+            $selected = $this->normalizeMultiValue($where['memory_group']);
+            $categories = $this->normalizeMultiValue($where['goods_category'] ?? '');
+            $groups = $categories ? $catalog->groups($siteId, $categories) : [];
+            if ($groups && $selected) {
+                // 旧商品可能只有标题写明容量/表径。筛选项、颜色和点选后的列表共用同一个判定。
+                $facet = (new CoreModelSpecFacetService())->read($siteId, $catalog, $groups, $categories,
+                    $this->normalizeMultiValue($where['brand_id'] ?? ''), $this->normalizeMultiValue($where['condition_grade'] ?? ''),
+                    $this->normalizeMultiValue($where['device_color'] ?? ''), $selected, true);
+                $sku_where[] = ['goods.goods_id', 'in', $facet['ids'] ?: [0]];
+            } else {
+                $mem = $catalog->filterValues($siteId, $selected);
+                if ($mem) $sku_where[] = [ 'goods.memory_group', 'in', $mem ];
+            }
+        }
+        if (!empty($where[ 'condition_grade' ])) {
+            $grade = is_array($where[ 'condition_grade' ]) ? $where[ 'condition_grade' ] : array_filter(array_map('trim', explode(',', (string) $where[ 'condition_grade' ])));
+            if (!empty($grade)) $sku_where[] = [ 'goods.condition_grade', 'in', array_values($grade) ];
+        }
+        if (!empty($where['device_color'])) {
+            $colors = is_array($where['device_color']) ? $where['device_color'] : array_filter(array_map('trim', explode(',', (string)$where['device_color'])));
+            if ($colors) $sku_where[] = ['goods.device_color', 'in', array_values($colors)];
+        }
+        if ((string)($where[ 'in_stock' ] ?? '') === '1') {
+            $sku_where[] = [ 'goodsSku.stock', '>', 0 ];
+        }
+
+        if (!empty($where[ 'start_price' ]) && !empty($where[ 'end_price' ])) {
+            $money = [ $where[ 'start_price' ], $where[ 'end_price' ] ];
+            sort($money);
+            $sku_where[] = [ 'goodsSku.price', 'between', $money ];
+        } else if (!empty($where[ 'start_price' ])) {
+            $sku_where[] = [ 'goodsSku.price', '>=', $where[ 'start_price' ] ];
+        } else if (!empty($where[ 'end_price' ])) {
+            $sku_where[] = [ 'goodsSku.price', '<=', $where[ 'end_price' ] ];
+        }
+
+        // 对外 source 契约：空=全部，1=本站自营，主站 site_id=主站代理。
+        // warehouse 是已上线页面的旧参数，继续兼容，但 source 显式传入时优先。
+        $sourceSelector = trim((string)($where['source'] ?? ''));
+        if ($sourceSelector !== '' && $sourceSelector !== 'all' && $sourceSelector !== '0') {
+            $this->applySourceSelector($sku_where, $sourceSelector, $master_site_id);
+        } elseif (!empty($where['warehouse'])) {
+            $warehouseSelector = (string)$where['warehouse'] === 'agent' ? (string)$master_site_id : '1';
+            $this->applySourceSelector($sku_where, $warehouseSelector, $master_site_id);
+        }
+
+        // 查询优惠券包括的id
+        if (!empty($where[ 'coupon_id' ])) {
             $coupon_goods_model = new CouponGoods();
             $coupon_list = $coupon_goods_model->where([
-                ['coupon_id', '=', $where['coupon_id']]
+                [ 'coupon_id', '=', $where[ 'coupon_id' ] ]
             ])->field('goods_id,category_id')->select()->toArray();
             if (!empty($coupon_list)) {
                 $goods_ids = array_values(array_filter(array_column($coupon_list, 'goods_id')));
                 $category_ids = array_values(array_filter(array_column($coupon_list, 'category_id')));
                 if (!empty($goods_ids)) {
-                    $sku_where[] = ['goods.goods_id', 'in', $goods_ids];
+                    $sku_where[] = [ 'goods.goods_id', 'in', $goods_ids ];
                 } elseif (!empty($category_ids)) {
                     $like_arr = [];
                     foreach ($category_ids as $k => $v) {
                         $like_arr[] = "%" . $v . "%";
                     }
-                    $sku_where[] = ['goods_category', "like", $like_arr, 'or'];
+                    $sku_where[] = [ 'goods_category', "like", $like_arr, 'or' ];
                 }
             }
         }
 
-        // 排序处理
-        if (!empty($where['order'])) {
-            if($where['order'] == '_time') {
-                $order = 'update_time ' . $where['sort'];
-            } else {
-                $order = $where['order'] . ' ' . $where['sort'];
-            }
+        // 参数过滤
+        if (!empty($where[ 'order' ]) && in_array($where[ 'order' ], [ 'sale_num', 'price' ])) {
+            $order = $where[ 'order' ] . ' ' . ($where[ 'sort' ] === 'asc' ? 'asc' : 'desc');
+        } elseif ($newArrival) {
+            $order = 'goods.create_time desc,goods.goods_id desc';
+        } elseif (($where[ 'order' ] ?? '') === 'latest') {
+            $order = 'goods.goods_id desc';
         } else {
-            $order = 'sort asc,create_time desc,update_time desc';
+            $sort_config = ( new CoreGoodsConfigService() )->getSortConfig($this->site_id);
+            if ($sort_config[ 'sort_column' ] == 'sale_price') {
+                $sort_config[ 'sort_column' ] = 'goodsSku.sale_price';
+            }
+            $order = $sort_config[ 'sort_column' ] . ' ' . $sort_config[ 'sort_type' ];
         }
 
         $search_model = $this->model
-            ->withSearch(["brand_id", "goods_category", "label_ids", 'service_ids', "goods_name", "goods_type", "sale_num", "sku_sn"], $where)
+            ->withSearch([ "brand_id", "goods_category", "label_ids", 'service_ids' ], $where)
             ->field($field)
-            ->withJoin(['goodsSku'])
-            ->with(['brand_name'])
-            ->where($sku_where)
-            ->order($order)
-            ->append(['goods_type_name', 'goods_cover_thumb_small', 'goods_cover_thumb_mid','brand_name']);
-
-       
+            ->withJoin([
+                'goodsSku' => [ 'sku_id', 'sku_name', 'sku_image', 'sku_no', 'goods_id', 'sku_spec_format', 'price', 'market_price', 'sale_price', 'stock', 'weight', 'volume', 'member_price' ]
+            ])
+            ->where($sku_where);
+        $search_model->order($order)->append([ 'goods_cover_thumb_small','goods_cover_thumb_mid', 'goods_label_name', 'goods_brand', 'sale_state', 'warranty_expire_date' ]);
+        $this->applyDeviceRangeFilters($search_model, $where);
         $list = $this->pageQuery($search_model);
-
-        if (!empty($this->member_id)) {
-            $member_info = $this->getMemberInfo();
-            foreach ($list['data'] as $k => &$v) {
-                if (!empty($v['goodsSku'])) {
-                    $v['goodsSku']['member_price'] = $this->getMemberPrice($member_info, $v['member_discount'], $v['goodsSku']['member_price'], $v['goodsSku']['price'],$v['goodsSku']['market_price']);
-                }
+        $list['server_time'] = $now;
+        $goods_active_price_service = ( new CoreGoodsActivePriceService() );
+        foreach ($list[ 'data' ] as $k => &$v) {
+            if (!empty($v[ 'goodsSku' ])) {
+                $v[ 'goodsSku' ][ 'member_discount' ] = $v[ 'member_discount' ];
+                $list_show_price = $goods_active_price_service->getShowPrice($v[ 'goodsSku' ], $this->site_id, $this->member_id);
+                $v[ 'goodsSku' ][ 'show_price' ] = $list_show_price[ 'show_price' ];
+                $v[ 'goodsSku' ][ 'show_type' ] = $list_show_price[ 'show_type' ];
             }
+            // 限购查询当前会员已购数量
+            $has_buy = ( new CoreGoodsLimitBuyService() )->getGoodsHasBuyNumber($this->site_id, $this->member_id, $v[ 'goods_id' ]);
+            $v[ 'has_buy' ] = $has_buy;
+            $v['source_type'] = $is_agent_site && (string)($v['source'] ?? '') === (string)$master_site_id
+                ? 'proxy'
+                : 'self';
         }
-
-        foreach ($list['data'] as $k => &$v) {
-            if (isset($v['goods_cover_thumb_small']) && isset($v['goods_cover'])) {
-                $v['goods_cover_thumb_small'] = $v['goods_cover'];
-            }
-            if (isset($v['goods_cover_thumb_mid']) && isset($v['goods_cover'])) {
-                $v['goods_cover_thumb_mid'] = $v['goods_cover'];
-            }
-        }
-
         return $list;
+    }
+
+    /**
+     * 将前台来源选择翻译为真实数据库条件。
+     * source=1 是“本站自营”的业务枚举，不是数据库中 source 字段必须等于 1。
+     */
+    private function applySourceSelector(array &$skuWhere, string $selector, int $masterSiteId): void
+    {
+        $selector = strtolower(trim($selector));
+        if (in_array($selector, ['1', 'self', 'local'], true)) {
+            $siteId = (int)$this->site_id;
+            // 历史自营数据存在空值、字符串0和本站ID三种写法。
+            $skuWhere[] = ['goods.source', 'in', ['', '0', (string)$siteId]];
+            return;
+        }
+        if (in_array($selector, ['agent', 'proxy'], true)) $selector = (string)$masterSiteId;
+        if (ctype_digit($selector) && (int)$selector > 0) {
+            $skuWhere[] = ['goods.source', '=', (string)(int)$selector];
+        }
+    }
+
+    private function normalizeMultiValue($value): array
+    {
+        if (is_array($value)) {
+            return array_values(array_filter(array_map(static fn($item) => trim((string)$item), $value), static fn($item) => $item !== ''));
+        }
+        if ($value === null || trim((string)$value) === '') {
+            return [];
+        }
+        return array_values(array_filter(array_map('trim', explode(',', (string)$value)), static fn($item) => $item !== ''));
+    }
+
+    /**
+     * 返回列表页实际可消费的筛选项。
+     * 筛选数据按站点隔离；内存/规格以本站规格分组的名称、排序和子项为准。
+     * 没有维护规格字典时返回空选项，不回退库存里的未受控值。
+     */
+    public function getFilterOptions(array $where = []): array
+    {
+        $category_service = new GoodsCategoryService();
+        $categories = $category_service->getTree();
+
+        $optionCategoryIds = $this->normalizeMultiValue($where['goods_category'] ?? '');
+        $optionBrandIds = $this->normalizeMultiValue($where['brand_id'] ?? '');
+        $optionGrades = $this->normalizeMultiValue($where['condition_grade'] ?? '');
+        $memoryService = new CoreMemoryFilterService();
+        $memoryGroups = $memoryService->groups((int)$this->site_id, $optionCategoryIds);
+        $optionMemories = $this->normalizeMultiValue($where['memory_group'] ?? '');
+        if ($optionCategoryIds && $memoryGroups) {
+            $facet = (new CoreModelSpecFacetService())->read((int)$this->site_id, $memoryService, $memoryGroups,
+                $optionCategoryIds, $optionBrandIds, $optionGrades, $this->normalizeMultiValue($where['device_color'] ?? ''), $optionMemories);
+            $memoryGroups = $facet['groups'];
+            $colors = $facet['colors'];
+        } else {
+            $colors = $this->catalogColors($optionCategoryIds, $optionBrandIds, $optionGrades,
+                $memoryService->filterValues((int)$this->site_id, $optionMemories));
+        }
+        $memories = $memoryService->flatten($memoryGroups);
+        $deviceAttributes = new CoreDeviceAttributeService();
+
+        $grades = (new GoodsGrade())
+            ->where([
+                [ 'site_id', '=', $this->site_id ],
+                [ 'status', '=', 1 ],
+            ])
+            ->field('grade_id,grade_name,grade_desc,grade_image,sort')
+            ->order('sort desc,grade_id asc')
+            ->select()
+            ->toArray();
+
+        if (empty($grades)) {
+            $grade_names = (new Goods())
+                ->where([
+                    [ 'site_id', '=', $this->site_id ],
+                    [ 'status', '=', 1 ],
+                    [ 'delete_time', '=', 0 ],
+                    [ 'condition_grade', '<>', '' ],
+                ])
+                ->field('condition_grade')
+                ->group('condition_grade')
+                ->order('condition_grade asc')
+                ->column('condition_grade');
+            $grades = array_map(static fn($name) => [
+                'grade_id' => (string)$name,
+                'grade_name' => (string)$name,
+                'grade_desc' => '',
+                'grade_image' => '',
+                'sort' => 0,
+            ], $grade_names);
+        }
+
+        // 选中分类后仅返回该范围内真实存在的成色，避免型号页出现无法命中的全局选项。
+        if ($optionCategoryIds && !empty($grades)) {
+            $availableGradeQuery = (new Goods())->where([
+                ['site_id', '=', $this->site_id],
+                ['status', '=', 1],
+                ['sale_status', '=', 'available'],
+                ['delete_time', '=', 0],
+                ['condition_grade', '<>', ''],
+            ]);
+            $availableGradeQuery->where(function ($query) use ($optionCategoryIds) {
+                foreach ($optionCategoryIds as $index => $categoryId) {
+                    $method = $index === 0 ? 'where' : 'whereOr';
+                    $query->$method('goods_category', 'like', '%"' . (int)$categoryId . '"%');
+                }
+            });
+            $availableGradeNames = $availableGradeQuery
+                ->field('condition_grade')
+                ->group('condition_grade')
+                ->column('condition_grade');
+            $availableGradeMap = array_fill_keys(array_map('strval', $availableGradeNames), true);
+            $grades = array_values(array_filter($grades, static fn(array $grade) => isset($availableGradeMap[(string)($grade['grade_name'] ?? '')])));
+        }
+
+        $label_groups = (new LabelGroup())
+            ->where('site_id', $this->site_id)
+            ->field('group_id,group_name,sort')
+            ->order('sort desc,group_id asc')
+            ->select()
+            ->toArray();
+        $labels = (new Label())
+            ->where([
+                [ 'site_id', '=', $this->site_id ],
+                [ 'status', '=', 1 ],
+            ])
+            ->field('label_id,label_name,group_id,style_type,color_json,icon,sort')
+            ->order('sort desc,label_id asc')
+            ->select()
+            ->toArray();
+        $label_map = [];
+        foreach ($labels as $label) {
+            $label_map[(int)$label['group_id']][] = $label;
+        }
+        foreach ($label_groups as &$group) {
+            $group['items'] = $label_map[(int)$group['group_id']] ?? [];
+        }
+        unset($group);
+        if (empty($label_groups) && !empty($labels)) {
+            $label_groups[] = [ 'group_id' => 0, 'group_name' => '商品标签', 'sort' => 0, 'items' => $labels ];
+        }
+
+        $services = (new Service())
+            ->where('site_id', $this->site_id)
+            ->field('service_id,service_name,image,desc')
+            ->order('service_id asc')
+            ->select()
+            ->toArray();
+        $brands = (new Brand())
+            ->where([
+                [ 'site_id', '=', $this->site_id ],
+                [ 'delete_time', '=', 0 ],
+            ])
+            ->field('brand_id,brand_name,logo,sort')
+            ->order('sort desc,brand_id asc')
+            ->select()
+            ->toArray();
+
+        return [
+            'categories' => $categories,
+            'memory_groups' => $memoryGroups,
+            'memories' => $memories,
+            'grades' => array_values($grades),
+            'colors' => array_values(array_map(static fn($name) => ['value' => (string)$name, 'label' => (string)$name], $colors)),
+            'battery_ranges' => $deviceAttributes->batteryRanges(),
+            'warranty_ranges' => array_map(static function (array $item) {
+                unset($item['min'], $item['max']);
+                return $item;
+            }, $deviceAttributes->warrantyRanges()),
+            'label_groups' => array_values(array_filter($label_groups, static fn($group) => !empty($group['items']))),
+            'services' => $services,
+            'brands' => $brands,
+            'warehouses' => $this->getWarehouseOptions(),
+            'price_ranges' => [
+                [ 'label' => '500元以下', 'min' => '', 'max' => 500 ],
+                [ 'label' => '500-1000元', 'min' => 500, 'max' => 1000 ],
+                [ 'label' => '1000-2000元', 'min' => 1000, 'max' => 2000 ],
+                [ 'label' => '2000-4000元', 'min' => 2000, 'max' => 4000 ],
+                [ 'label' => '4000元以上', 'min' => 4000, 'max' => '' ],
+            ],
+        ];
+    }
+
+    private function catalogColors(array $categoryIds, array $brandIds, array $grades, array $memories): array
+    {
+        $query = (new Goods())->where([
+            ['site_id', '=', $this->site_id], ['status', '=', 1], ['sale_status', '=', 'available'],
+            ['delete_time', '=', 0], ['device_color', '<>', ''],
+        ]);
+        if ($categoryIds) $query->withSearch(['goods_category'], ['goods_category' => $categoryIds]);
+        if ($brandIds) $query->whereIn('brand_id', array_map('intval', $brandIds));
+        if ($memories) $query->whereIn('memory_group', $memories);
+        if ($grades) $query->whereIn('condition_grade', $grades);
+        return $query->group('device_color')->order('device_color asc')->column('device_color');
+    }
+
+    private function applyDeviceRangeFilters($query, array $where): void
+    {
+        $attributeService = new CoreDeviceAttributeService();
+        $this->applyNamedRanges($query, 'goods.battery_health', $where['battery_range'] ?? '', $attributeService->batteryRanges());
+        $this->applyNamedRanges($query, 'goods.warranty_expire_time', $where['warranty_range'] ?? '', $attributeService->warrantyRanges());
+    }
+
+    private function applyNamedRanges($query, string $field, $selected, array $ranges): void
+    {
+        $selected = $this->normalizeMultiValue($selected);
+        if (!$selected) return;
+        $rangeMap = [];
+        foreach ($ranges as $range) $rangeMap[(string)$range['value']] = $range;
+        $valid = array_values(array_filter(array_map(static fn($value) => $rangeMap[$value] ?? null, $selected)));
+        if (!$valid) return;
+        $query->where(function ($group) use ($field, $valid) {
+            foreach ($valid as $index => $range) {
+                $method = $index === 0 ? 'where' : 'whereOr';
+                $group->$method(function ($item) use ($field, $range) {
+                    if ($range['max'] === null) {
+                        $item->where($field, '>=', (int)$range['min']);
+                    } else {
+                        $item->where($field, 'between', [(int)$range['min'], (int)$range['max']]);
+                    }
+                });
+            }
+        });
+    }
+
+    /**
+     * 用户端仓库切换选项：本地仓(自营) / 代理仓(主站货,如石家庄仓)。
+     * show=1 时前端才显示切换；名称优先使用当前子站的展示配置。
+     * @return array
+     */
+    public function getWarehouseOptions(): array
+    {
+        $displayConfig = (new \addon\phone_shop\app\service\core\agent\AgentConfigService())->getDisplayConfig((int)$this->site_id);
+        $master_site_id = $displayConfig['master_site_id'];
+        $is_master = ($this->site_id == $master_site_id);
+        // 本站是否存在代理货(source=主站、在售) -> 决定是否显示切换
+        $has_agent_goods = ( new Goods() )->where([
+            [ 'site_id', '=', $this->site_id ],
+            [ 'source', '=', (string) $master_site_id ],
+            [ 'status', '=', 1 ],
+        ])->count() > 0;
+        return [
+            'show'           => (!$is_master && $has_agent_goods) ? 1 : 0,
+            'local_name'     => '本地仓',
+            'agent_name'     => $displayConfig['effective_agent_name'],
+            'master_site_id' => $master_site_id,
+        ];
     }
 
     /**
@@ -222,80 +478,111 @@ class GoodsService extends BaseApiService
      */
     public function getDetail(array $data)
     {
-        if($this->site_id !== 0 ){
-            $sites =  (new Site())-> field('category_status,brand_status,label_status,service_status')->where([['site_id','=', $this->site_id]]) ->findOrEmpty()->toArray();        
-        }
-        
-        $site_id = empty($sites['category_status'] ) ? $this->site_id : $this->site_id.",100005,0";
-        $brand_site_id = empty($sites['brand_status'] ) ? $this->site_id : $this->site_id.",0";
-        $label_site_id = empty($sites['label_status'] ) ? $this->site_id : $this->site_id.",0";
-        $service_site_id = empty($sites['service_status'] ) ? $this->site_id : $this->site_id.",0";
-       
+        $start = $last = hrtime(true);
+        $timings = [];
+        $mark = static function (string $phase) use (&$last, &$timings) {
+            $now = hrtime(true);
+            $timings[$phase] = round(($now - $last) / 1e6, 1);
+            $last = $now;
+        };
         $sku_id = $data[ 'sku_id' ];
         $goods_id = $data[ 'goods_id' ];
+        if (!empty($goods_id)) {
+            $goods_info = ( new Goods() )->where([ [ 'site_id', '=', $this->site_id ], [ 'goods_id', '=', $goods_id ], [ 'delete_time', '=', 0 ] ])->count();
+            if (empty($goods_info)) throw new CommonException('SHOP_GOODS_NOT_EXIST');//商品不存在
+        }
 
         $goods_sku_model = new GoodsSku();
 
-        if (empty($sku_id) && !empty($goods_id)) {
-            // 查询默认规格项
-            $default_sku_info = $goods_sku_model->where([ [ 'goods_id', '=', $goods_id ], [ 'site_id', 'in', "$site_id" ], [ 'is_default', '=', 1 ] ], 'sku_id')
-                ->field('sku_id')->findOrEmpty()->toArray();
-            if (!empty($default_sku_info)) {
-                $sku_id = $default_sku_info[ 'sku_id' ];
-            }
-        }
+        $sku_where = [ [ 'site_id', '=', $this->site_id ] ];
+        if (!empty($goods_id)) $sku_where[] = [ 'goods_id', '=', $goods_id ];
+        $sku_where[] = empty($sku_id) && !empty($goods_id)
+            ? [ 'is_default', '=', 1 ]
+            : [ 'sku_id', '=', $sku_id ];
+        $mark('goods_lookup');
 
         $field = 'sku_id, sku_name, sku_image, sku_no, goods_id, site_id, sku_spec_format, price, market_price, sale_price, stock, weight, volume, sale_num, is_default,member_price';
-        
-        $info = $goods_sku_model->where([ [ 'site_id', 'in', "$site_id" ], [ 'sku_id', '=', $sku_id ] ])
+
+        $record = $goods_sku_model->where($sku_where)
             ->field($field)
             ->with([
-                'goods' => function($query) {
-                    $query->withField('goods_id, site_id, goods_name, goods_type, sub_title, goods_cover,memory_ids , goods_category, goods_image,goods_desc,brand_id,label_ids,service_ids, unit, stock, sale_num + virtual_sale_num as sale_num, status,delivery_type,attr_id,attr_format,member_discount,is_discount,poster_id,virtual_receive_type')
-                        ->append([ 'goods_type_name', 'goods_cover_thumb_small', 'goods_cover_thumb_mid', 'goods_cover_thumb_big', 'delivery_type_list', 'goods_image_thumb_small', 'goods_image_thumb_mid', 'goods_image_thumb_big' ]);
+                'goods' => function ($query) {
+                    $query->withField('goods_id, goods_image_width,goods_image_height, site_id, goods_name,goods_type, sub_title, goods_cover, goods_category, goods_image,goods_video,goods_desc,brand_id,label_ids,service_ids, unit, stock, sale_num + virtual_sale_num as sale_num, is_limit,limit_type,max_buy,min_buy,status,sale_status,is_online_sellable,delivery_type,attr_ids,attr_format,member_discount,is_discount,poster_id,virtual_receive_type,is_gift,form_id,diy_detail_id,qc_report,memory_group,condition_grade,device_color,battery_health,warranty_expire_time')
+                        ->append([ 'goods_type_name', 'goods_cover_thumb_mid', 'delivery_type_list', 'goods_image_thumb_small', 'goods_image_thumb_mid', 'goods_image_thumb_big', 'goods_brand', 'sale_state', 'warranty_expire_date' ]);
                 },
                 // 商品规格列表
-                'skuList' => function($query) {
+                'skuList' => function ($query) {
                     $query->field('sku_id, site_id, sku_name, sku_image, sku_no, goods_id, sku_spec_format, price, market_price, sale_price, stock, weight, volume, is_default,member_price');
                 },
                 // 商品规格项/规格值列表
-                'goodsSpec' => function($query) {
+                'goodsSpec' => function ($query) {
                     $query->field('spec_id, goods_id, spec_name, spec_values');
                 },
             ])
             ->append([ 'sku_image_thumb_small', 'sku_image_thumb_mid', 'sku_image_thumb_big' ])
-            ->findOrEmpty()->toArray();
-
+            ->findOrEmpty();
+        $mark('sku_relations');
+        $info = $record->toArray();
+        $mark('format_images');
         if (!empty($info) && !empty($info[ 'goods' ])) {
+            // 成色等级在商品表中保存的是名称快照，详情页仍需要消费等级中心维护的
+            // 图片与说明。按站点和名称读取，避免把后台等级表的主键耦合进商品数据。
+            $grade_name = trim((string)($info['goods']['condition_grade'] ?? ''));
+            if ($grade_name !== '') {
+                $grade_info = (new GoodsGrade())
+                    ->where([
+                        ['site_id', '=', $this->site_id],
+                        ['grade_name', '=', $grade_name]
+                    ])
+                    ->field('grade_id,grade_name,grade_desc,grade_image')
+                    ->findOrEmpty()
+                    ->toArray();
+
+                $info['goods']['condition_grade_info'] = !empty($grade_info) ? $grade_info : [
+                    'grade_id' => 0,
+                    'grade_name' => $grade_name,
+                    'grade_desc' => '',
+                    'grade_image' => ''
+                ];
+            }
+
+            // 历史版本曾把结构化质检 JSON 写进 goods_desc。接口层兜底清洗，
+            // 质检数据仍通过 qc_report 交给独立质检组件展示。
+            $info['goods']['goods_desc'] = (new CoreGoodsDescriptionService())
+                ->sanitize((string)($info['goods']['goods_desc'] ?? ''));
+            $info[ 'type' ] = $data[ 'type' ] ?? '';
+            $mark('grade_description');
+
+            $goods_active_price_service = ( new CoreGoodsActivePriceService() );
+            //获取展示信息（价格 标签）
+            $info[ 'member_discount' ] = $info[ 'goods' ][ 'member_discount' ] ?? '';
+            $detail_show_price = $goods_active_price_service->getShowPrice($info, $this->site_id, $this->member_id);
+            $info[ 'show_price' ] = $detail_show_price[ 'show_price' ];
+            $info[ 'show_type' ] = $detail_show_price[ 'show_type' ];
+            //组装数据
+            if (!empty($info[ 'skuList' ])) {
+                foreach ($info[ 'skuList' ] as &$value) {
+                    $value[ 'type' ] = $data[ 'type' ] ?? '';
+                    $value[ 'member_discount' ] = $info[ 'goods' ][ 'member_discount' ] ?? '';
+                    // 当前 SKU 与列表项取自同一行，用本次请求刚算好的报价，不跨请求缓存价格。
+                    $list_show_price = (int)$value['sku_id'] === (int)$info['sku_id']
+                        ? $detail_show_price
+                        : $goods_active_price_service->getShowPrice($value, $this->site_id, $this->member_id);
+                    $value[ 'show_price' ] = $list_show_price[ 'show_price' ];
+                    $value[ 'show_type' ] = $list_show_price[ 'show_type' ];
+                }
+            }
+
+            $mark('pricing');
             if (!empty($info[ 'goods' ][ 'service_ids' ])) {
                 // 商品服务
-                $goods_service_model = new Service();
-                $info[ 'service' ] = $goods_service_model->where([
-                    [ 'site_id', 'in', "$service_site_id" ],
-                    [ 'service_id', 'in', $info[ 'goods' ][ 'service_ids' ] ]
-                ])->field('service_id, service_name, image, desc')
-                    ->select()->toArray();
+                $info[ 'service' ] = $this->getGoodsService($info[ 'goods' ][ 'service_ids' ]);
             }
             if (!empty($info[ 'goods' ][ 'label_ids' ])) {
                 // 商品标签
-                $goods_label_model = new Label();
-                $info[ 'label_info' ] = $goods_label_model->where([
-                    [ 'site_id', 'in', "$label_site_id" ],
-                    [ 'label_id', 'in', $info[ 'goods' ][ 'label_ids' ] ]
-                ])->field('label_id, label_name, memo')
-                    ->order('sort desc,create_time desc')->select()->toArray();
+                $info[ 'label_info' ] = $this->getGoodsLabel($info[ 'goods' ][ 'label_ids' ]);
             }
-            if (!empty($info[ 'goods' ][ 'brand_id' ])) {
-                // 商品品牌
-                $goods_brand_model = new Brand();
-                $info[ 'brand_info' ] = $goods_brand_model->where([
-                    [ 'site_id', 'in', "$brand_site_id" ],
-                    [ 'brand_id', '=', $info[ 'goods' ][ 'brand_id' ] ]
-                ])->field('brand_id, brand_name, logo, desc')
-                    ->order('sort desc,create_time desc')
-                    ->findOrEmpty()->toArray();
-            }
-
+//            if ($info[ 'show_type' ] == GoodsDict::DISCOUNT_PRICE) {
             // 参与限时折扣，查询活动信息
             if ($info[ 'goods' ][ 'is_discount' ] == 1) {
                 $discount_service = new DiscountService();
@@ -303,33 +590,124 @@ class GoodsService extends BaseApiService
                 if (!empty($info[ 'discount_info' ])) {
                     $info[ 'discount_info' ][ 'active' ][ 'start_time' ] = strtotime($info[ 'discount_info' ][ 'active' ][ 'start_time' ]);
                     $info[ 'discount_info' ][ 'active' ][ 'end_time' ] = strtotime($info[ 'discount_info' ][ 'active' ][ 'end_time' ]);
+                    $info[ 'type' ] = ActiveDict::DISCOUNT;
+                }
+            } else {
+                $info[ 'type' ] = '';
+                $info[ 'type_name' ] = '';
+            }
+//            }
+
+            //新人价
+            if (!empty($data[ 'type' ]) && $data[ 'type' ] == ActiveDict::NEWCOMER_DISCOUNT) {
+                // 查询新人价
+                $newcomer_service = new NewcomerService();
+                if ($newcomer_service->checkIfNewcomer()) {
+                    $newcomer_info = $newcomer_service->getNewcomerInfo($info[ 'goods_id' ], $info[ 'sku_id' ]);
+                    if (!empty($newcomer_info)) {
+                        $info[ 'newcomer_price' ] = $newcomer_info[ 'newcomer_price' ];
+                        $info[ 'newcomer_desc' ] = $newcomer_info[ 'newcomer_desc' ];
+                        $info[ 'is_newcomer' ] = 1;
+                        $info[ 'type' ] = ActiveDict::NEWCOMER_DISCOUNT;
+                    }
+                    $newcomer_service->getNewcomerPriceByList($info[ 'skuList' ]);
+                } else {
+                    $info[ 'is_newcomer' ] = 0;
+                    $info[ 'type' ] = '';
+                    $info[ 'type_name' ] = '';
                 }
             }
 
             if (!empty($this->member_id)) {
-                $goods_collect_model = new GoodsCollect();
-                $collect_info = $goods_collect_model->where([ [ 'site_id', 'in', "$site_id" ], [ 'member_id', '=', $this->member_id ], [ 'goods_id', '=', $info[ 'goods_id' ] ] ])->findOrEmpty()->toArray();
-                if (!empty($collect_info)) {
-                    $info[ 'goods' ][ 'is_collect' ] = 1;
-                } else {
-                    $info[ 'goods' ][ 'is_collect' ] = 0;
-                }
-
-                // 查询会员价
-                $member_info = $this->getMemberInfo();
-                $info[ 'member_price' ] = $this->getMemberPrice($member_info, $info[ 'goods' ][ 'member_discount' ], $info[ 'member_price' ], $info[ 'price' ],$info[ 'market_price' ]);
-
-                $this->getMemberPriceByList($member_info, $info[ 'goods' ][ 'member_discount' ], $info[ 'skuList' ], $info['market_price']);
-
+                $info[ 'goods' ][ 'is_collect' ] = $this->getGoodsIsCollect($info[ 'goods_id' ]);
+                // 限购查询当前会员已购数量
+                $has_buy = ( new CoreGoodsLimitBuyService() )->getGoodsHasBuyNumber($this->site_id, $this->member_id, $info[ 'goods' ][ 'goods_id' ]);
+                $info[ 'goods' ][ 'has_buy' ] = $has_buy;
             } else {
+                $info[ 'goods' ][ 'has_buy' ] = 0;
                 $info[ 'goods' ][ 'is_collect' ] = 0;
-                $info[ 'member_price' ] = $info[ 'price' ];
-                foreach ($info[ 'skuList' ] as &$v) {
-                    $v[ 'member_price' ] = $info[ 'price' ];
-                }
             }
+
+            $info[ 'type_name' ] = '';
+            if (!empty($info[ 'type' ])) {
+                $info[ 'type_name' ] = ActiveDict::getClass($info[ 'type' ]); // 查询来源活动类型
+            }
+
+            //查询评价设置是否显示
+            $core_order_config_service = new CoreOrderConfigService();
+            $evaluate_config = $core_order_config_service->getEvaluateConfig($this->site_id);
+            $info[ 'evaluate_is_show' ] = $evaluate_config[ 'evaluate_is_show' ];
+            $mark('labels_member_config');
+
+            // 商品统计-浏览次数
+            CoreGoodsStatService::addStat([ 'site_id' => $this->site_id, 'goods_id' => $info[ 'goods' ][ 'goods_id' ], 'access_num' => 1 ]);
+            ( new CoreGoodsAccessNumService() )->inc([ 'goods_id' => $info[ 'goods' ][ 'goods_id' ], 'access_num' => 1 ]);
+            $mark('view_stats');
+
+            // 种草秀数据查询
+            $info[ 'sow_show_list' ] = event('SowShowData', [ 'relate_id' => $info[ 'goods_id' ], 'relate_type' => 'phone_shop', 'limit' => 3 ])[ 0 ] ?? [];
+            $mark('sow_show');
+
+            //自定义详情模版
+            $info[ 'diy_detail_info' ] = ( new DiyService() )->getInfo([ 'id' => $info[ 'goods' ][ 'diy_detail_id' ], 'name' => 'DIY_PHONE_SHOP_GOODS_DETAIL' ]);
+
+            //获取商品主图第一张图片宽高
+            $info['goods']['image_size'] = ['width' => $info['goods']['goods_image_width'] ?? 800, 'height' => $info['goods']['goods_image_height'] ?? 800];
+            $mark('diy_template');
+        }
+
+        $total_ms = round((hrtime(true) - $start) / 1e6, 1);
+        if ($total_ms >= 500) {
+            \think\facade\Log::info('[phone_shop.goods.detail.slow] ' . json_encode([
+                'site_id' => (int)$this->site_id, 'goods_id' => (int)($info['goods_id'] ?? $goods_id),
+                'total_ms' => $total_ms, 'phases_ms' => $timings,
+            ]));
         }
         return $info;
+    }
+
+    public function getGoodsService($service_ids) : array
+    {
+        $service = ( new Service() )
+            ->where([
+                [ 'site_id', '=', $this->site_id ],
+                [ 'service_id', 'in', $service_ids ]
+            ])
+            ->field('service_id, service_name, image, desc')
+            ->select()
+            ->toArray();
+        return $service;
+    }
+
+
+    public function getGoodsLabel($label_ids) : array
+    {
+        $goods_label_model = new Label();
+        $label_info = $goods_label_model
+            ->where([
+                [ 'site_id', '=', $this->site_id ],
+                [ 'label_id', 'in', $label_ids ],
+                [ 'status', '=', 1 ]
+            ])
+            ->field('label_id, label_name, memo,style_type,color_json,icon')
+            ->order('sort desc,label_id desc')
+            ->select()
+            ->toArray();
+        return $label_info;
+    }
+
+    public function getGoodsIsCollect($goods_id) : int
+    {
+        $goods_collect_model = new GoodsCollect();
+        $collect_info = $goods_collect_model
+            ->where([ [ 'site_id', '=', $this->site_id ], [ 'member_id', '=', $this->member_id ], [ 'goods_id', '=', $goods_id ] ])
+            ->findOrEmpty()
+            ->toArray();
+        if (!empty($collect_info)) {
+            return 1;
+        } else {
+            return 0;
+        }
     }
 
     /**
@@ -338,45 +716,56 @@ class GoodsService extends BaseApiService
      * @return array
      */
     public function getSku(int $sku_id)
-    { 
-        if($this->site_id !== 0 ){
-        $sites =  (new Site())-> field('category_status')->where([['site_id','=', $this->site_id]]) ->findOrEmpty()->toArray();
-        
-         }
-    
-    $site_id = empty($sites['category_status'] ) ? $this->site_id : $this->site_id.",0";
-
-        $field = 'site_id,sku_id, sku_name, sku_image, sku_no, goods_id, sku_spec_format, price, market_price, sale_price, stock, weight, volume, sale_num, is_default,member_price';
+    {
+        $field = 'site_id,sku_id, sku_name, sku_image, goods_id, sku_spec_format, price, market_price, sale_price, stock, member_price';
 
         $goods_sku_model = new GoodsSku();
-        
 
-        $info = $goods_sku_model->where([ [ 'site_id', 'in', "$site_id" ], [ 'sku_id', '=', $sku_id ] ])
+        $info = $goods_sku_model->where([ [ 'site_id', '=', $this->site_id ], [ 'sku_id', '=', $sku_id ] ])
             ->field($field)
             ->with([
                 // 商品主表
-                'goods' => function($query) {
-                    $query->withField('goods_id, goods_name, goods_type, sub_title,memory_ids,goods_cover, unit, stock, sale_num + virtual_sale_num as sale_num, status,member_discount,is_discount')
-                        ->append([ 'goods_type_name', 'goods_cover_thumb_small', 'goods_cover_thumb_mid', 'goods_cover_thumb_big' ]);
+                'goodsSingle' => function ($query) {
+                    $query->withField('site_id,goods_id, goods_name, goods_cover, unit, member_discount,is_discount')
+                        ->append([ 'goods_cover_thumb_mid' ]);
                 },
                 // 商品规格列表
-                'skuList' => function($query) {
-                    $query->field('site_id, sku_id, sku_name, sku_image, sku_no, goods_id, sku_spec_format, price, market_price, sale_price, stock, weight, volume, is_default,member_price');
+                'skuList' => function ($query) {
+                    $query->field('site_id,sku_id, sku_name, sku_image, goods_id, sku_spec_format, price, market_price, sale_price, stock,member_price')
+                        ->append([ 'sku_image_thumb_mid' ]);
                 },
                 // 商品规格项/规格值列表
-                'goodsSpec' => function($query) {
+                'goodsSpec' => function ($query) {
                     $query->field('spec_id, goods_id, spec_name, spec_values');
                 },
             ])
-            ->append([ 'sku_image_thumb_small', 'sku_image_thumb_mid', 'sku_image_thumb_big' ])
+            ->append([ 'sku_image_thumb_mid' ])
             ->findOrEmpty()->toArray();
-        if (!empty($this->member_id)) {
-            $member_info = $this->getMemberInfo();
 
-            $info[ 'member_price' ] = $this->getMemberPrice($member_info, $info[ 'goods' ][ 'member_discount' ], $info[ 'member_price' ], $info[ 'price' ],$info[ 'market_price' ]);
 
-            $this->getMemberPriceByList($member_info, $info[ 'goods' ][ 'member_discount' ], $info[ 'skuList' ],$info['market_price']);
-
+        if (!empty($info)) {
+            $info[ 'goods' ] = $info[ 'goodsSingle' ];
+            unset($info[ 'goodsSingle' ]);
+            if (!empty($this->member_id)) {
+                // 限购查询当前会员已购数量
+                $has_buy = ( new CoreGoodsLimitBuyService() )->getGoodsHasBuyNumber($this->site_id, $this->member_id, $info[ 'goods_id' ]);
+                $info[ 'has_buy' ] = $has_buy;
+            }
+            $goods_active_price_service = new CoreGoodsActivePriceService();
+            //获取展示信息（价格 标签）
+            $info[ 'member_discount' ] = $info[ 'goods' ][ 'member_discount' ] ?? '';
+            $detail_show_price = $goods_active_price_service->getShowPrice($info, $this->site_id, $this->member_id);
+            $info[ 'show_price' ] = $detail_show_price[ 'show_price' ];
+            $info[ 'show_type' ] = $detail_show_price[ 'show_type' ];
+            //组装数据
+            if (!empty($info[ 'skuList' ])) {
+                foreach ($info[ 'skuList' ] as &$value) {
+                    $value[ 'member_discount' ] = $info[ 'goods' ][ 'member_discount' ] ?? '';
+                    $list_show_price = $goods_active_price_service->getShowPrice($value, $this->site_id, $this->member_id);
+                    $value[ 'show_price' ] = $list_show_price[ 'show_price' ];
+                    $value[ 'show_type' ] = $list_show_price[ 'show_type' ];
+                }
+            }
         }
 
         return $info;
@@ -389,11 +778,12 @@ class GoodsService extends BaseApiService
      */
     public function getGoodsComponents(array $where = [])
     {
-        $field = 'goods_id,site_id,goods_name,sub_title,goods_category,goods_type,goods_cover,unit,status,sale_num + goods.virtual_sale_num as sale_num,member_discount,is_discount';
+        $field = 'goods_id,site_id,goods_name,sub_title,goods_type,goods_cover,unit,sale_num + goods.virtual_sale_num as sale_num,member_discount,label_ids,brand_id,is_limit,limit_type,max_buy,min_buy,virtual_receive_type';
 
         $sku_where = [
             [ 'goodsSku.is_default', '=', 1 ],
             [ 'goodsSku.site_id', '=', $this->site_id ],
+            [ 'goods.is_gift', '=', GoodsDict::NOT_IS_GIFT ],
             [ 'status', '=', 1 ]
         ];
 
@@ -405,38 +795,31 @@ class GoodsService extends BaseApiService
         if (!empty($where[ 'order' ]) && in_array($where[ 'order' ], [ 'sale_num', 'price' ])) {
             $order = $where[ 'order' ] . ' desc';
         } else {
-            $order = 'sort desc,create_time desc';
+            $sort_config = ( new CoreGoodsConfigService() )->getSortConfig($this->site_id);
+            if ($sort_config[ 'sort_column' ] == 'sale_price') {
+                $sort_config[ 'sort_column' ] = 'goodsSku.sale_price';
+            }
+            $order = $sort_config[ 'sort_column' ] . ' ' . $sort_config[ 'sort_type' ];
         }
 
         $list = $this->model
             ->withSearch([ "goods_category", "label_ids", 'service_ids' ], $where)
             ->field($field)
-            ->withJoin([ 'goodsSku' ])
-            ->where($sku_where)->order($order)->append([ 'goods_type_name', 'goods_cover_thumb_small', 'goods_cover_thumb_mid' ])
+            ->withJoin([
+                'goodsSku' => [ 'sku_id', 'sku_name', 'sku_image', 'sku_no', 'goods_id', 'sku_spec_format', 'price', 'market_price', 'sale_price', 'stock', 'weight', 'volume', 'member_price' ]
+            ])
+            ->where($sku_where)->order($order)->append([ 'goods_cover_thumb_small','goods_cover_thumb_mid', 'goods_label_name', 'goods_brand' ])
             ->limit($where[ 'num' ])
             ->select()->toArray();
-        if (!empty($this->member_id)) {
-            $member_info = $this->getMemberInfo();
-            foreach ($list as $k => &$v) {
-                if (!empty($v[ 'goodsSku' ])) {
-                    $v[ 'goodsSku' ][ 'member_price' ] = $this->getMemberPrice($member_info, $v[ 'member_discount' ], $v[ 'goodsSku' ][ 'member_price' ], $v[ 'goodsSku' ][ 'price' ],$v[ 'goodsSku' ][ 'market_price' ]);
-                }
-                
+        $goods_active_price_service = ( new CoreGoodsActivePriceService() );
+        foreach ($list as $k => &$v) {
+            if (!empty($v[ 'goodsSku' ])) {
+                $v[ 'goodsSku' ][ 'member_discount' ] = $v[ 'member_discount' ];
+                $list_show_price = $goods_active_price_service->getShowPrice($v[ 'goodsSku' ], $this->site_id, $this->member_id);
+                $v[ 'goodsSku' ][ 'show_price' ] = $list_show_price[ 'show_price' ];
+                $v[ 'goodsSku' ][ 'show_type' ] = $list_show_price[ 'show_type' ];
             }
         }
-
-        foreach ($list as $k => &$v) {
-           
-            // 替换缩略图字段为cover的值
-            if (isset($v['goods_cover_thumb_small']) && isset($v['goods_cover'])) {
-               $v['goods_cover_thumb_small'] = $v['goods_cover'];
-           }
-           if (isset($v['goods_cover_thumb_mid']) && isset($v['goods_cover'])) {
-               $v['goods_cover_thumb_mid'] = $v['goods_cover'];
-           }
-            
-        }
-       
         return $list;
     }
 
@@ -450,8 +833,8 @@ class GoodsService extends BaseApiService
         ])->field($member_field)
             ->with([
                 // 会员等级
-                'memberLevelData' => function($query) {
-                    $query->field('level_id, site_id, level_name, status, level_benefits, level_gifts');
+                'memberLevelData' => function ($query) {
+                    $query->field('level_id, site_id, level_no, level_name, status, level_benefits, level_gifts');
                 },
             ])
             ->findOrEmpty()->toArray();
@@ -466,7 +849,15 @@ class GoodsService extends BaseApiService
      * @param $price
      * @return int|string
      */
-    public function getMemberPrice($member_info, $member_discount, $member_price, $price,$market_price=0)
+    /**
+     * 从 member_price JSON 取该会员等级的指定价。键统一口径=站内序号 level_no(优先),兼容旧 level_id。取不到返回 null。
+     */
+    private function pickLevelPrice($member_price_json, $member_info)
+    {
+        return CoreMemberPriceService::pickLevelPrice($member_price_json, (array)$member_info);
+    }
+
+    public function getMemberPrice($member_info, $member_discount, $member_price, $price)
     {
         if (empty($member_discount)) {
             return $price;
@@ -481,8 +872,7 @@ class GoodsService extends BaseApiService
         if (!empty($member_info) && empty($member_info[ 'member_level' ])) {
             return $price;
         }
-        
-       // log:write('price-----------会员的身份'.$member_discount);
+
         if ($member_discount == 'discount') {
             // 按照会员等级折扣计算
 
@@ -491,35 +881,35 @@ class GoodsService extends BaseApiService
                 && !empty($member_info[ 'memberLevelData' ][ 'level_benefits' ][ 'discount' ])
                 && !empty($member_info[ 'memberLevelData' ][ 'level_benefits' ][ 'discount' ][ 'is_use' ])) {
 
-                $price = number_format($price * $member_info[ 'memberLevelData' ][ 'level_benefits' ][ 'discount' ][ 'discount' ] / 10, 2, '.', '');
+                $price = CoreMemberDiscountPriceService::calculate(
+                    $price,
+                    $member_info[ 'memberLevelData' ][ 'level_benefits' ][ 'discount' ]
+                );
             }
 
         } elseif ($member_discount == 'fixed_price') {
-            // 指定会员价
-            // if (!empty($member_price)) {
-            //     $member_price = json_decode($member_price, true);
-            //     if (!empty($member_price[ 'level_' . $member_info[ 'member_level' ] ])) {
-            //         $member_level_price = $member_price[ 'level_' . $member_info[ 'member_level' ] ];
-            //         $price = number_format($member_level_price, 2, '.', '');
-            //     }
-            // }
-            $price = $market_price;
+            // 指定会员价(按 level_no 统一口径取,兼容旧 level_id)
+            if (!empty($member_price)) {
+                $member_level_price = $this->pickLevelPrice($member_price, $member_info);
+                if ($member_level_price !== null) {
+                    $price = number_format($member_level_price, 2, '.', '');
+                }
+            }
         }
 
         return $price;
-
     }
 
     /**
      * 查询商品的会员价
-     * @param $member_infowx20120555b35b6174
+     * @param $member_info
      * @param string $member_discount 会员等级折扣，不参与：空，会员折扣：discount，指定会员价：fixed_price
      * @param $sku_list
      * @return int
      */
-    public function getMemberPriceByList($member_info, $member_discount, &$sku_list, $market_price)
+    public function getMemberPriceByList($member_info, $member_discount, &$sku_list)
     {
-        // Log::write('会员价格是------'. $market_price."------会员身份-----".$member_info."----会员身份-----".$member_discount."----会员身份-----".$sku_list) ;
+
         // 是否按照原价返回
         $is_default = false;
 
@@ -539,7 +929,6 @@ class GoodsService extends BaseApiService
 
         foreach ($sku_list as $k => &$v) {
 
-            // $v[ 'member_price' ] = $v[ 'price' ];
             if ($is_default) {
                 $v[ 'member_price' ] = $v[ 'price' ];
             } else {
@@ -550,289 +939,30 @@ class GoodsService extends BaseApiService
                     if (!empty($member_info[ 'memberLevelData' ][ 'level_benefits' ])
                         && !empty($member_info[ 'memberLevelData' ][ 'level_benefits' ][ 'discount' ])
                         && !empty($member_info[ 'memberLevelData' ][ 'level_benefits' ][ 'discount' ][ 'is_use' ])) {
-                        $v[ 'member_price' ] = number_format($v[ 'price' ] * $member_info[ 'memberLevelData' ][ 'level_benefits' ][ 'discount' ][ 'discount' ] / 10, 2, '.', '');
+                        $v[ 'member_price' ] = CoreMemberDiscountPriceService::calculate(
+                            $v[ 'price' ],
+                            $member_info[ 'memberLevelData' ][ 'level_benefits' ][ 'discount' ]
+                        );
+                    } else {
+                        $v[ 'member_price' ] = $v[ 'price' ];
                     }
 
                 } elseif ($member_discount == 'fixed_price') {
-                    // 指定会员价
-                    // if (!empty($v[ 'member_price' ])) {
-                    //     $member_price = json_decode($v[ 'member_price' ], true); // 会员价，json格式，指定会员价
-                    //     // var_dump($member_price);
-                    //     if (!empty($member_price[ 'level_' . $member_info[ 'member_level' ] ])) {
-                    //         $member_level_price = $member_price[ 'level_' . $member_info[ 'member_level' ] ];
-                    //         $v[ 'member_price' ] = number_format($member_level_price, 2, '.', '');
-                    //     } else {
-                    //         $v[ 'member_price' ] = $v[ 'price' ];
-                    //     }
-                    // }
-                     $v[ 'member_price' ]= $market_price;
-                    
+                    // 指定会员价(按 level_no 统一口径取,兼容旧 level_id)
+                    if (!empty($v[ 'member_price' ])) {
+                        $member_level_price = $this->pickLevelPrice($v[ 'member_price' ], $member_info);
+                        if ($member_level_price !== null) {
+                            $v[ 'member_price' ] = number_format($member_level_price, 2, '.', '');
+                        } else {
+                            $v[ 'member_price' ] = $v[ 'price' ];
+                        }
+                    }
                 }
             }
         }
 
         return $sku_list;
 
-    }
-
-    /**
-     * operationGoods
-     * 操作商品的上下架
-     * 参数是 goods_id
-     * @param $goods_id
-     * @return array
-    */
-    public function operationGoods($data)
-    {
-        $goods_id = $data[ 'goods_id' ];
-       
-        if (empty($goods_id)) {
-            return error('', '请选择商品');
-        }
-        // 查询 goods_id 的状态 
-        $field = 'status' ;
-        $goods_info = $this->model->where('goods_id','=',$goods_id)->field($field)->find()->toArray();
-        $this->model->where(  'goods_id' , "=" , $goods_id)-> update( [ 'status' => !$goods_info['status']]);
-        return true;
-    }
-    
-    /**
-     * 添加商品
-     * @param $data
-     * @return array
-   */
-    public function add(array $data)
-    {
-
-        // 将 $data[ 'goods_image' ] 转为 xxx,22,333
-
-        // return $data[ 'goods_image' ];
-        try {
-            Db::startTrans();
-            $goods_sku_model = new GoodsSku();
-            // $goods_spec_model = new GoodsSpec();
-
-            
-            // 商品封面
-            if (!empty($data[ 'goods_image' ])) $data[ 'goods_cover' ] = $data['goods_image'][0];
-            // 获取当前商品的数量
-            $count = $this->model->getGoodsCount();
-          
-            $goods_data = [
-                'site_id' => $this->site_id,
-                'goods_no'=>$this->model->getLastGoodsId()+10001,
-                'goods_name' => $data[ 'goods_name' ],
-                'sub_title' => $data[ 'goods_desc' ],
-                'goods_type' => $data[ 'goods_type' ],
-                'goods_cover' => $data[ 'goods_cover' ],
-                'goods_image' => implode(',', $data[ 'goods_image' ]),
-                'goods_category' => array_map(function($item) { return (string) $item; }, $data[ 'goods_category' ]),
-                'goods_desc' => $data[ 'goods_desc' ],
-                'brand_id' => $data[ 'brand_id' ],
-                'label_ids' => array_map(function($item) { return (string) $item; }, $data[ 'label_ids' ]),
-                'service_ids' => array_map(function($item) { return (string) $item; }, $data[ 'service_ids' ]),
-                'unit' => $data[ 'unit' ],
-                'stock' => $data[ 'stock' ],
-                'virtual_sale_num' => $data[ 'virtual_sale_num' ],
-                'status' => $data[ 'status' ],
-                'sort' => $data[ 'sort' ],
-                'attr_id' => $data[ 'attr_id' ],
-                'attr_format' => $data[ 'attr_format' ],
-                'delivery_type' => $data[ 'delivery_type' ],
-                'is_free_shipping' => $data[ 'is_free_shipping' ],
-                'fee_type' => $data[ 'fee_type' ],
-                'delivery_money' => $data[ 'delivery_money' ],
-                'delivery_template_id' => $data[ 'delivery_template_id' ],
-                'supplier_id' => $data[ 'supplier_id' ],
-                'member_discount' => $data[ 'member_discount' ],
-                'poster_id' => $data[ 'poster_id' ],
-                'is_proxy' => $data[ 'is_proxy' ],
-                'memory_ids' => $data[ 'memory_ids' ],
-                'create_time' => time()
-            ];
-            $res = $this->model->create($goods_data);
-
-            $sku_data = [];
-            if ($data['spec_type'] == 'single') {
-                // 单规格
-                $sku_data = [
-                    'site_id' => $this->site_id,
-                    'sku_name' => '',
-                    'sku_image' => $data['goods_cover'],
-                    'sku_no' => $data['sku_no'],
-                    'goods_id' => $res->goods_id,
-                    'sku_spec_format' => '', // sku规格格式
-                    'price' => $data['price'],
-                    'market_price' => $data['market_price'],
-                    'sale_price' => $data['price'],
-                    'cost_price' => $data['cost_price'],
-                    'stock' => $data['stock'],
-                    'weight' => $data['weight'],
-                    'volume' => $data['volume'],
-                    'is_default' => 1
-                ];
-                $goods_sku_model->save($sku_data);
-            } 
-            
-            
-
-            Db::commit();
-
-            event('AfterGoodsEdit', [
-                'goods_id' => $res->goods_id,
-                'goods_data' => $goods_data,
-                'sku_data' => $sku_data
-            ]);
-
-            return $res->goods_id;
-        } catch (\Exception $e) {
-            Db::rollback();
-            throw new CommonException($e->getMessage());
-        }
-    }
-
-
-    // 修改商品
-    public function update(int $goods_id, array $data)
-    {
-        try {
-            Db::startTrans();
-            $goods_sku_model = new GoodsSku();
-
-            // 准备商品主表数据
-            $goods_data = [];
-
-            // 商品封面
-            if (!empty($data['goods_image'])) {
-                $goods_data['goods_cover'] = $data['goods_image'][0];
-                $goods_data['goods_image'] = implode(',', $data['goods_image']);
-            }
-
-            // 处理数组字段，确保它们是字符串格式
-            if (!empty($data['goods_category'])) {
-                $goods_data['goods_category'] = array_map(function($item) { return (string) $item; }, $data['goods_category']);
-            }
-            if (!empty($data['label_ids'])) {
-                $goods_data['label_ids'] = array_map(function($item) { return (string) $item; }, $data['label_ids']);
-            }
-            if (!empty($data['service_ids'])) {
-                $goods_data['service_ids'] = array_map(function($item) { return (string) $item; }, $data['service_ids']);
-            }
-
-            // 复制商品基本信息字段
-            $goods_fields = [
-                'goods_name', 'sub_title', 'goods_type', 'brand_id', 
-                'unit', 'status', 'sort', 'attr_id', 'attr_format',
-                'delivery_type', 'is_free_shipping', 'fee_type',
-                'delivery_money', 'delivery_template_id', 'supplier_id',
-                'member_discount', 'poster_id', 'is_proxy', 'memory_ids',
-                'goods_desc'
-            ];
-
-            foreach ($goods_fields as $field) {
-                if (isset($data[$field])) {
-                    $goods_data[$field] = $data[$field];
-                }
-            }
-
-            $goods_data['update_time'] = time();
-            
-            // 更新商品基本信息
-            $res = $this->model->where('goods_id', '=', $goods_id)->update($goods_data);
-
-            // 更新SKU信息
-            if (!empty($data['sku_no'])) {
-                $sku_data = [
-                    'sku_no' => $data['sku_no']
-                ];
-
-                // 只有在提供了这些字段时才更新
-                $sku_fields = ['price', 'market_price', 'cost_price', 'stock', 'weight', 'volume'];
-                foreach ($sku_fields as $field) {
-                    if (isset($data[$field])) {
-                        $sku_data[$field] = $data[$field];
-                    }
-                }
-
-                if (isset($data['price'])) {
-                    $sku_data['sale_price'] = $data['price'];
-                }
-
-                if (!empty($goods_data['goods_cover'])) {
-                    $sku_data['sku_image'] = $goods_data['goods_cover'];
-                }
-                
-                $goods_sku_model->where([
-                    ['goods_id', '=', $goods_id],
-                    ['is_default', '=', 1]
-                ])->update($sku_data);
-            }
-
-            Db::commit();
-
-            event('AfterGoodsEdit', [
-                'goods_id' => $goods_id,
-                'goods_data' => $goods_data,
-                'sku_data' => isset($sku_data) ? $sku_data : []
-            ]);
-
-            return $res;
-        } catch (\Exception $e) {
-            Db::rollback();
-            throw new CommonException($e->getMessage());
-        }
-    }
-
-    // getMemoryList 
-    public function getMemoryList( array $where = [], $field = 'spec_id, spec_name,    site_id,  sort, create_time, update_time')
-    {
-    // $where['id'] 是 分类id
-    // 先获取 分类的 memory_group
-    $memory_group = (new Category())->where([ ['category_id', '=', $where['id']]])->value('memory_group');
-   
-    if($this->site_id !== 0 ){
-        $sites = (new Site())->field('memory_group_status')->where([['site_id', '=', $this->site_id]])->findOrEmpty()->toArray();
-    }
-    $site_id = empty($sites['memory_group_status']) ? $this->site_id : $this->site_id.",0";
-       
-    if(!empty($memory_group)){
-       // 先查询 $where['id'] 在 memory_group 表中 获取 memory_ids
-       $memory_ids = (new MemoryGroup())->where([['site_id', 'in',  $site_id], ['group_id', 'in', $memory_group ]])->value('memory_ids');
-       if($memory_ids){
-        $where['memory_ids'] = $memory_ids;
-       }
-       
-      
-    }else{
-        return [];
-    }
-   
-       // 然后通过 memory_ids 查询 memory 表 获取 spec_name
-       $memory_list = (new Memory())->where([['site_id', 'in', $site_id], ['spec_id', 'in', $where['memory_ids']]])->field('spec_id, spec_name')->select()->toArray();
-
-       return $memory_list;
-        $order = 'sort desc,spec_id desc';
-        if($this->site_id !== 0 ){
-            $sites = (new Site())->field('memory_status')->where([['site_id', 'in', $site_id]])->findOrEmpty()->toArray();
-        }
-        
-    
-        $list=  $this->model->where([['site_id', 'in', $site_id]])->withSearch(["spec_name"])
-            ->field($field)
-            
-            ->order($order)
-            ->select()
-            ->toArray();
-
-            // 将其整理 去除不必要的字段
-            // $list = array_map(function($item) {
-            //     return [
-            //         'memory_id' => $item['spec_id'],
-            //         'memory_name' => $item['spec_name'],
-            //     ];
-            // }, $list);
-
-        return $list;
     }
 
 }

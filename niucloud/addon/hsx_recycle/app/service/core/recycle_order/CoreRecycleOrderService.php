@@ -1,0 +1,204 @@
+<?php
+declare(strict_types=1);
+
+namespace addon\hsx_recycle\app\service\core\recycle_order;
+
+use addon\hsx_recycle\app\dict\order\RecycleOrderDict;
+use addon\hsx_recycle\app\model\order\RecycleDevice;
+use addon\hsx_recycle\app\model\order\RecycleOrder;
+use addon\hsx_recycle\app\service\core\order\OrderSubmitConfigService;
+use addon\hsx_recycle\app\service\core\order\LogisticsVehicleService;
+use core\base\BaseCoreService;
+use core\exception\CommonException;
+use think\facade\Db;
+use think\facade\Log;
+
+/**
+ * 回收订单核心服务层
+ * Class CoreRecycleOrderService
+ * @package addon\hsx_recycle\app\service\core\recycle_order
+ */
+class CoreRecycleOrderService extends BaseCoreService
+{
+    protected $model;
+
+    public function __construct()
+    {
+        parent::__construct();
+        $this->model = new RecycleOrder();
+    }
+
+    /**
+     * 创建订单
+     * @param array $data
+     * @return RecycleOrder
+     * @throws CommonException
+     */
+    public function create(array $data)
+    {
+        try {
+            Db::startTrans();
+
+            $devicesPayload = $data['devices'] ?? [];
+            $isDraftDeviceEntry = !empty($data['draft_device_entry']);
+            $draftDeviceCount = 0;
+            if ($isDraftDeviceEntry && array_key_exists('count', $data)) {
+                $rawCount = $data['count'];
+                // 0 保留未预设总数的现有录单入口；新表单确认时提交 1–10000。
+                // 不把小数、负数、布尔值等静默截断后保存为打印总数。
+                if ((!is_int($rawCount) && !is_string($rawCount))
+                    || !preg_match('/^(0|[1-9][0-9]*)$/D', (string)$rawCount)
+                    || (float)$rawCount > 10000) {
+                    throw new CommonException('总台数须为1至10000的整数，请重新填写后确认');
+                }
+                $draftDeviceCount = (int)$rawCount;
+            }
+            if (empty($devicesPayload) && !$isDraftDeviceEntry) {
+                $count = max(1, (int)($data['count'] ?? 1));
+                $devicesPayload = array_fill(0, $count, []);
+            }
+
+            // 创建订单
+            $submitConfig = (new OrderSubmitConfigService())->getConfig((int)$data['site_id']);
+            $data = (new LogisticsVehicleService())->prepareOrderData((int)$data['site_id'], $data);
+            $flowMode = (string)($submitConfig['flow']['mode'] ?? $submitConfig['payment']['mode'] ?? RecycleOrderDict::FLOW_MODE_ORDER);
+            if (!in_array($flowMode, [RecycleOrderDict::FLOW_MODE_ORDER, RecycleOrderDict::FLOW_MODE_DEVICE], true)) {
+                $flowMode = RecycleOrderDict::FLOW_MODE_ORDER;
+            }
+            $order = RecycleOrder::create([
+                'site_id' => $data['site_id'],
+                'flow_mode' => $flowMode,
+                'order_source' => $data['order_source'] ?? 'customer',
+                'agent_uid' => $data['agent_uid'] ?? 0,
+                'agent_name' => $data['agent_name'] ?? '',
+                'agent_mobile' => $data['agent_mobile'] ?? '',
+                'member_id' => $data['member_id'] ?? 0,
+                'order_no' => $this->createOrderNo(),
+                'customer_name' => $data['customer_name'] ?? '',
+                'customer_phone' => $data['customer_phone'] ?? '',
+                'delivery_type' => $data['delivery_type'] ?? RecycleOrderDict::DELIVERY_TYPE_EXPRESS,
+                'express_company' => $data['express_company'] ?? '',
+                'express_no' => $data['express_no'] ?? '',
+                'logistics_name' => $data['logistics_name'] ?? '',
+                'logistics_vehicle_no' => $data['logistics_vehicle_no'] ?? '',
+                'logistics_contact_name' => $data['logistics_contact_name'] ?? '',
+                'logistics_contact_mobile' => $data['logistics_contact_mobile'] ?? '',
+                'logistics_pickup_address' => $data['logistics_pickup_address'] ?? '',
+                'logistics_eta_at' => (int)($data['logistics_eta_at'] ?? 0),
+                'status' => RecycleOrderDict::ORDER_STATUS_PENDING_SIGN,
+                'device_count' => $isDraftDeviceEntry ? 0 : count($devicesPayload),
+                // 草稿尚未录入设备，但已确认的订单总台数必须先保存，供首张标签使用。
+                'count' => $isDraftDeviceEntry ? $draftDeviceCount : (int)($data['count'] ?? count($devicesPayload)),
+                'remark' => $data['remark'] ?? '',
+                'create_at' => time(),
+                'update_at' => time(),
+            ]);
+
+            // 创建设备 判断是否有设备信息 如果没有设备信息 不创建设备记录
+            if (!empty($devicesPayload) && count($devicesPayload) > 0) {
+                $devices = [];
+                foreach ($devicesPayload as $device) {
+                    // 检查设备信息是否有效：至少需要有 imei 或 model
+                    $imei = trim($device['imei'] ?? '');
+                    $model = trim($device['model'] ?? '');
+
+                    // 如果 imei 和 model 都为空，跳过该设备
+                    if (empty($imei) && empty($model)) {
+                        continue;
+                    }
+
+                    $categoryId = (int)($device['category_id'] ?? 0);
+                    $categoryPath = $device['category_path'] ?? [];
+                    if (!is_array($categoryPath) || empty($categoryPath)) {
+                        $categoryPath = $categoryId > 0 ? [ $categoryId ] : [];
+                    }
+
+                    $devices[] = [
+                        'site_id' => $data['site_id'],
+                        'order_id' => $order->id,
+                        'member_id' => $data['member_id'] ?? 0,
+                        'category_id' => $categoryId,
+                        'info' => (new \addon\hsx_recycle\app\service\core\order\CustomerQuoteService())->applyAdminQuote((int)$data['site_id'], [
+                            'goods_category' => array_values(array_map('strval', $categoryPath))
+                        ], $device),
+                        'imei' => $imei,
+                        'model' => $model,
+                        'status' => RecycleOrderDict::DEVICE_STATUS_PENDING_CHECK,
+                        'initial_price' => $device['initial_price'] ?? 0,
+                        'create_at' => time(),
+                        'update_at' => time(),
+                    ];
+                }
+
+                // 只有在有有效设备信息时才批量保存
+                if (!empty($devices)) {
+                    $createdDevices = (new RecycleDevice())->saveAll($devices);
+                    foreach ($createdDevices as $createdDevice) {
+                        (new \addon\hsx_recycle\app\service\admin\order\RecycleDeviceInfoCorrectionService())
+                            ->recordInitialEntry((int)$createdDevice->id, ($data['order_source'] ?? 'customer') === 'customer' ? 'customer_order' : 'staff_order', (int)$data['site_id']);
+                    }
+                }
+            }
+
+            // 触发创建后事件
+            CoreRecycleOrderEventService::orderCreateAfter([
+                'order_id' => $order->id,
+                'site_id' => $data['site_id'],
+                'order_data' => $order->toArray()
+            ]);
+
+            // 触发订单下单后事件
+            \addon\hsx_recycle\app\service\core\order\CoreRecycleOrderEventService::orderAddAfter([
+                'order_id' => $order->id,
+                'site_id' => $data['site_id'],
+                'member_id' => $data['member_id'] ?? 0
+            ]);
+
+            Db::commit();
+            return $order;
+        } catch (\Exception $e) {
+            Db::rollback();
+            Log::error('创建回收订单失败：' . $e->getMessage());
+            throw new CommonException('创建订单失败：' . $e->getMessage());
+        }
+    }
+
+    /**
+     * 获取订单详情
+     * @param int $order_id
+     * @return array
+     */
+      public function getInfo(int $order_id)
+    {
+        try {
+            Log::record('【回收通知】CoreRecycleOrderService->getInfo 尝试获取订单: ' . $order_id, 'notice');
+            
+            // 移除了有问题的payment关联
+            $info = $this->model->where([['id', '=', $order_id]])->withoutField('delete_time')->findOrEmpty()->toArray();
+            
+            if (empty($info)) {
+                Log::record('【回收通知】CoreRecycleOrderService->getInfo 订单不存在: ' . $order_id, 'error');
+                return [];
+            }
+            
+            // 获取相关设备信息
+            $info['devices'] = (new RecycleDevice())->where([['order_id', '=', $order_id]])->select()->toArray();
+            
+            Log::record('【回收通知】CoreRecycleOrderService->getInfo 成功获取订单: ' . json_encode($info), 'notice');
+            return $info;
+        } catch (\Exception $e) {
+            Log::record('【回收通知】CoreRecycleOrderService->getInfo 异常: ' . $e->getMessage(), 'error');
+            return [];
+        }
+    }
+
+
+    /**
+     * 生成订单编号
+     * @return string
+     */
+    protected function createOrderNo()
+    {
+        return 'R' . date('YmdHis') . mt_rand(1000, 9999);
+    }
+}

@@ -14,6 +14,9 @@ namespace addon\phone_shop\app\dict\delivery;
 class ElectronicSheetDict
 {
 
+
+
+
     /**
      * 获取邮费支付方式类型
      * @param $type
@@ -25,6 +28,23 @@ class ElectronicSheetDict
             1 => get_lang('dict_shop_delivery_electronic_sheet.cash_payment'),
             2 => get_lang('dict_shop_delivery_electronic_sheet.freight_collect'),
             3 => get_lang('dict_shop_delivery_electronic_sheet.monthly_statement')
+        ];
+        if ($type == '') return $type_list;
+        return $type_list[ $type ] ?? '';
+    }
+
+
+    /**
+     * 快递100 支付方式类型
+     * @param $type
+     * @return string|string[]
+     */
+    public static function getKd100PayType($type = '')
+    {
+        $type_list = [
+            1 =>"SHIPPER",
+            2 =>"CONSIGNEE",
+            3 =>"THIRDPARTY"
         ];
         if ($type == '') return $type_list;
         return $type_list[ $type ] ?? '';

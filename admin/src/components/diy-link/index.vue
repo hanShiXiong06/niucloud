@@ -126,7 +126,9 @@ const prop = defineProps({
     },
     ignore: {
         type: Array,
-        default: []
+        default: () => {
+            return [] // 指定需要忽略的自定义链接，例如：['DIY_MAKE_PHONE_CALL']，表示隐藏拨打电话
+        }
     }
 })
 
@@ -157,7 +159,7 @@ const dynamicComponentRefs: any = ref(null) // 动态组件ref
 
 const selectLink: any = ref([])
 
-const modules: any = import.meta.glob('@/**/*.vue')
+import { dynamicComponentModules as modules } from '@/utils/dynamic-components'
 
 const show = () => {
     getLinkFn(() => {

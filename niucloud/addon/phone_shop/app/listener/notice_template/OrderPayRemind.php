@@ -12,7 +12,7 @@ use app\listener\notice_template\BaseNoticeTemplate;
  */
 class OrderPayRemind extends BaseNoticeTemplate
 {
-    private $key = 'phone_shop_order_pay_remind';
+    private $key = 'shop_order_pay_remind';
 
     public function handle(array $params)
     {

@@ -11,7 +11,7 @@ use app\listener\notice_template\BaseNoticeTemplate;
  */
 class RefundRefuse extends BaseNoticeTemplate
 {
-    private $key = 'phone_shop_refund_refuse';
+    private $key = 'shop_refund_refuse';
 
     public function handle(array $params)
     {

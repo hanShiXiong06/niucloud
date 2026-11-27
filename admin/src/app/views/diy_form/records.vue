@@ -115,7 +115,7 @@
                 <div class="mt-[16px] flex justify-end">
                     <el-pagination v-model:current-page="formMemberList.page" v-model:page-size="formMemberList.limit"
                                    layout="total, sizes, prev, pager, next, jumper" :total="formMemberList.total"
-                                   @size-change="getFormRecordsMemberFn()" @current-change="getFormRecordsMemberFn()" />
+                                   @size-change="getFormRecordsMemberFn()" @current-change="getFormRecordsMemberFn" />
                 </div>
 
             </el-tab-pane>
@@ -234,7 +234,7 @@ const getDiyFormFieldStatFn = (form_id: any) => {
     })
 }
 
-const modules: any = import.meta.glob('@/**/*.vue')
+import { dynamicComponentModules as modules } from '@/utils/dynamic-components'
 const formDetail = ref([])
 
 const formDetailEvent = (row: any) => {

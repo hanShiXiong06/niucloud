@@ -57,5 +57,4 @@ class DeliveryService extends BaseAdminService
     {
         return $this->core_delivery_config_service->getDeliveryConfig($this->site_id);
     }
-
 }

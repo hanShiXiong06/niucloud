@@ -3,7 +3,7 @@
 	"actualPayment": "实付款",
 	"orderClose": "关闭订单",
 	"orderFinish": "确认收货",
-	"topay": "支付",
+	"topay": "去支付",
 	"orderDetail": "详情",
 	"orderTradeNo": "支付流水号",
 	"createTime": "创建时间",
@@ -19,5 +19,8 @@
 	"discountMoney": "优惠金额",
 	"logisticsTracking":"查看物流",
 	"copy":"复制",
-	"detailedInformation":"详细信息"
+	"detailedInformation":"详细信息",
+	"helpPay":"的帮付",
+	"memberRemark":"用户备注",
+	"orderDelete":"删除"
 }

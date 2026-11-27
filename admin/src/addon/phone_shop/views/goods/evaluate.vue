@@ -4,15 +4,18 @@
 
             <div class="flex justify-between items-center">
                 <span class="text-page-title">{{ pageName }}</span>
-                <el-button type="primary" @click="addEvent">
-                    {{ t('addEvaluate') }}
-                </el-button>
+                <el-button type="primary" @click="addEvent">{{ t('addEvaluate') }}</el-button>
             </div>
 
             <el-card class="box-card !border-none my-[10px] table-search-wrap" shadow="never">
                 <el-form :inline="true" :model="evaluateTable.searchParam" ref="searchFormRef">
                     <el-form-item :label="t('goodsName')" prop="goods_name">
                         <el-input v-model.trim="evaluateTable.searchParam.goods_name" :placeholder="t('goodsNamePlaceholder')" class="input-width" maxlength="60" />
+                    </el-form-item>
+                    <el-form-item :label="t('status')" prop="status">
+                        <el-select v-model="evaluateTable.searchParam.status" :placeholder="t('statusPlaceholder')" clearable>
+                            <el-option v-for="(item, index) in statusList" :key="index" :label="item" :value="index" />                        
+                        </el-select>
                     </el-form-item>
                     <el-form-item>
                         <el-button type="primary" @click="loadEvaluateList()">{{ t('search') }}</el-button>
@@ -22,15 +25,22 @@
             </el-card>
 
             <div class="mt-[10px]">
-                <el-table :data="evaluateTable.data" size="large" v-loading="evaluateTable.loading">
+                <div class="mb-[10px] flex items-center">
+                    <el-checkbox v-model="toggleCheckbox" size="large" class="px-[14px]" @change="toggleChange" :indeterminate="isIndeterminate" />
+                    <el-button @click="batchDeleteEvent" size="small" >{{t("batchDelete")}}</el-button>
+                    <el-button @click="batchAdoptEvent" size="small"  >{{t("batchAdopt")}}</el-button>
+                    <el-button @click="batchRefuseEvent" size="small"  >{{t("batchRefuse")}}</el-button>
+                </div>
+                <el-table :data="evaluateTable.data" size="large" v-loading="evaluateTable.loading" ref="evaluateTableRef" @selection-change="handleSelectionChange">
                     <template #empty>
                         <span>{{ !evaluateTable.loading ? t('emptyData') : '' }}</span>
                     </template>
-                    <el-table-column :label="t('goodsInfo')" min-width="120" align="left">
+                    <el-table-column type="selection" width="55" />
+                    <el-table-column :label="t('goodsInfo')" min-width="230" align="left">
                         <template #default="{ row }">
-                            <div class="flex cursor-pointer">
+                            <div class="flex">
                                 <div class="flex items-center min-w-[50px] mr-[10px]">
-                                    <el-image v-if="row.goods.goods_cover_thumb_small" class="w-[50px] h-[50px]" :src="img(row.goods.goods_cover_thumb_small)" fit="contain">
+                                    <el-image v-if="row.goods?.goods_cover_thumb_small || row.goods_image" class="w-[50px] h-[50px] rounded-[4px]" :src="img(row.goods?.goods_cover_thumb_small || row.goods_image)" fit="cover">
                                         <template #error>
                                             <div class="image-slot">
                                                 <img class="w-[50px] h-[50px]" src="@/addon/phone_shop/assets/goods_default.png" />
@@ -40,8 +50,19 @@
 
                                     <img v-else class="w-[50px] h-[50px]" src="@/addon/phone_shop/assets/goods_default.png" fit="contain" />
                                 </div>
-                                <div class="flex">
-                                    <p class="multi-hidden">{{ row.goods.goods_name }}</p>
+                                <div class="min-w-0 flex-1">
+                                    <div class="flex items-center gap-[6px]">
+                                        <el-tooltip :content="row.goods_name || row.goods?.goods_name || '-'" placement="top" :disabled="!(row.goods_name || row.goods?.goods_name)">
+                                            <p class="truncate max-w-[180px]">{{ row.goods_name || row.goods?.goods_name || '-' }}</p>
+                                        </el-tooltip>
+                                        <el-tag v-if="row.is_verified_purchase" type="success" size="small" effect="light">真实购买</el-tag>
+                                    </div>
+                                    <el-tooltip v-if="row.category_path || row.category_name" :content="row.category_path || row.category_name" placement="top">
+                                        <p class="mt-[5px] text-[12px] text-color-info truncate max-w-[210px]">
+                                            评价归属：{{ row.category_path || row.category_name }}
+                                        </p>
+                                    </el-tooltip>
+                                    <p v-if="row.sku_name" class="mt-[3px] text-[12px] text-color-info truncate max-w-[210px]">成交规格：{{ row.sku_name }}</p>
                                 </div>
                             </div>
                         </template>
@@ -95,7 +116,7 @@
             </div>
         </el-card>
 
-        <evaluate-add ref="editEvaluateDialog" @complete="loadEvaluateList" />
+        <evaluate-add ref="editEvaluateDialog" @complete="loadEvaluateList(getTablePageStorage(evaluateTable.searchParam).page)" />
 
         <el-dialog v-model="replyShowDialog" :title="t('explainFirst')" width="460px" class="diy-dialog-wrap" :destroy-on-close="true">
             <el-form :model="formData" label-width="90px" ref="formRef" :rules="formRules" class="page-form">
@@ -117,9 +138,9 @@
 <script lang="ts" setup>
 import { reactive, ref, computed } from 'vue'
 import { t } from '@/lang'
-import { getEvaluateList, deleteEvaluate, adoptEvaluate, refuseEvaluate, replyEvaluate, toppingEvaluate, cancelToppingEvaluate } from '@/addon/phone_shop/api/goods'
+import { getEvaluateList, deleteEvaluate, adoptEvaluate, refuseEvaluate, replyEvaluate, toppingEvaluate, cancelToppingEvaluate ,getEvaluateStatus,batchDelEvaluate,batchAdoptEvaluate,batchRefuseEvaluate} from '@/addon/phone_shop/api/goods'
 import EvaluateAdd from '@/addon/phone_shop/views/goods/components/evaluate-add.vue'
-import { img } from '@/utils/common'
+import { img, setTablePageStorage,getTablePageStorage} from '@/utils/common'
 import { ElMessageBox, FormInstance } from 'element-plus'
 import { useRoute } from 'vue-router'
 
@@ -133,7 +154,8 @@ const evaluateTable = reactive({
     loading: true,
     data: [],
     searchParam: {
-        goods_name: ''
+        goods_name: '',
+        status: ''
     }
 })
 
@@ -154,17 +176,26 @@ const loadEvaluateList = (page: number = 1) => {
         evaluateTable.loading = false
         evaluateTable.data = res.data.data
         evaluateTable.total = res.data.total
-        evaluateTable.data.map((item: any)=> {
-            item.previewList = item.images.map((el:any)=> {
+        evaluateTable.data.map((item: any) => {
+            item.previewList = item.images.map((el: any) => {
                 return img(el)
             })
             return item
         })
+        setTablePageStorage(evaluateTable.page, evaluateTable.limit, evaluateTable.searchParam)
     }).catch(() => {
         evaluateTable.loading = false
     })
 }
-loadEvaluateList()
+loadEvaluateList(getTablePageStorage(evaluateTable.searchParam).page)
+
+const statusList = ref([])
+const getEvaluateStatusFn = () => {
+    getEvaluateStatus().then(res => {
+       statusList.value = res.data
+    })
+}
+getEvaluateStatusFn()
 
 const editEvaluateDialog: Record<string, any> | null = ref(null)
 /**
@@ -174,6 +205,129 @@ const addEvent = () => {
     editEvaluateDialog.value.setFormData()
     editEvaluateDialog.value.showDialog = true
 }
+
+
+// 批量复选框
+const toggleCheckbox = ref()
+
+// 复选框中间状态
+const isIndeterminate = ref(false)
+
+// 监听批量复选框事件
+const toggleChange = (value: any) => {
+    isIndeterminate.value = false
+    evaluateTableRef.value.toggleAllSelection()
+}
+
+const evaluateTableRef = ref()
+
+// 选中数据
+const multipleSelection: any = ref([])
+
+// 监听表格单行选中
+const handleSelectionChange = (val: []) => {
+    multipleSelection.value = val
+
+    toggleCheckbox.value = false
+    if (multipleSelection.value.length > 0 && multipleSelection.value.length < evaluateTable.data.length) {
+        isIndeterminate.value = true
+    } else {
+        isIndeterminate.value = false
+    }
+
+    if (multipleSelection.value.length == evaluateTable.data.length && evaluateTable.data.length && multipleSelection.value.length) {
+        toggleCheckbox.value = true
+    }
+}
+
+// 批量删除
+const batchDeleteEvent = () => {
+    if (multipleSelection.value.length == 0) {
+        ElMessage({
+            type: 'warning',
+            message: `${t('batchEmptySelectedCommentsTips')}`
+        })
+        return
+    }
+
+    ElMessageBox.confirm(t('batchDeleteTips'), t('warning'), {
+        confirmButtonText: t('confirm'),
+        cancelButtonText: t('cancel'),
+        type: 'warning'
+    }).then(() => {
+        const evaluate_ids: any = []
+        multipleSelection.value.forEach((item: any) => {
+            evaluate_ids .push(item.evaluate_id)
+        })
+
+        batchDelEvaluate({
+            evaluate_ids: evaluate_ids
+        }).then(() => {
+            loadEvaluateList(getTablePageStorage(evaluateTable.searchParam).page)
+        }).catch(() => {
+        })
+    })
+}
+
+// 批量审核通过
+const batchAdoptEvent = (status: number) => {
+    if (multipleSelection.value.length == 0) {
+        ElMessage({
+            type: 'warning',
+            message: t('batchEmptySelectedCommentsTips')
+        })
+        return
+    }
+
+    ElMessageBox.confirm(t('batchAdoptTips'), t('warning'), {
+        confirmButtonText: t('confirm'),
+        cancelButtonText: t('cancel'),
+        type: 'warning'
+    }).then(() => {
+        const evaluate_ids: any = []
+        multipleSelection.value.forEach((item: any) => {
+            evaluate_ids .push(item.evaluate_id)
+        })
+
+        batchAdoptEvaluate({
+            evaluate_ids: evaluate_ids
+        }).then(() => {
+            loadEvaluateList(getTablePageStorage(evaluateTable.searchParam).page)
+        }).catch(() => {
+        })
+    })
+}
+
+
+// 批量审核拒绝
+const batchRefuseEvent = (status: number) => {
+    if (multipleSelection.value.length == 0) {
+        ElMessage({
+            type: 'warning',
+            message: t('batchEmptySelectedCommentsTips')
+        })
+        return
+    }
+
+    ElMessageBox.confirm(t('batchRefuseTips'), t('warning'), {
+        confirmButtonText: t('confirm'),
+        cancelButtonText: t('cancel'),
+        type: 'warning'
+    }).then(() => {
+        const evaluate_ids: any = []
+        multipleSelection.value.forEach((item: any) => {
+            evaluate_ids .push(item.evaluate_id)
+        })
+
+        batchRefuseEvaluate({
+            evaluate_ids: evaluate_ids
+        }).then(() => {
+            loadEvaluateList(getTablePageStorage(evaluateTable.searchParam).page)
+        }).catch(() => {
+        })
+    })
+}
+
 
 /**
  * 删除商品评价
@@ -187,7 +341,7 @@ const deleteEvent = (id: number) => {
         }
     ).then(() => {
         deleteEvaluate(id).then(() => {
-            loadEvaluateList()
+            loadEvaluateList(getTablePageStorage(evaluateTable.searchParam).page)
         }).catch(() => {
         })
     })
@@ -203,8 +357,7 @@ const adoptEvent = (id: number) => {
         }
     ).then(() => {
         adoptEvaluate(id).then(() => {
-            loadEvaluateList()
-        }).catch(() => {
+            loadEvaluateList(getTablePageStorage(evaluateTable.searchParam).page)
         })
     })
 }
@@ -212,7 +365,7 @@ const adoptEvent = (id: number) => {
 // 审核拒绝
 const refuseEvent = (id: number) => {
     refuseEvaluate(id).then(() => {
-        loadEvaluateList()
+        loadEvaluateList(getTablePageStorage(evaluateTable.searchParam).page)
     })
 }
 
@@ -220,11 +373,11 @@ const refuseEvent = (id: number) => {
 const toppingEvent = (id: number, event:string) => {
     if (event == 'topping') {
         toppingEvaluate(id).then(() => {
-            loadEvaluateList()
+            loadEvaluateList(getTablePageStorage(evaluateTable.searchParam).page)
         })
     } else {
         cancelToppingEvaluate(id).then(() => {
-            loadEvaluateList()
+            loadEvaluateList(getTablePageStorage(evaluateTable.searchParam).page)
         })
     }
 }
@@ -255,9 +408,9 @@ const confirm = async (formEl: FormInstance | undefined) => {
         if (valid) {
             const data = formData
             replyEvaluate(data).then(res => {
-                loadEvaluateList()
+                loadEvaluateList(getTablePageStorage(evaluateTable.searchParam).page)
                 replyShowDialog.value = false
-            }).catch(err => {
+            }).catch(() => {
                 replyShowDialog.value = false
             })
         }

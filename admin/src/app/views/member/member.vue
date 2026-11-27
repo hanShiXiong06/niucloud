@@ -28,7 +28,7 @@
                         </el-select>
                     </el-form-item>
 
-                    <el-form-item :label="t('memberLevel')" prop="member_level">
+                    <el-form-item :label="entitlementSources.length ? '个人等级' : t('memberLevel')" prop="member_level">
                         <el-select v-model="memberTableData.searchParam.member_level" collapse-tags clearable :placeholder="t('memberLevelPlaceholder')" class="input-width">
                             <el-option :label="t('selectPlaceholder')" value="" />
                             <el-option :label="item['level_name']" :value="item['level_id']" v-for="(item, index) in levelSelectData" :key="index" />
@@ -84,7 +84,12 @@
                             </div>
                         </template>
                     </el-table-column>
-                    <el-table-column prop="member_level_name" :label="t('memberLevel')" min-width="130" :show-overflow-tooltip="true" />
+                    <el-table-column prop="member_level_name" :label="entitlementSources.length ? '个人等级' : t('memberLevel')" min-width="130" :show-overflow-tooltip="true" />
+                    <el-table-column v-for="source in entitlementSources" :key="source.key" :label="source.title" min-width="230">
+                        <template #default="{ row }">
+                            <MemberEntitlements :items="row.member_entitlements" :sources="entitlementSources" :source-key="source.key" />
+                        </template>
+                    </el-table-column>
                     <el-table-column prop="mobile" :label="t('mobile')" min-width="120" />
                     <el-table-column prop="point" :label="t('point')" min-width="80" align="right">
                         <template #default="{ row }">
@@ -156,9 +161,12 @@ import { useRoute } from 'vue-router'
 import AddMember from '@/app/views/member/components/add-member.vue'
 import detailMember from '@/app/views/member/components/detail-member.vue'
 import EditMember from '@/app/views/member/components/edit-member.vue'
+import MemberEntitlements from '@/app/views/member/components/member-entitlements.vue'
+import { normalizeMemberEntitlementSources, type MemberEntitlementSource } from '@/app/utils/member-entitlements'
 
 const route = useRoute()
 const pageName = route.meta.title
+const entitlementSources = ref<MemberEntitlementSource[]>([])
 
 const memberTableData = reactive({
     page: 1,
@@ -218,6 +226,7 @@ const loadMemberList = (page: number = 1) => {
         memberTableData.loading = false
         memberTableData.data = res.data.data
         memberTableData.total = res.data.total
+        entitlementSources.value = normalizeMemberEntitlementSources(res.data.member_entitlement_sources)
         if (isReset.value) {
             isSelectAllPages.value = false
             excludedIds.value = []

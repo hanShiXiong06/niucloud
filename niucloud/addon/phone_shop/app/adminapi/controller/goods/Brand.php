@@ -17,6 +17,7 @@ use addon\phone_shop\app\service\admin\goods\BrandService;
 
 /**
  * 商品品牌控制器
+ * @description 商品品牌
  * Class Brand
  * @package addon\phone_shop\app\adminapi\controller\goods
  */
@@ -24,6 +25,7 @@ class Brand extends BaseAdminController
 {
    /**
     * 获取商品品牌分页列表
+    * @description 查看列表-分页
     * @return \think\Response
     */
     public function pages(){
@@ -37,6 +39,7 @@ class Brand extends BaseAdminController
 
     /**
      * 获取商品品牌列表
+     * @description 查看商品列表-全部
      * @return \think\Response
      */
     public function lists(){
@@ -48,6 +51,7 @@ class Brand extends BaseAdminController
 
     /**
      * 商品品牌详情
+     * @description 查看详情
      * @param int $id
      * @return \think\Response
      */
@@ -57,6 +61,7 @@ class Brand extends BaseAdminController
 
     /**
      * 添加商品品牌
+     * @description 添加商品品牌
      * @return \think\Response
      */
     public function add(){
@@ -65,6 +70,7 @@ class Brand extends BaseAdminController
              ["logo",""],
              ["desc",""],
              ["sort",0],
+             ["color_json",""],
         ]);
         $this->validate($data, 'addon\phone_shop\app\validate\goods\Brand.add');
         $id = (new BrandService())->add($data);
@@ -73,6 +79,7 @@ class Brand extends BaseAdminController
 
     /**
      * 商品品牌编辑
+     * @description 编辑商品品牌
      * @param $id  商品品牌id
      * @return \think\Response
      */
@@ -82,6 +89,7 @@ class Brand extends BaseAdminController
              ["logo",""],
              ["desc",""],
              ["sort",0],
+             ["color_json",""],
         ]);
         $this->validate($data, 'addon\phone_shop\app\validate\goods\Brand.edit');
         (new BrandService())->edit($id, $data);
@@ -90,6 +98,7 @@ class Brand extends BaseAdminController
 
     /**
      * 商品品牌删除
+     * @description 删除商品品牌
      * @param $id  商品品牌id
      * @return \think\Response
      */
@@ -100,6 +109,7 @@ class Brand extends BaseAdminController
 
     /**
      * 修改排序
+     * @description 编辑品牌排序
      * @return \think\Response
      */
     public function modifySort()

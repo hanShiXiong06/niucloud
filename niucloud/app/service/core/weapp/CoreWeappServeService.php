@@ -37,9 +37,29 @@ class CoreWeappServeService extends BaseCoreService
     public function serve(int $site_id)
     {
         $app = CoreWeappService::app($site_id);
+        $message_security = CoreWeappMessageSecurity::configuration($site_id);
+        $authenticated_encryptor = null;
+        if ($message_security['encrypted_ready'] && hash_equals($message_security['app_id'], $app->getAccount()->getAppId())) {
+            $authenticated_encryptor = new CoreWeappMessageEncryptor(
+                $app->getEncryptor(), $site_id, $app->getAccount()->getAppId(),
+                $message_security['original_id'], $message_security['source']
+            );
+            $app->setEncryptor($authenticated_encryptor);
+        }
         $server = $app->getServer();
-        $server->with(function($message, \Closure $next)  use ($site_id){
-
+        $server->with(function($message, \Closure $next)  use ($site_id, $authenticated_encryptor){
+            // Optional application consumers must perform their own business
+            // checks. A PSR response allows an acknowledgement without turning
+            // it into a text-message reply; other messages keep the SDK chain.
+            foreach (event('WeappMessage', [
+                'site_id' => $site_id, 'message' => $message->toArray(),
+                // Legacy consumers keep their message; sensitive consumers
+                // require the native SDK authentication result, never a flag.
+                'authenticated_message' => $authenticated_encryptor?->authenticatedMessage()
+            ]) as $result) {
+                if ($result instanceof \Psr\Http\Message\ResponseInterface) return $result;
+            }
+            return $next($message);
         });
         $response = $server->serve();
         return $response;

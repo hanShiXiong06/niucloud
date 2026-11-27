@@ -2,7 +2,7 @@
     <div class="main-container" v-loading="loading">
 
         <el-card class="card !border-none" shadow="never">
-            <el-page-header :content="pageName" :icon="ArrowLeft" @back="$router.back()" />
+            <el-page-header :content="pageName" :icon="ArrowLeft" @back="back()" />
         </el-card>
 
         <!-- 表单 -->
@@ -41,11 +41,11 @@
 
                 <!-- 商品名称： -->
                 <el-form-item :label="t('goodsName')" prop="names">
-                    <el-input v-model="formData.names" type="textarea" clearable :placeholder="t('goodsNamePlaceholder')" class="!w-[512px]" show-word-limit :maxlength="60" />
+                    <el-input v-model.trim="formData.names" type="textarea" clearable :placeholder="t('goodsNamePlaceholder')" class="!w-[512px]" show-word-limit :maxlength="60" />
                 </el-form-item>
                 <!-- 商品标题： -->
                 <el-form-item :label="t('goodsTitle')">
-                    <el-input v-model="formData.title" type="textarea" clearable :placeholder="t('goodsTitlePlaceholder')" class="!w-[512px]" show-word-limit :maxlength="60" />
+                    <el-input v-model.trim="formData.title" type="textarea" clearable :placeholder="t('goodsTitlePlaceholder')" class="!w-[512px]" show-word-limit :maxlength="60" />
                 </el-form-item>
                 <!-- 商品图片 -->
                 <el-form-item :label="t('image')" prop="image">
@@ -121,6 +121,16 @@
                                 </template>
                             </el-table-column>
                             <el-table-column :label="t('limit')" min-width="200">
+                                <template #header>
+                                    <div style="display: inline-flex; align-items: center">
+                                        <span class="mr-[5px]">{{ t('limit') }}</span>
+                                        <el-tooltip class="box-item" effect="light" :content="t('limitRules')" placement="top">
+                                        <el-icon color="#666">
+                                            <QuestionFilled />
+                                        </el-icon>
+                                        </el-tooltip>
+                                    </div>
+                                </template>
                                 <template #default="{ row,$index }">
                                     <el-form-item v-if="row.is_enabled" :prop="'product_list.'+ $index + '.limit_num'" :rules="[{
                                         trigger: 'blur',
@@ -131,6 +141,10 @@
                                                     callback(t('limitTips'))
                                                 } else if (value <=0) {
                                                     callback(t('limitTipsTwo'))
+                                                } else if (value > Number(row.stock)) {
+                                                    callback(t('limitTipsThree'))
+                                                } else if(parseInt(value)>parseInt(row.goods_stock)){
+                                                    callback(t('stockTipsThree'))
                                                 } else {
                                                     callback();
                                                 }
@@ -222,14 +236,14 @@
                             callback(t('stockTips'))
                         } else if (value <=0) {
                             callback(t('stockTipsTwo'))
-                        }else if(formData.product_list[0].sum_count != '-1'&&parseInt(value)>parseInt(formData.product_list[0].sum_count.sum_count)){
+                        }else if(formData.product_list[0].sum_count != '-1' && parseInt(value)>parseInt(formData.product_list[0].sum_count.sum_count)){
                             callback(t('stockTipsThree'))
                         }else {
                             callback();
                         }
                     }
                 }]">
-                    <el-input v-model="formData.stock" clearable :placeholder="t('stockPlaceholder')" class="input-width" />
+                    <el-input v-model.trim="formData.stock" clearable :placeholder="t('stockPlaceholder')" class="input-width" />
                 </el-form-item>
                 <!-- 兑换限制 -->
                 <el-form-item :label="t('limit')" prop="limit_num"  :rules="[{
@@ -248,57 +262,57 @@
                         }
                     }
                 }]">
-                    <el-input v-model="formData.limit_num" clearable :placeholder="t('limitPlaceholder')" class="input-width" />
+                    <el-input v-model.trim="formData.limit_num" clearable :placeholder="t('limitPlaceholder')" class="input-width" />
                 </el-form-item>
                 <!-- 兑换价 -->
                 <el-form-item :label="t('money')" required>
                     <div class="flex justify-center">
-                                        <el-form-item prop="point" :rules="[{
-                                            trigger: 'blur',
-                                            validator: (rule: any, value: any, callback: any) => {
-                                                    if (value.length == 0) {
-                                                        callback(t('pointPlaceholder'))
-                                                    } if (isNaN(value) || !regExp.number.test(value)) {
-                                                            callback(t('pointTips'))
-                                                        } else if (value <=0) {
-                                                            callback(t('pointTipsTwo'))
-                                                        } else{
-                                                            callback();
-                                                        }
-                                            }
-                                            }]" class="sku-form-item-wrap">
-                                            <!-- @blur="inputBlur(row,'reduce',$index)" -->
-                                            <el-input v-model.trim="formData.point" class="!w-[200px]"  clearable placeholder="0" maxlength="8" >
-                                                <template #append>
-                                                    <span>{{t('integralUnit')}}</span>
-                                                </template>
-                                            </el-input>
-                                        </el-form-item>
-                                        <span class="mx-[20px]">+</span>
-                                        <el-form-item prop="price" :rules="[{
-                                            trigger: 'blur',
-                                            validator: (rule: any, value: any, callback: any) => {
-                                                     if(value.length){
-                                                        if (isNaN(value) || !regExp.digit.test(value)) {
-                                                            callback(t('moneyTips'))
-                                                        } else if (value <0) {
-                                                            callback(t('moneyTipsTwo'))
-                                                        }else{
-                                                            callback();
-                                                        }
-                                                    }else {
-                                                        callback();
-                                                    }
-                                            }
-                                            }]" class="sku-form-item-wrap">
-                                            <!-- @blur="inputBlur(row,'reduce',$index)" -->
-                                            <el-input v-model.trim="formData.price" class="!w-[200px]"  clearable placeholder="0.00" maxlength="8" >
-                                                <template #append>
-                                                    <span>{{t('prickUnit')}}</span>
-                                                </template>
-                                            </el-input>
-                                        </el-form-item>
-                                    </div>
+                        <el-form-item prop="point" :rules="[{
+                            trigger: 'blur',
+                            validator: (rule: any, value: any, callback: any) => {
+                                    if (value.length == 0) {
+                                        callback(t('pointPlaceholder'))
+                                    } if (isNaN(value) || !regExp.number.test(value)) {
+                                            callback(t('pointTips'))
+                                        } else if (value <=0) {
+                                            callback(t('pointTipsTwo'))
+                                        } else{
+                                            callback();
+                                        }
+                                    }
+                            }]" class="sku-form-item-wrap">
+                            <!-- @blur="inputBlur(row,'reduce',$index)" -->
+                            <el-input v-model.trim="formData.point" class="!w-[200px]"  clearable placeholder="0" maxlength="8" >
+                                <template #append>
+                                    <span>{{t('integralUnit')}}</span>
+                                </template>
+                            </el-input>
+                        </el-form-item>
+                        <span class="mx-[20px]">+</span>
+                        <el-form-item prop="price" :rules="[{
+                            trigger: 'blur',
+                            validator: (rule: any, value: any, callback: any) => {
+                                     if(value.length){
+                                        if (isNaN(value) || !regExp.digit.test(value)) {
+                                            callback(t('moneyTips'))
+                                        } else if (value <0) {
+                                            callback(t('moneyTipsTwo'))
+                                        }else{
+                                            callback();
+                                        }
+                                    }else {
+                                        callback();
+                                    }
+                            }
+                            }]" class="sku-form-item-wrap">
+                            <!-- @blur="inputBlur(row,'reduce',$index)" -->
+                            <el-input v-model.trim="formData.price" class="!w-[200px]"  clearable placeholder="0.00" maxlength="8" >
+                                <template #append>
+                                    <span>{{t('prickUnit')}}</span>
+                                </template>
+                            </el-input>
+                        </el-form-item>
+                    </div>
                 </el-form-item>
             </el-card>
 
@@ -320,7 +334,7 @@
                         }
                     }
                 }]">
-                    <el-input v-model="formData.balance" clearable :placeholder="t('balancePlaceholder')" class="input-width" />
+                    <el-input v-model.trim="formData.balance" clearable :placeholder="t('balancePlaceholder')" class="input-width" />
                 </el-form-item>
                 <!-- 余额类型 -->
                 <el-form-item :label="t('balance')">
@@ -345,7 +359,7 @@
                         }
                     }
                 }]">
-                    <el-input v-model="formData.stock" clearable :placeholder="t('stockPlaceholder')" class="input-width" />
+                    <el-input v-model.trim="formData.stock" clearable :placeholder="t('stockPlaceholder')" class="input-width" />
                 </el-form-item>
                 <!-- 兑换限制 -->
                 <el-form-item :label="t('limit')" prop="limit_num"  :rules="[{
@@ -364,7 +378,7 @@
                         }
                     }
                 }]">
-                    <el-input v-model="formData.limit_num" clearable :placeholder="t('limitPlaceholder')" class="input-width" />
+                    <el-input v-model.trim="formData.limit_num" clearable :placeholder="t('limitPlaceholder')" class="input-width" />
                 </el-form-item>
                 <!-- 兑换价 -->
                 <el-form-item :label="t('money')" required>
@@ -443,12 +457,11 @@
 <script lang="ts" setup>
 import { ref, computed, reactive } from 'vue'
 import { t } from '@/lang'
-import { img,deepClone } from '@/utils/common'
-import { FormInstance,ElMessage } from 'element-plus'
+import { img, deepClone } from '@/utils/common'
+import { FormInstance, ElMessage } from 'element-plus'
 import { ArrowLeft } from '@element-plus/icons-vue'
-import { addActiveExchange } from "@/addon/phone_shop/api/marketing";
+import { addActiveExchange } from '@/addon/phone_shop/api/marketing'
 import goodsSelectPopup from '@/addon/phone_shop/views/goods/components/goods-select-popup.vue'
-import couponSelectPopup from '@/addon/phone_shop/views/goods/components/coupon-select-popup.vue'
 import { useRoute, useRouter } from 'vue-router'
 
 const route = useRoute()
@@ -458,25 +471,25 @@ const pageName = route.meta.title
 const loading = ref(false)
 // 商品类型
 const goodsType = reactive([
-    {name:'商品',type:'goods'},
+    { name: '商品', type: 'goods' }
     // {name:'优惠券',type:'coupon'},
     // {name:'余额',type:'balance'},
 ])
 const initialFormData = {
     type: 'goods', // 名称
     names: '', // 标题
-    title:'',
-    image:'',
-    goods_ids:[],
-    coupon_ids:[],
-    product_list:[],
-    stock:'',
-    limit_num:'',
-    point:'',
-    price:'',
-    balance:'',
-    isBalance:1,
-    content:''
+    title: '',
+    image: '',
+    goods_ids: [],
+    coupon_ids: [],
+    product_list: [],
+    stock: '',
+    limit_num: '',
+    point: '',
+    price: '',
+    balance: '',
+    isBalance: 1,
+    content: ''
 }
 const formData: Record<string, any> = ref({ ...initialFormData })
 const formRef = ref<FormInstance>()
@@ -501,48 +514,49 @@ const formRules = computed(() => {
         ],
         coupon_ids: [
             { required: true, message: t('couponSelectPlaceholder'), trigger: 'change' }
-        ],
+        ]
     }
 })
-const changeGoodsType=(item:any)=>{
+const changeGoodsType = (item:any) => {
     formData.value.type = item.type
     formData.value.coupon_ids = []
     formData.value.goods_ids = []
-    if(formData.value.type == 'goods'){
+    if (formData.value.type == 'goods') {
         formData.value.goods_info = {}
-    }else {
-        if(formData.value.goods_info) delete formData.value.goods_info
+    } else {
+        if (formData.value.goods_info) delete formData.value.goods_info
     }
     formData.value.product_list = []
 }
 
-/********* 商品 **********/
-//删除商品
-const deleteGoods = ()=>{
+/** ******* 商品 **********/
+// 删除商品
+const deleteGoods = () => {
     delete formData.value.goods_info
     formData.value.goods_ids = []
     formData.value.product_list = []
 }
-//设置商品sku是否参与
-const enabledEvent =  (row:any)=>{
+// 设置商品sku是否参与
+const enabledEvent = (row:any) => {
     row.is_enabled = row.is_enabled ? 0 : 1
-    if(formData.value.product_list.every((el:any)=>el.is_enabled===0)){
+    if (formData.value.product_list.every((el: any) => el.is_enabled === 0)) {
         row.is_enabled = 1
         ElMessage({
-             type: 'warning',
+            type: 'warning',
             message: `${t('noEnabledTip')}`
         })
         return
     }
-    row.stock = '';
-    row.limit_num = '';
-    row.point = '';
-    row.price = '';
+    row.stock = ''
+    row.limit_num = ''
+    row.point = ''
+    row.price = ''
 }
+
 const goodsSelectPopupRef = ref()
-const goodsSelect = (value:any)=>{
-    const goods_info:any=Object.values(deepClone(value))[0]
-    formData.value.product_list =deepClone(goods_info.skuList.map((el:any)=>{
+const goodsSelect = (value:any) => {
+    const goods_info: any = Object.values(deepClone(value))[0]
+    formData.value.product_list = deepClone(goods_info.skuList.map((el: any) => {
         el.goods_stock = el.stock + ''
         el.goods_price = el.price + ''
         el.limit_num = ''
@@ -553,17 +567,21 @@ const goodsSelect = (value:any)=>{
         return el
     }))
     formData.value.goods_info = {
-        goods_name:goods_info.goods_name,
-        goods_cover:goods_info.goods_cover,
-        goods_price:goods_info.goodsSku.price,
-        goods_id:goods_info.goods_id
+        goods_name: goods_info.goods_name,
+        goods_cover: goods_info.goods_cover,
+        goods_price: goods_info.goodsSku.price,
+        goods_id: goods_info.goods_id
     }
     formData.value.image = goods_info.goods_image
     formData.value.names = goods_info.goods_name
     formData.value.title = goods_info.sub_title
     formData.value.content = goods_info.goods_desc
-    if(formRef.value) formRef.value.validateField('product_list').catch(()=>{})
+    if (formRef.value) {
+        formRef.value.validateField('product_list').catch(() => {
+        })
+    }
 }
+
 interface batchOperationInterface {
     stock:any,
     limit_num:any,
@@ -571,10 +589,10 @@ interface batchOperationInterface {
     price:any,
 }
 const batchOperation = ref<batchOperationInterface>({
-    stock:'',
-    limit_num:'',
-    point:'',
-    price:'',
+    stock: '',
+    limit_num: '',
+    point: '',
+    price: ''
 })
 // 批量复选框
 const toggleCheckbox = ref()
@@ -607,23 +625,23 @@ const handleSelectionChange = (val: []) => {
         toggleCheckbox.value = true
     }
 }
-//批量设置确认按钮
-const saveBatch = ()=>{
-    if(!multipleSelection.value.length){
+// 批量设置确认按钮
+const saveBatch = () => {
+    if (!multipleSelection.value.length) {
         ElMessage({
             type: 'warning',
             message: `${t('batchEmptySelectedGoodsTips')}`
         })
         return
     }
-    if(batchOperation.value.stock){
+    if (batchOperation.value.stock) {
         if (isNaN(batchOperation.value.stock) || !regExp.number.test(batchOperation.value.stock)) {
             ElMessage({
                 type: 'warning',
                 message: `${t('stockTips')}`
             })
             return
-        } else if (batchOperation.value.stock <=0) {
+        } else if (batchOperation.value.stock <= 0) {
             ElMessage({
                 type: 'warning',
                 message: `${t('stockTipsTwo')}`
@@ -631,14 +649,14 @@ const saveBatch = ()=>{
             return
         }
     }
-    if(batchOperation.value.limit_num){
+    if (batchOperation.value.limit_num) {
         if (isNaN(batchOperation.value.limit_num) || !regExp.number.test(batchOperation.value.limit_num)) {
             ElMessage({
                 type: 'warning',
                 message: `${t('limitTips')}`
             })
             return
-        } else if (batchOperation.value.limit_num <=0) {
+        } else if (batchOperation.value.limit_num <= 0) {
             ElMessage({
                 type: 'warning',
                 message: `${t('limitTipsTwo')}`
@@ -646,14 +664,14 @@ const saveBatch = ()=>{
             return
         }
     }
-    if(batchOperation.value.point){
+    if (batchOperation.value.point) {
         if (isNaN(batchOperation.value.point) || !regExp.number.test(batchOperation.value.point)) {
             ElMessage({
                 type: 'warning',
                 message: `${t('pointTips')}`
             })
             return
-        } else if (batchOperation.value.point <=0) {
+        } else if (batchOperation.value.point <= 0) {
             ElMessage({
                 type: 'warning',
                 message: `${t('pointTipsTwo')}`
@@ -661,14 +679,14 @@ const saveBatch = ()=>{
             return
         }
     }
-    if(batchOperation.value.price){
+    if (batchOperation.value.price) {
         if (isNaN(batchOperation.value.price) || !regExp.digit.test(batchOperation.value.price)) {
             ElMessage({
                 type: 'warning',
                 message: `${t('moneyTips')}`
             })
             return
-        } else if (batchOperation.value.price <0) {
+        } else if (batchOperation.value.price < 0) {
             ElMessage({
                 type: 'warning',
                 message: `${t('moneyTipsTwo')}`
@@ -676,67 +694,70 @@ const saveBatch = ()=>{
             return
         }
     }
-    formData.value.product_list.forEach((el:any,index:number)=>{
-        multipleSelection.value.forEach((v:any)=>{
-            if(v.sku_id === el.sku_id){
-                if(batchOperation.value.stock) el.stock = batchOperation.value.stock+''
-                if(batchOperation.value.limit_num) el.limit_num = batchOperation.value.limit_num+''
-                if(batchOperation.value.point) el.point = batchOperation.value.point+''
-                if(batchOperation.value.price) el.price = batchOperation.value.price+''
-                if(formRef.value){
-                    formRef.value.validateField('product_list.'+ index + '.stock').catch(()=>{})
-                    formRef.value.validateField('product_list.'+ index + '.limit_num').catch(()=>{})
-                    formRef.value.validateField('product_list.'+ index + '.point').catch(()=>{})
-                    formRef.value.validateField('product_list.'+ index + '.price').catch(()=>{})
+    formData.value.product_list.forEach((el: any, index: number) => {
+        multipleSelection.value.forEach((v: any) => {
+            if (v.sku_id === el.sku_id) {
+                if (batchOperation.value.stock) el.stock = batchOperation.value.stock + ''
+                if (batchOperation.value.limit_num) el.limit_num = batchOperation.value.limit_num + ''
+                if (batchOperation.value.point) el.point = batchOperation.value.point + ''
+                if (batchOperation.value.price) el.price = batchOperation.value.price + ''
+                if (formRef.value) {
+                    formRef.value.validateField('product_list.' + index + '.stock').catch(() => {
+                    })
+                    formRef.value.validateField('product_list.' + index + '.limit_num').catch(() => {
+                    })
+                    formRef.value.validateField('product_list.' + index + '.point').catch(() => {
+                    })
+                    formRef.value.validateField('product_list.' + index + '.price').catch(() => {
+                    })
                 }
             }
         })
-
     })
     isIndeterminate.value = false
     toggleCheckbox.value = false
-    batchOperation.value={
-            stock:'',
-            limit_num:'',
-            point:'',
-            price:'',
+    batchOperation.value = {
+        stock: '',
+        limit_num: '',
+        point: '',
+        price: ''
     }
     productListTableRef.value.clearSelection()
 }
-/********** 优惠券 ***********/
-const couponSelect = (value:any)=>{
+/** ******** 优惠券 ***********/
+const couponSelect = (value:any) => {
     formData.value.product_list = Object.values(value)
 }
-/**** 提交 ****/
+/** ** 提交 ****/
 const onSave = async (formEl: FormInstance | undefined) => {
     if (loading.value || !formEl) return
     await formEl.validate(async (valid) => {
         if (valid) {
             loading.value = true
-           
-            if(formData.value.type == 'goods'){
-                formData.value.product_detail = JSON.stringify(formData.value.product_list.map((el:any)=>{
+
+            if (formData.value.type == 'goods') {
+                formData.value.product_detail = JSON.stringify(formData.value.product_list.map((el: any) => {
                     return {
-                        goods_id:el.goods_id,
-                        sku_id:el.sku_id,
-                        point:el.point||'0',
-                        price:el.price||'0',
-                        limit_num:el.limit_num||'0',
-                        stock:el.stock||'0',
-                        is_enabled:el.is_enabled
+                        goods_id: el.goods_id,
+                        sku_id: el.sku_id,
+                        point: el.point || '0',
+                        price: el.price || '0',
+                        limit_num: el.limit_num || '0',
+                        stock: el.stock || '0',
+                        is_enabled: el.is_enabled
                     }
-                }).filter((el:any)=>el.is_enabled===1))
-            } else if(formData.value.type == 'coupon'){
-                formData.value.product_detail = JSON.stringify(formData.value.product_list.map((el:any)=>{
+                }).filter((el: any) => el.is_enabled === 1))
+            } else if (formData.value.type == 'coupon') {
+                formData.value.product_detail = JSON.stringify(formData.value.product_list.map((el: any) => {
                     return {
-                        coupon_id:el.id,
+                        coupon_id: el.id
                     }
                 }))
-            }else{
-                if(formData.value.isBalance){
-                    formData.value.product_detail=JSON.stringify([{balance:formData.value.balance}])
-                }else{
-                    formData.value.product_detail=JSON.stringify([{money:formData.value.balance}])
+            } else {
+                if (formData.value.isBalance) {
+                    formData.value.product_detail = JSON.stringify([{ balance: formData.value.balance }])
+                } else {
+                    formData.value.product_detail = JSON.stringify([{ money: formData.value.balance }])
                 }
             }
             // formData.value.goods_data =  JSON.stringify(formData.value.product_list.filter((el:any)=>{
@@ -752,8 +773,9 @@ const onSave = async (formEl: FormInstance | undefined) => {
         }
     })
 }
+
 const back = () => {
-    history.back()
+    router.push('/phone_shop/marketing/exchange/goods_list')
 }
 </script>
 

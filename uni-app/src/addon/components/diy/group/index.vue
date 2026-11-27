@@ -132,57 +132,6 @@
                 <template v-if="component.componentName == 'RecycleSendButton'">
                    <diy-recycle-send-button ref="diyRecycleSendButtonRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.RecycleSendButton" @update:componentIsShow="component.componentIsShow = $event" />
                 </template>
-                <template v-if="component.componentName == 'CardList'">
-                   <diy-card-list ref="diyCardListRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.CardList" @update:componentIsShow="component.componentIsShow = $event" />
-                </template>
-                <template v-if="component.componentName == 'HomeServiceBanner'">
-                   <diy-homeService-banner ref="diyHomeServiceBannerRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.HomeServiceBanner" @update:componentIsShow="component.componentIsShow = $event" />
-                </template>
-                <template v-if="component.componentName == 'HomeServiceCard'">
-                   <diy-homeService-card ref="diyHomeServiceCardRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.HomeServiceCard" @update:componentIsShow="component.componentIsShow = $event" />
-                </template>
-                <template v-if="component.componentName == 'HomeServiceCardList'">
-                   <diy-homeService-cardList ref="diyHomeServiceCardListRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.HomeServiceCardList" @update:componentIsShow="component.componentIsShow = $event" />
-                </template>
-                <template v-if="component.componentName == 'HomeServiceCarouselSearch'">
-                   <diy-homeService-carousel-search ref="diyHomeServiceCarouselSearchRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.HomeServiceCarouselSearch" @update:componentIsShow="component.componentIsShow = $event" />
-                </template>
-                <template v-if="component.componentName == 'HomeServiceGoodsList'">
-                   <diy-homeService-goods-list ref="diyHomeServiceGoodsListRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.HomeServiceGoodsList" @update:componentIsShow="component.componentIsShow = $event" />
-                </template>
-                <template v-if="component.componentName == 'HomeServiceGuarantee'">
-                   <diy-homeService-guarantee ref="diyHomeServiceGuaranteeRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.HomeServiceGuarantee" @update:componentIsShow="component.componentIsShow = $event" />
-                </template>
-                <template v-if="component.componentName == 'HomeServiceLowCost'">
-                   <diy-homeService-lowCost ref="diyHomeServiceLowCostRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.HomeServiceLowCost" @update:componentIsShow="component.componentIsShow = $event" />
-                </template>
-                <template v-if="component.componentName == 'HomeServiceManyGoodsList'">
-                   <diy-homeService-manyGoodsList ref="diyHomeServiceManyGoodsListRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.HomeServiceManyGoodsList" @update:componentIsShow="component.componentIsShow = $event" />
-                </template>
-                <template v-if="component.componentName == 'HomeServiceMemberInfo'">
-                   <diy-homeService-member-info ref="diyHomeServiceMemberInfoRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.HomeServiceMemberInfo" @update:componentIsShow="component.componentIsShow = $event" />
-                </template>
-                <template v-if="component.componentName == 'HomeServiceOrderInfo'">
-                   <diy-homeService-order-info ref="diyHomeServiceOrderInfoRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.HomeServiceOrderInfo" @update:componentIsShow="component.componentIsShow = $event" />
-                </template>
-                <template v-if="component.componentName == 'HomeServicePanicBuying'">
-                   <diy-homeService-panicBuying ref="diyHomeServicePanicBuyingRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.HomeServicePanicBuying" @update:componentIsShow="component.componentIsShow = $event" />
-                </template>
-                <template v-if="component.componentName == 'HomeServiceRubikCube'">
-                   <diy-homeService-rubikCube ref="diyHomeServiceRubikCubeRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.HomeServiceRubikCube" @update:componentIsShow="component.componentIsShow = $event" />
-                </template>
-                <template v-if="component.componentName == 'HomeServiceSearch'">
-                   <diy-homeService-search ref="diyHomeServiceSearchRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.HomeServiceSearch" @update:componentIsShow="component.componentIsShow = $event" />
-                </template>
-                <template v-if="component.componentName == 'HomeServiceSettle'">
-                   <diy-homeService-settle ref="diyHomeServiceSettleRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.HomeServiceSettle" @update:componentIsShow="component.componentIsShow = $event" />
-                </template>
-                <template v-if="component.componentName == 'HomeServiceSubguarantee'">
-                   <diy-homeService-subguarantee ref="diyHomeServiceSubguaranteeRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.HomeServiceSubguarantee" @update:componentIsShow="component.componentIsShow = $event" />
-                </template>
-                <template v-if="component.componentName == 'HomeServiceTechnician'">
-                   <diy-homeService-technician ref="diyHomeServiceTechnicianRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.HomeServiceTechnician" @update:componentIsShow="component.componentIsShow = $event" />
-                </template>
                 <template v-if="component.componentName == 'PhoneGoodsCoupon'">
                    <diy-phone-goods-coupon ref="diyPhoneGoodsCouponRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.PhoneGoodsCoupon" @update:componentIsShow="component.componentIsShow = $event" />
                 </template>
@@ -198,8 +147,47 @@
                 <template v-if="component.componentName == 'PhoneShopExchangeInfo'">
                    <diy-phone-shop-exchange-info ref="diyPhoneShopExchangeInfoRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.PhoneShopExchangeInfo" @update:componentIsShow="component.componentIsShow = $event" />
                 </template>
+                <template v-if="component.componentName == 'PhoneShopGoodsDetailAttr'">
+                   <diy-phone-shop-goods-detail-attr ref="diyPhoneShopGoodsDetailAttrRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.PhoneShopGoodsDetailAttr" @update:componentIsShow="component.componentIsShow = $event" />
+                </template>
+                <template v-if="component.componentName == 'PhoneShopGoodsDetailBasicInfo'">
+                   <diy-phone-shop-goods-detail-basic-info ref="diyPhoneShopGoodsDetailBasicInfoRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.PhoneShopGoodsDetailBasicInfo" @update:componentIsShow="component.componentIsShow = $event" />
+                </template>
+                <template v-if="component.componentName == 'PhoneShopGoodsDetailBottom'">
+                   <diy-phone-shop-goods-detail-bottom ref="diyPhoneShopGoodsDetailBottomRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.PhoneShopGoodsDetailBottom" @update:componentIsShow="component.componentIsShow = $event" />
+                </template>
+                <template v-if="component.componentName == 'PhoneShopGoodsDetailDesc'">
+                   <diy-phone-shop-goods-detail-desc ref="diyPhoneShopGoodsDetailDescRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.PhoneShopGoodsDetailDesc" @update:componentIsShow="component.componentIsShow = $event" />
+                </template>
+                <template v-if="component.componentName == 'PhoneShopGoodsDetailEvaluate'">
+                   <diy-phone-shop-goods-detail-evaluate ref="diyPhoneShopGoodsDetailEvaluateRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.PhoneShopGoodsDetailEvaluate" @update:componentIsShow="component.componentIsShow = $event" />
+                </template>
+                <template v-if="component.componentName == 'PhoneShopGoodsDetailPurchaseService'">
+                   <diy-phone-shop-goods-detail-purchase-service ref="diyPhoneShopGoodsDetailPurchaseServiceRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.PhoneShopGoodsDetailPurchaseService" @update:componentIsShow="component.componentIsShow = $event" />
+                </template>
+                <template v-if="component.componentName == 'PhoneShopGoodsDetailQc'">
+                   <diy-phone-shop-goods-detail-qc ref="diyPhoneShopGoodsDetailQcRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.PhoneShopGoodsDetailQc" @update:componentIsShow="component.componentIsShow = $event" />
+                </template>
+                <template v-if="component.componentName == 'PhoneShopGoodsDetailSow'">
+                   <diy-phone-shop-goods-detail-sow ref="diyPhoneShopGoodsDetailSowRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.PhoneShopGoodsDetailSow" @update:componentIsShow="component.componentIsShow = $event" />
+                </template>
+                <template v-if="component.componentName == 'PhoneShopGoodsHot'">
+                   <diy-phone-shop-goods-hot ref="diyPhoneShopGoodsHotRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.PhoneShopGoodsHot" @update:componentIsShow="component.componentIsShow = $event" />
+                </template>
+                <template v-if="component.componentName == 'PhoneShopGoodsRanking'">
+                   <diy-phone-shop-goods-ranking ref="diyPhoneShopGoodsRankingRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.PhoneShopGoodsRanking" @update:componentIsShow="component.componentIsShow = $event" />
+                </template>
+                <template v-if="component.componentName == 'PhoneShopGoodsRecommend'">
+                   <diy-phone-shop-goods-recommend ref="diyPhoneShopGoodsRecommendRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.PhoneShopGoodsRecommend" @update:componentIsShow="component.componentIsShow = $event" />
+                </template>
+                <template v-if="component.componentName == 'PhoneShopMemberBarcode'">
+                   <diy-phone-shop-member-barcode ref="diyPhoneShopMemberBarcodeRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.PhoneShopMemberBarcode" @update:componentIsShow="component.componentIsShow = $event" />
+                </template>
                 <template v-if="component.componentName == 'PhoneShopMemberInfo'">
                    <diy-phone-shop-member-info ref="diyPhoneShopMemberInfoRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.PhoneShopMemberInfo" @update:componentIsShow="component.componentIsShow = $event" />
+                </template>
+                <template v-if="component.componentName == 'PhoneShopNewcomer'">
+                   <diy-phone-shop-newcomer ref="diyPhoneShopNewcomerRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.PhoneShopNewcomer" @update:componentIsShow="component.componentIsShow = $event" />
                 </template>
                 <template v-if="component.componentName == 'PhoneShopOrderInfo'">
                    <diy-phone-shop-order-info ref="diyPhoneShopOrderInfoRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.PhoneShopOrderInfo" @update:componentIsShow="component.componentIsShow = $event" />
@@ -207,64 +195,116 @@
                 <template v-if="component.componentName == 'PhoneShopSearch'">
                    <diy-phone-shop-search ref="diyPhoneShopSearchRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.PhoneShopSearch" @update:componentIsShow="component.componentIsShow = $event" />
                 </template>
-                <template v-if="component.componentName == 'AiImageHelp'">
-                   <diy-ai-image-help ref="diyAiImageHelpRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.AiImageHelp" @update:componentIsShow="component.componentIsShow = $event" />
+                <template v-if="component.componentName == 'PhoneSingleRecommend'">
+                   <diy-phone-single-recommend ref="diyPhoneSingleRecommendRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.PhoneSingleRecommend" @update:componentIsShow="component.componentIsShow = $event" />
                 </template>
-                <template v-if="component.componentName == 'AiImageMember'">
-                   <diy-ai-image-member ref="diyAiImageMemberRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.AiImageMember" @update:componentIsShow="component.componentIsShow = $event" />
+                <template v-if="component.componentName == 'RecycleQuotationList'">
+                   <diy-recycle-quotation-list ref="diyRecycleQuotationListRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.RecycleQuotationList" @update:componentIsShow="component.componentIsShow = $event" />
                 </template>
-                <template v-if="component.componentName == 'AiImageMemberInfo'">
-                   <diy-ai-image-member-info ref="diyAiImageMemberInfoRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.AiImageMemberInfo" @update:componentIsShow="component.componentIsShow = $event" />
+                <template v-if="component.componentName == 'RecycleSpiderQuotationList'">
+                   <diy-recycle-spider-quotation-list ref="diyRecycleSpiderQuotationListRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.RecycleSpiderQuotationList" @update:componentIsShow="component.componentIsShow = $event" />
                 </template>
-                <template v-if="component.componentName == 'AiImageModel'">
-                   <diy-ai-image-model ref="diyAiImageModelRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.AiImageModel" @update:componentIsShow="component.componentIsShow = $event" />
+                <template v-if="component.componentName == 'RecycleSpiderSearch'">
+                   <diy-recycle-spider-search ref="diyRecycleSpiderSearchRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.RecycleSpiderSearch" @update:componentIsShow="component.componentIsShow = $event" />
+                </template>
+                <template v-if="component.componentName == 'AiAssistantEntry'">
+                   <diy-ai-assistant-entry ref="diyAiAssistantEntryRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.AiAssistantEntry" @update:componentIsShow="component.componentIsShow = $event" />
+                </template>
+                <template v-if="component.componentName == 'ProjectCenterAreaEligibility'">
+                   <diy-project-center-area-eligibility ref="diyProjectCenterAreaEligibilityRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.ProjectCenterAreaEligibility" @update:componentIsShow="component.componentIsShow = $event" />
+                </template>
+                <template v-if="component.componentName == 'ProjectCenterCollapse'">
+                   <diy-project-center-collapse ref="diyProjectCenterCollapseRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.ProjectCenterCollapse" @update:componentIsShow="component.componentIsShow = $event" />
+                </template>
+                <template v-if="component.componentName == 'ProjectCenterIncomeBoard'">
+                   <diy-project-center-income-board ref="diyProjectCenterIncomeBoardRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.ProjectCenterIncomeBoard" @update:componentIsShow="component.componentIsShow = $event" />
+                </template>
+                <template v-if="component.componentName == 'ProjectCenterReferenceGallery'">
+                   <diy-project-center-reference-gallery ref="diyProjectCenterReferenceGalleryRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.ProjectCenterReferenceGallery" @update:componentIsShow="component.componentIsShow = $event" />
+                </template>
+                <template v-if="component.componentName == 'ProjectFormLocation'">
+                   <diy-project-form-location ref="diyProjectFormLocationRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.ProjectFormLocation" @update:componentIsShow="component.componentIsShow = $event" />
+                </template>
+                <template v-if="component.componentName == 'LeadBusinessNavigation'">
+                   <diy-lead-business-navigation ref="diyLeadBusinessNavigationRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.LeadBusinessNavigation" @update:componentIsShow="component.componentIsShow = $event" />
+                </template>
+                <template v-if="component.componentName == 'LeadCooperationEntry'">
+                   <diy-lead-cooperation-entry ref="diyLeadCooperationEntryRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.LeadCooperationEntry" @update:componentIsShow="component.componentIsShow = $event" />
+                </template>
+                <template v-if="component.componentName == 'LeadCooperationHero'">
+                   <diy-lead-cooperation-hero ref="diyLeadCooperationHeroRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.LeadCooperationHero" @update:componentIsShow="component.componentIsShow = $event" />
+                </template>
+                <template v-if="component.componentName == 'LeadProfileBenefits'">
+                   <diy-lead-profile-benefits ref="diyLeadProfileBenefitsRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.LeadProfileBenefits" @update:componentIsShow="component.componentIsShow = $event" />
+                </template>
+                <template v-if="component.componentName == 'LeadProfileIdentity'">
+                   <diy-lead-profile-identity ref="diyLeadProfileIdentityRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.LeadProfileIdentity" @update:componentIsShow="component.componentIsShow = $event" />
+                </template>
+                <template v-if="component.componentName == 'LeadProfilePromotion'">
+                   <diy-lead-profile-promotion ref="diyLeadProfilePromotionRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.LeadProfilePromotion" @update:componentIsShow="component.componentIsShow = $event" />
+                </template>
+                <template v-if="component.componentName == 'LeadProfileTools'">
+                   <diy-lead-profile-tools ref="diyLeadProfileToolsRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.LeadProfileTools" @update:componentIsShow="component.componentIsShow = $event" />
+                </template>
+                <template v-if="component.componentName == 'LeadRoleEntry'">
+                   <diy-lead-role-entry ref="diyLeadRoleEntryRef" :component="component" :global="data.global" :index="index" :scrollBool="diyGroup.componentsScrollBool.LeadRoleEntry" @update:componentIsShow="component.componentIsShow = $event" />
                 </template>
                 </view>
             </view>
         </template>
-        <template v-if="diyStore.mode == '' && data.global && diyGroup.showCopyright.value && data.global.copyright && data.global.copyright.isShow">
-           <copy-right />
+        <template v-if="data.global && diyGroup.showCopyright.value && data.global.copyright && data.global.copyright.isShow">
+           <copy-right :textColor="data.global.copyright.textColor" />
         </template>
 
         <template v-if="diyStore.mode == '' && data.global && data.global.bottomTabBar && data.global.bottomTabBar.isShow">
             <view class="pt-[20rpx]"></view>
-            <tabbar :addon="data.global.bottomTabBar.designNav.key" />
+            <tabbar :addon="data.global.bottomTabBar.designNav?.key" />
         </template>
     </view>
 </template>
 <script lang="ts" setup>
-   import diyRecycleCategory from '@/addon/recycle/components/diy/recycle-category/index.vue';
-   import diyRecycleOrderOverview from '@/addon/recycle/components/diy/recycle-order-overview/index.vue';
-   import diyRecycleSendButton from '@/addon/recycle/components/diy/recycle-send-button/index.vue';
-   import diyCardList from '@/addon/home_service/components/diy/card-list/index.vue';
-   import diyHomeServiceBanner from '@/addon/home_service/components/diy/homeService-banner/index.vue';
-   import diyHomeServiceCard from '@/addon/home_service/components/diy/homeService-card/index.vue';
-   import diyHomeServiceCardList from '@/addon/home_service/components/diy/homeService-cardList/index.vue';
-   import diyHomeServiceCarouselSearch from '@/addon/home_service/components/diy/homeService-carousel-search/index.vue';
-   import diyHomeServiceGoodsList from '@/addon/home_service/components/diy/homeService-goods-list/index.vue';
-   import diyHomeServiceGuarantee from '@/addon/home_service/components/diy/homeService-guarantee/index.vue';
-   import diyHomeServiceLowCost from '@/addon/home_service/components/diy/homeService-lowCost/index.vue';
-   import diyHomeServiceManyGoodsList from '@/addon/home_service/components/diy/homeService-manyGoodsList/index.vue';
-   import diyHomeServiceMemberInfo from '@/addon/home_service/components/diy/homeService-member-info/index.vue';
-   import diyHomeServiceOrderInfo from '@/addon/home_service/components/diy/homeService-order-info/index.vue';
-   import diyHomeServicePanicBuying from '@/addon/home_service/components/diy/homeService-panicBuying/index.vue';
-   import diyHomeServiceRubikCube from '@/addon/home_service/components/diy/homeService-rubikCube/index.vue';
-   import diyHomeServiceSearch from '@/addon/home_service/components/diy/homeService-search/index.vue';
-   import diyHomeServiceSettle from '@/addon/home_service/components/diy/homeService-settle/index.vue';
-   import diyHomeServiceSubguarantee from '@/addon/home_service/components/diy/homeService-subguarantee/index.vue';
-   import diyHomeServiceTechnician from '@/addon/home_service/components/diy/homeService-technician/index.vue';
+   import diyRecycleCategory from '@/addon/hsx_recycle/components/diy/recycle-category/index.vue';
+   import diyRecycleOrderOverview from '@/addon/hsx_recycle/components/diy/recycle-order-overview/index.vue';
+   import diyRecycleSendButton from '@/addon/hsx_recycle/components/diy/recycle-send-button/index.vue';
    import diyPhoneGoodsCoupon from '@/addon/phone_shop/components/diy/phone-goods-coupon/index.vue';
    import diyPhoneGoodsList from '@/addon/phone_shop/components/diy/phone-goods-list/index.vue';
    import diyPhoneManyGoodsList from '@/addon/phone_shop/components/diy/phone-many-goods-list/index.vue';
    import diyPhoneShopExchangeGoods from '@/addon/phone_shop/components/diy/phone-shop-exchange-goods/index.vue';
    import diyPhoneShopExchangeInfo from '@/addon/phone_shop/components/diy/phone-shop-exchange-info/index.vue';
+   import diyPhoneShopGoodsDetailAttr from '@/addon/phone_shop/components/diy/phone-shop-goods-detail-attr/index.vue';
+   import diyPhoneShopGoodsDetailBasicInfo from '@/addon/phone_shop/components/diy/phone-shop-goods-detail-basic-info/index.vue';
+   import diyPhoneShopGoodsDetailBottom from '@/addon/phone_shop/components/diy/phone-shop-goods-detail-bottom/index.vue';
+   import diyPhoneShopGoodsDetailDesc from '@/addon/phone_shop/components/diy/phone-shop-goods-detail-desc/index.vue';
+   import diyPhoneShopGoodsDetailEvaluate from '@/addon/phone_shop/components/diy/phone-shop-goods-detail-evaluate/index.vue';
+   import diyPhoneShopGoodsDetailPurchaseService from '@/addon/phone_shop/components/diy/phone-shop-goods-detail-purchase-service/index.vue';
+   import diyPhoneShopGoodsDetailQc from '@/addon/phone_shop/components/diy/phone-shop-goods-detail-qc/index.vue';
+   import diyPhoneShopGoodsDetailSow from '@/addon/phone_shop/components/diy/phone-shop-goods-detail-sow/index.vue';
+   import diyPhoneShopGoodsHot from '@/addon/phone_shop/components/diy/phone-shop-goods-hot/index.vue';
+   import diyPhoneShopGoodsRanking from '@/addon/phone_shop/components/diy/phone-shop-goods-ranking/index.vue';
+   import diyPhoneShopGoodsRecommend from '@/addon/phone_shop/components/diy/phone-shop-goods-recommend/index.vue';
+   import diyPhoneShopMemberBarcode from '@/addon/phone_shop/components/diy/phone-shop-member-barcode/index.vue';
    import diyPhoneShopMemberInfo from '@/addon/phone_shop/components/diy/phone-shop-member-info/index.vue';
+   import diyPhoneShopNewcomer from '@/addon/phone_shop/components/diy/phone-shop-newcomer/index.vue';
    import diyPhoneShopOrderInfo from '@/addon/phone_shop/components/diy/phone-shop-order-info/index.vue';
    import diyPhoneShopSearch from '@/addon/phone_shop/components/diy/phone-shop-search/index.vue';
-   import diyAiImageHelp from '@/addon/ai_image/components/diy/ai-image-help/index.vue';
-   import diyAiImageMember from '@/addon/ai_image/components/diy/ai-image-member/index.vue';
-   import diyAiImageMemberInfo from '@/addon/ai_image/components/diy/ai-image-member-info/index.vue';
-   import diyAiImageModel from '@/addon/ai_image/components/diy/ai-image-model/index.vue';
+   import diyPhoneSingleRecommend from '@/addon/phone_shop/components/diy/phone-single-recommend/index.vue';
+   import diyRecycleQuotationList from '@/addon/recycle_daheng_quote/components/diy/recycle-quotation-list/index.vue';
+   import diyRecycleSpiderQuotationList from '@/addon/recycle_quote_spider/components/diy/recycle-spider-quotation-list/index.vue';
+   import diyRecycleSpiderSearch from '@/addon/recycle_quote_spider/components/diy/recycle-spider-search/index.vue';
+   import diyAiAssistantEntry from '@/addon/hsx_ai/components/diy/ai-assistant-entry/index.vue';
+   import diyProjectCenterAreaEligibility from '@/addon/hsx_project_center/components/diy/project-center-area-eligibility/index.vue';
+   import diyProjectCenterCollapse from '@/addon/hsx_project_center/components/diy/project-center-collapse/index.vue';
+   import diyProjectCenterIncomeBoard from '@/addon/hsx_project_center/components/diy/project-center-income-board/index.vue';
+   import diyProjectCenterReferenceGallery from '@/addon/hsx_project_center/components/diy/project-center-reference-gallery/index.vue';
+   import diyProjectFormLocation from '@/addon/hsx_project_center/components/diy/project-form-location/index.vue';
+   import diyLeadBusinessNavigation from '@/addon/hsx_lead/components/diy/lead-business-navigation/index.vue';
+   import diyLeadCooperationEntry from '@/addon/hsx_lead/components/diy/lead-cooperation-entry/index.vue';
+   import diyLeadCooperationHero from '@/addon/hsx_lead/components/diy/lead-cooperation-hero/index.vue';
+   import diyLeadProfileBenefits from '@/addon/hsx_lead/components/diy/lead-profile-benefits/index.vue';
+   import diyLeadProfileIdentity from '@/addon/hsx_lead/components/diy/lead-profile-identity/index.vue';
+   import diyLeadProfilePromotion from '@/addon/hsx_lead/components/diy/lead-profile-promotion/index.vue';
+   import diyLeadProfileTools from '@/addon/hsx_lead/components/diy/lead-profile-tools/index.vue';
+   import diyLeadRoleEntry from '@/addon/hsx_lead/components/diy/lead-role-entry/index.vue';
    import topTabbar from '@/components/top-tabbar/top-tabbar.vue'
    import popAds from '@/components/pop-ads/pop-ads.vue'
    import useDiyStore from '@/app/stores/diy';

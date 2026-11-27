@@ -8,5 +8,7 @@
   "evaluate": "评价",
   "selectedEvaluate": "查看评价",
   "orderListempty": "暂无订单",
+  "deliveryType":"配送方式",
+  "money":"元",
   "point": "积分"
 }

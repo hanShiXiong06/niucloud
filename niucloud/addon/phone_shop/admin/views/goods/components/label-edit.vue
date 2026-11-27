@@ -1,16 +1,12 @@
 <template>
     <el-dialog v-model="showDialog" :title="title" width="500px" class="diy-dialog-wrap" :destroy-on-close="true">
-        <el-form :model="formData" label-width="120px" ref="formRef" :rules="formRules" class="page-form"
-            v-loading="loading">
+        <el-form :model="formData" label-width="120px" ref="formRef" :rules="formRules" class="page-form" v-loading="loading">
             <el-form-item :label="t('labelName')" prop="label_name">
-                <el-input v-model.trim="formData.label_name" clearable :placeholder="t('labelNamePlaceholder')"
-                    class="input-width" maxlength="10" />
+                <el-input v-model.trim="formData.label_name" clearable :placeholder="t('labelNamePlaceholder')" class="input-width" maxlength="10" />
             </el-form-item>
             <el-form-item :label="t('groupName')" prop="group_id">
-                <el-select v-model="formData.group_id" :placeholder="t('groupNamePlaceholder')" clearable
-                    class="input-width">
-                    <el-option v-for="item in prop.groupList" :key="item.group_id" :label="item.group_name"
-                        :value="item.group_id" />
+                <el-select v-model="formData.group_id" :placeholder="t('groupNamePlaceholder')" clearable class="input-width">
+                    <el-option v-for="item in prop.groupList" :key="item.group_id" :label="item.group_name" :value="item.group_id" />
                 </el-select>
             </el-form-item>
             <el-form-item :label="t('styleType')">
@@ -41,14 +37,11 @@
                 <el-switch v-model="formData.status" :active-value="1" :inactive-value="0" />
             </el-form-item>
 
-            <el-form-item :label="t('memo')">
-                <el-input v-model.trim="formData.memo" type="textarea" clearable :placeholder="t('memoPlaceholder')"
-                    class="input-width" maxlength="50" />
+            <el-form-item :label="t('memo')" >
+                <el-input v-model.trim="formData.memo" type="textarea" clearable :placeholder="t('memoPlaceholder')" class="input-width" maxlength="50"/>
             </el-form-item>
-            <el-form-item :label="t('sort')">
-                <el-input v-model.trim="formData.sort" clearable :placeholder="t('sortPlaceholder')" class="input-width"
-                    @keyup="filterNumber($event)" maxlength="6" show-word-limit
-                    @blur="formData.sort = $event.target.value" />
+            <el-form-item :label="t('sort')" >
+                <el-input v-model.trim="formData.sort" clearable :placeholder="t('sortPlaceholder')" class="input-width" @keyup="filterNumber($event)" maxlength="8" show-word-limit @blur="formData.sort = $event.target.value"/>
             </el-form-item>
         </el-form>
 
@@ -66,7 +59,7 @@ import { ref, reactive, computed } from 'vue'
 import { t } from '@/lang'
 import type { FormInstance } from 'element-plus'
 import { filterNumber } from '@/utils/common'
-import { addLabel, editLabel, getLabelInfo } from '@/addon/phone_shop//api/goods'
+import { addLabel, editLabel, getLabelInfo } from '@/addon/phone_shop/api/goods'
 
 const prop = defineProps({
     groupList: {
@@ -90,7 +83,7 @@ const initialFormData = {
     color_json: {
         text_color: 'rgba(255, 255, 255, 1)',
         bg_color: 'rgba(255, 65, 66, 1)',
-        border_color: '',
+        border_color: ''
     },
     icon: '',
     memo: '',
@@ -188,7 +181,7 @@ defineExpose({
 
 <style lang="scss" scoped></style>
 <style lang="scss">
-.diy-dialog-wrap .el-form-item__label {
-    height: auto !important;
+.diy-dialog-wrap .el-form-item__label{
+    height: auto  !important;
 }
 </style>

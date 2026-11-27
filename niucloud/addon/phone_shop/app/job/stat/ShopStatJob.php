@@ -8,9 +8,9 @@
 // +----------------------------------------------------------------------
 // | Author: Niucloud Team
 // +----------------------------------------------------------------------
-namespace addon\shop\app\job\stat;
+namespace addon\phone_shop\app\job\stat;
 
-use addon\shop\app\model\order\Order;
+use addon\phone_shop\app\model\order\Order;
 use app\service\core\stat\CoreStatService;
 use core\base\BaseJob;
 

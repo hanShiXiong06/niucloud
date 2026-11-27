@@ -1,0 +1,2 @@
+-- The schema is removed by addon\recycle_quote_spider\Addon::uninstall().
+-- Keep this file empty so the framework installer does not run plugin DDL in a transaction.

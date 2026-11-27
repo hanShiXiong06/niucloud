@@ -41,7 +41,16 @@ class GoodsCollect extends BaseModel
      */
     public function goods()
     {
-        return $this->hasOne(Goods::class, 'goods_id', 'goods_id')->joinType('left')->withField('goods_id, goods_name,goods_cover')->append([ 'goods_cover_thumb_small' ])->bind([ 'goods_name', 'goods_cover_thumb_small' ]);
+        return $this->hasOne(Goods::class, 'goods_id', 'goods_id')->joinType('left')->withField('site_id,goods_id, goods_name,goods_cover,status')->append([ 'goods_cover_thumb_mid' ])->bind([ 'goods_name', 'goods_cover_thumb_mid','status' ]);
+    }
+
+    /**
+     * 关联默认商品规格
+     * @return \think\model\relation\HasOne
+     */
+    public function goodsSku()
+    {
+        return $this->hasOne(GoodsSku::class, 'goods_id', 'goods_id')->joinType('left')->withField('goods_id,sku_id,sku_name,price,member_price,sale_price')->bind([ 'sku_id', 'sku_name', 'price', 'member_price', 'sale_price' ]);
     }
 
 }

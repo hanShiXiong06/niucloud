@@ -4,12 +4,18 @@ declare ( strict_types = 1 );
 namespace addon\phone_shop\app\listener\poster;
 
 
+use addon\phone_shop\app\dict\active\ActiveDict;
+use addon\phone_shop\app\dict\active\DiscountDict;
+use addon\phone_shop\app\model\active\ActiveGoods;
+use addon\phone_shop\app\model\discount\DiscountGoods;
 use addon\phone_shop\app\model\goods\Goods;
 use addon\phone_shop\app\model\goods\GoodsSku;
 use addon\phone_shop\app\model\goods\Service;
 use addon\phone_shop\app\model\exchange\Exchange;
+use addon\phone_shop\app\service\api\goods\GoodsService;
 use app\model\member\Member;
 use app\service\core\sys\CoreSysConfigService;
+use think\facade\Log;
 
 /**
  * 商品海报数据
@@ -32,6 +38,7 @@ class ShopPoster
             $sku_id = $param[ 'sku_id' ] ?? 0;
             $member_id = $param[ 'member_id' ] ?? 0;
             $mode = $param[ 'mode' ] ?? '';
+            $active = $param[ 'active' ] ?? '';
 
             if ($mode == 'preview') {
                 // 预览模式
@@ -92,24 +99,86 @@ class ShopPoster
             ];
 
             $member_info = [];
+            $show_price_data[] = $sku[ 'sale_price' ];
 
-            if ($member_id > 0) {
-                $url_data[] = [ 'key' => 'mid', 'value' => $member_id ];
+            switch ($active){
+                case ActiveDict::NEWCOMER_DISCOUNT:
+                    if ($member_id > 0){
+                        //查询新人专享活动
+                        $newcomer_goods_info = ( new ActiveGoods() )->field('active_id,active_goods_value')->where([
+                            [ 'goods_id', '=', $goods_id ],
+                            [ 'sku_id', '=', $sku_id ],
+                            [ 'active_class', '=', ActiveDict::NEWCOMER_DISCOUNT ]
+                        ])->with([
+                            'active' => function($query) {
+                                $query->field('active_id,active_desc,active_status,active_value');
+                            }
+                        ])->findOrEmpty()->toArray();
 
-                //查询会员信息
-                $member_info = ( new Member() )->where([ [ 'member_id', '=', $member_id ], [ 'site_id', '=', $site_id ] ])->findOrEmpty();
-
-                if (!empty($member_info)) {
-                    if (empty($member_info[ 'headimg' ])) {
-                        $member_info[ 'headimg' ] = 'static/resource/images/default_headimg.png';
+                        if (!empty($newcomer_goods_info) && $newcomer_goods_info[ 'active' ][ 'active_status' ] == ActiveDict::ACTIVE) {
+                            $url_data[] = [ 'key' => 'type', 'value' => 'nd' ];
+                            $newcomer_price = json_decode($newcomer_goods_info[ 'active_goods_value' ], true)[ 'newcomer_price' ];
+                            if ($newcomer_price > 0) $show_price_data[] = $newcomer_price;
+                        }
                     }
-                }
-            }
+                    break;
+                case ActiveDict::DISCOUNT:
+                    //查看商品是否参加限时折扣活动
+                    $discount = (new DiscountGoods())->where([
+                        [ 'goods_id', '=', $goods_id ],
+                        [ 'sku_id', '=', $sku_id ],
+                        [ 'site_id', '=', $site_id ],
+                        [ 'status', '=', DiscountDict::ACTIVE ],
+                        [ 'is_enabled', '=', DiscountDict::YES ],
+                    ])->findOrEmpty();
+                    if (!$discount->isEmpty()){
+                        $discount_price = $sku[ 'sale_price' ] ?? 0;
+                        if ($discount_price >= 0) $show_price_data[] = $discount_price;
+                    }
+                    break;
+                default:
+                    if ($member_id > 0) {
+                        $url_data[] = [ 'key' => 'mid', 'value' => $member_id ];
 
+                        //查询会员信息
+                        $member_info = ( new Member() )->where([ [ 'member_id', '=', $member_id ], [ 'site_id', '=', $site_id ] ])->findOrEmpty();
+
+                        if (!empty($member_info)) {
+                            if (empty($member_info[ 'headimg' ])) {
+                                $member_info[ 'headimg' ] = 'static/resource/images/default_headimg.png';
+                            }
+                        }
+
+                        // 查询会员价
+                        $goods_service = new GoodsService();
+
+                        $member_price = $goods_service->getMemberPrice($goods_service->getMemberInfo(), $goods[ 'member_discount' ], $sku[ 'member_price' ], $sku[ 'price' ]);
+                        if ($member_price > 0) $show_price_data[] = $member_price;
+                    }
+
+                    //查看商品是否参加限时折扣活动
+                    $discount = (new DiscountGoods())->where([
+                        [ 'goods_id', '=', $goods_id ],
+                        [ 'sku_id', '=', $sku_id ],
+                        [ 'site_id', '=', $site_id ],
+                        [ 'status', '=', DiscountDict::ACTIVE ],
+                        [ 'is_enabled', '=', DiscountDict::YES ],
+                    ])->findOrEmpty();
+                    if (!$discount->isEmpty()){
+                        $discount_price = $sku[ 'sale_price' ] ?? 0;
+                        if ($discount_price >= 0) $show_price_data[] = $discount_price;
+                    }
+
+            }
+            $show_price = min($show_price_data);
+            $max_length = 35;
+            if (mb_strlen($goods_name, 'UTF-8') > $max_length) {
+                $goods_name = mb_substr($goods_name, 0, $max_length, 'UTF-8') . '...';
+            }
             $return_data = [
                 'goods_name' => $goods_name,
 //                'services' => $services,
-                'goods_price' => '￥' . $sku[ 'price' ],
+                'goods_price' => '￥' . $show_price,
                 'goods_market_price' => $market_price_text,
                 'goods_img' => $sku_img,
                 'url' => [
@@ -118,13 +187,13 @@ class ShopPoster
                     'data' => $url_data,
                 ],
             ];
-
             if (!empty($member_info)) {
                 $return_data[ 'nickname' ] = mb_strlen($member_info[ 'nickname' ]) > 10 ? mb_substr($member_info[ 'nickname' ], 0, 7, 'utf-8') . '...' : $member_info[ 'nickname' ];
                 $return_data[ 'headimg' ] = $member_info[ 'headimg' ];
             }
+            Log::write('海报数据'.json_encode($return_data,256));
             return $return_data;
-        } elseif ($type == 'phone_shop_point_goods') {
+        } elseif ($type == 'shop_point_goods') {
 
             // 积分商品 海报模板数据
 
@@ -200,6 +269,7 @@ class ShopPoster
                 $return_data[ 'headimg' ] = $member_info[ 'headimg' ];
             }
             return $return_data;
+
         }
     }
 }

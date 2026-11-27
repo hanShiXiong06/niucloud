@@ -17,6 +17,8 @@
   vertical-align: middle;
   font-size: 18rpx;
   color: #fff;
+  border: 2rpx solid transparent;
+
   &.middle {
     padding: 4rpx 8rpx;
     border-radius: 8rpx;
@@ -39,6 +41,7 @@
   box-sizing: border-box;
   margin-top: 8rpx;
   border: 2rpx solid transparent;
+
   &.middle {
     height: 40rpx;
     padding: 0 12rpx;
@@ -56,10 +59,16 @@
   margin-right: 14rpx;
   box-sizing: border-box;
   margin-top: 8rpx;
+
   &.middle {
     height: 38rpx;
     border-radius: 8rpx;
     margin-right: 16rpx;
   }
 }
+
 /******************** 商品列表 end **********************/
+// 购物车按钮背景颜色
+.cart-btn-bg{
+	background: linear-gradient(127deg, var(--primary-help-color1) 0%, var(--primary-help-color5) 100%);
+}

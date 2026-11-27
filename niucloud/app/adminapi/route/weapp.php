@@ -21,6 +21,7 @@ use think\facade\Route;
 Route::group('weapp', function() {
 
     /***************************************************** 微信配置 ****************************************************/
+    Route::get('auth_url', 'weapp.Auth/getWeappQrcodeUrl');
     Route::get('config', 'weapp.Config/get');
     //设置微信配置
     Route::put('config', 'weapp.Config/set');
@@ -43,8 +44,10 @@ Route::group('weapp', function() {
     Route::get('version', 'weapp.Version/lists');
     //获取预览码
     Route::get('preview', 'weapp.Version/preview');
-    //获取小程序上传日志
+    //获取小程序上传日志（会更新状态）
     Route::get('upload/:key', 'weapp.Version/uploadLog');
+    //直接获取小程序上传日志（不更新状态）
+    Route::get('upload_log/:key', 'weapp.Version/getUploadLogOnly');
 
 
 

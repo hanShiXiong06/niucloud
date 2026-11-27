@@ -21,7 +21,6 @@ use core\base\BaseCoreService;
 class CorePointexChangeService extends BaseCoreService
 {
 
-
     public function __construct()
     {
         parent::__construct();
@@ -36,9 +35,8 @@ class CorePointexChangeService extends BaseCoreService
     public function getInfo($where)
     {
         $field = 'stock,total_exchange_num,id,site_id,type,names,title,image,status,product_detail,point,price,limit_num,content,sort,total_point_num,total_price_num,total_order_num,total_member_num,update_time,create_time';
-        $info = $this->model->withSearch(['names', 'status', 'create_time', 'product_detail', 'sku_id', 'goods_id'], $where)->append(['type_name'])->field($field)->findOrEmpty()->toArray();
+        $info = $this->model->withSearch([ 'names', 'status', 'create_time', 'product_detail', 'sku_id', 'goods_id' ], $where)->append([ 'type_name' ])->field($field)->findOrEmpty()->toArray();
         return $info;
     }
-
 
 }

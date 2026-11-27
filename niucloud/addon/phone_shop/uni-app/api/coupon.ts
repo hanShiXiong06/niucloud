@@ -49,12 +49,14 @@ export function getShopCouponComponents(params: Record<string, any>) {
 export function getMyCouponCount(params: Record<string, any>) {
     return request.get(`phone_shop/member/coupon/count`, params)
 }
+
 /**
  * 获取我的优惠券类型
  */
 export function getMyCouponType() {
     return request.get(`phone_shop/coupon_type`)
 }
+
 /**
  * 获取我的优惠数量
  */

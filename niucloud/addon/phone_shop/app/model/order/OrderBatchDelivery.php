@@ -89,7 +89,6 @@ class OrderBatchDelivery extends BaseModel
         }
     }
 
-
     /**
      * 类型搜索
      * @param $query

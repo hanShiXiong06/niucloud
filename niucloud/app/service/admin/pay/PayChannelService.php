@@ -61,19 +61,33 @@ class PayChannelService extends BaseAdminService
             $data[ 'channel' ] = $channel;
             $data[ 'type' ] = $type;
             $data[ 'site_id' ] = $this->site_id;
-            $data[ 'config' ] = $this->getConfigByPayType($data[ 'config' ], $type);
+            $data[ 'config' ] = $this->prepareConfig($channel, $type, $data[ 'config' ], []);
             $res = $this->model->create($data);
         } else {
             $config = $pay_channel->config;
-            $data[ 'config' ] = $this->getConfigByPayType($data[ 'config' ], $type);
-            foreach ($data[ 'config' ] as $config_k => $config_v) {
-                if ($config_v == CommonDict::ENCRYPT_STR && isset($config[$config_k])) {
-                    $data[ 'config' ][$config_k] = $config[$config_k];
-                }
-            }
+            $data[ 'config' ] = $this->prepareConfig($channel, $type, $data[ 'config' ], $config);
             $pay_channel->save($data);
         }
         return true;
+    }
+
+    /** Optional PayType extension: validate/normalize only the owning driver's settings. */
+    private function prepareConfig(string $channel, string $type, array $input, array $previous): array
+    {
+        $config = $this->getConfigByPayType($input, $type);
+        foreach ($config as $key => $value) {
+            // A literal secret mask is not a boolean configuration update.
+            if (is_string($value) && $value === CommonDict::ENCRYPT_STR && isset($previous[$key])) {
+                $config[$key] = $previous[$key];
+            }
+        }
+        $normalizer = PayDict::getPayType()[$type]['config_normalizer'] ?? null;
+        if ($normalizer !== null) {
+            if (!is_callable($normalizer)) throw new PayException('支付配置扩展不可用，请联系管理员');
+            $config = call_user_func($normalizer, $this->site_id, $channel, $config, $previous);
+            if (!is_array($config)) throw new PayException('支付配置扩展返回格式无效');
+        }
+        return $config;
     }
 
     /**

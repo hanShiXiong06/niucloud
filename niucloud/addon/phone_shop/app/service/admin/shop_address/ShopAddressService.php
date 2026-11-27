@@ -79,8 +79,8 @@ class ShopAddressService extends BaseAdminService
             'is_default_delivery' => $param[ 'is_delivery_address' ] ? $param[ 'is_default_delivery' ] : 0,
             'is_default_refund' => $param[ 'is_refund_address' ] ? $param[ 'is_default_refund' ] : 0
         ];
-        if ($data[ 'is_default_delivery' ]) $this->model->update([ 'is_default_delivery' => 0 ], [ [ 'is_default_delivery', '>', 0 ] ]);
-        if ($data[ 'is_default_refund' ]) $this->model->update([ 'is_default_refund' => 0 ], [ [ 'is_default_refund', '>', 0 ] ]);
+        if ($data[ 'is_default_delivery' ]) $this->model->update([ 'is_default_delivery' => 0 ], [ [ 'is_default_delivery', '>', 0 ], ['site_id', '=', $this->site_id ] ]);
+        if ($data[ 'is_default_refund' ]) $this->model->update([ 'is_default_refund' => 0 ], [ [ 'is_default_refund', '>', 0 ], ['site_id', '=', $this->site_id ] ]);
         $res = $this->model->create($data);
         return $res->id;
 
@@ -109,8 +109,8 @@ class ShopAddressService extends BaseAdminService
             'is_default_delivery' => $param[ 'is_delivery_address' ] ? $param[ 'is_default_delivery' ] : 0,
             'is_default_refund' => $param[ 'is_refund_address' ] ? $param[ 'is_default_refund' ] : 0
         ];
-        if ($data[ 'is_default_delivery' ]) $this->model->update([ 'is_default_delivery' => 0 ], [ [ 'is_default_delivery', '>', 0 ] ]);
-        if ($data[ 'is_default_refund' ]) $this->model->update([ 'is_default_refund' => 0 ], [ [ 'is_default_refund', '>', 0 ] ]);
+        if ($data[ 'is_default_delivery' ]) $this->model->update([ 'is_default_delivery' => 0 ], [ [ 'is_default_delivery', '>', 0 ], ['site_id', '=', $this->site_id ] ]);
+        if ($data[ 'is_default_refund' ]) $this->model->update([ 'is_default_refund' => 0 ], [ [ 'is_default_refund', '>', 0 ], ['site_id', '=', $this->site_id ] ]);
         $this->model->where([ [ 'id', '=', $id ], ['site_id', '=', $this->site_id] ])->update($data);
         return true;
     }

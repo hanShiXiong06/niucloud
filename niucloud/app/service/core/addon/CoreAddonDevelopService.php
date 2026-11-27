@@ -11,9 +11,7 @@
 
 namespace app\service\core\addon;
 
-use app\dict\sys\FileDict;
 use app\model\addon\Addon;
-use app\service\core\upload\CoreFetchService;
 use core\exception\AddonException;
 use core\exception\UploadFileException;
 
@@ -363,14 +361,19 @@ class CoreAddonDevelopService extends CoreAddonBaseService
             $image = $this->addon_info[$file_name] ?? '';
             if (empty($image)) return true;
             if (check_file_is_remote($image)) {
-                try {
-                    downloadImage($image,$file); // 将云存储的图片下载到本地
-                    (new CoreFetchService())->setRootPath($dir)->setRename($name)->image($image, 0, FileDict::LOCAL);
-                } catch ( UploadFileException $e ) {
-                    return true;
+                if (!downloadImage($image, $file)) {
+                    throw new UploadFileException('插件图片下载失败，请重新上传后再保存');
                 }
             } else {
-                @copy($image, $file);
+                $temp_file = $file . '.upload-' . bin2hex(random_bytes(6));
+                $copied = is_file($image) && @copy($image, $temp_file);
+                $valid_image = $copied
+                    && filesize($temp_file) > 0
+                    && @getimagesize($temp_file) !== false;
+                if (!$valid_image || !@rename($temp_file, $file)) {
+                    @unlink($temp_file);
+                    throw new UploadFileException('插件图片无效，请重新上传 PNG 或 JPG 图片');
+                }
             }
         } else {
             //创建路由文件

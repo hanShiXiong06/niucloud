@@ -28,7 +28,6 @@ class KdniaoDeliverySearch extends BaseDeliverySearch
         $this->logistic_config = $config;
     }
 
-
     /**
      * 物流跟踪查询
      * @param array $data

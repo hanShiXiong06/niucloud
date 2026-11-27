@@ -38,7 +38,7 @@
     </div>
 
     <el-dialog v-model="showDialog" :title="t('selectLayout')" width="800" :destroy-on-close="true">
-        <div class="h-[300px]">
+        <div class="h-[330px]">
             <el-scrollbar >
                 <div class="flex justify-between items-center mb-[20px]">
                     <h3 class="!text-sm !text-[#444]">{{ t('layout') }}</h3>
@@ -47,7 +47,7 @@
                         <div class="ml-[2px] text-[12px] text-[#999]">如何开发自定义布局</div>
                     </div>
                 </div>
-                <div class="flex justify-items-stretch">
+                <div class="flex flex-wrap justify-items-stretch">
                     <div class="w-[180px] h-[130px] mr-[10px] mb-[10px] border hover:border-primary cursor-pointer"
                          :class="{'border-primary': ((!layoutConfig[currAddon] && item.layout == 'default') || (layoutConfig[currAddon] == item.layout)) }"
                          @click="layoutConfig[currAddon] = item.layout"
@@ -152,7 +152,7 @@ const confirm = () => {
 
 // 跳转自定义布局
 const toDiyLayout = () => {
-    let url = 'https://doc.niucloud.com/saas.html?keywords=/ru-he-kai-fa-zi-ding-yi-bu-ju-hou-tai-bu-ju';
+    let url = 'https://doc.press.niucloud.com/php/saas-framework/dev/pluginDev/diyLayoutDev.html';
     window.open(url)
 }
 </script>

@@ -1,0 +1,103 @@
+<?php
+
+return [
+    'bind' => [
+
+    ],
+    'listen' => [
+        'HsxRecycleBusinessOperationRecorded' => ['addon\hsx_recycle\app\listener\audit\BusinessOperationRecorded'],
+        // adminapp 旧核心命名空间兼容注册
+        'AppInit' => [ 'addon\hsx_recycle\app\listener\system\AdminAppCompatListener' ],
+       // 协议
+        'AgreementType' => [ 'addon\hsx_recycle\app\listener\AgreementType' ],
+        // 主题色
+        'ThemeColor' => [ 'addon\hsx_recycle\app\listener\diy\ThemeColorListener' ],
+        // 添加wapIndex的监听(添加到首页)
+        'WapIndex' => [ 'addon\hsx_recycle\app\listener\WapIndexListener' ],
+        // 添加DIY页面配置监听器
+        'DiyWapIndex' => [ 'addon\hsx_recycle\app\listener\diy\WapIndexListener' ],
+        // 底部导航
+        'BottomNavigation' => [ 'addon\hsx_recycle\app\listener\BottomNavigationListener' ],
+
+        //通知
+        'NoticeData' => [
+            // 预约取件状态：复用 notice 标准业务数据契约
+            'addon\hsx_recycle\app\listener\notice_template\PickupUpdate',
+            // 签收通知
+            'addon\hsx_recycle\app\listener\notice_template\OrderSign',
+            // 下单通知
+            'addon\hsx_recycle\app\listener\notice_template\OrderAdd',
+            // 同意通知
+            'addon\hsx_recycle\app\listener\notice_template\OrderAgree',
+            // 打款通知
+            'addon\hsx_recycle\app\listener\notice_template\OrderPay',
+            // 订单完成奖励通知
+            'addon\hsx_recycle\app\listener\notice_template\OrderReward',
+            // 代卖进度通知
+            'addon\hsx_recycle\app\listener\notice_template\ConsignmentStatus',
+        ],
+        // 应用信息
+        'RecyclePromotion' => [ 'addon\hsx_recycle\app\listener\app\RecyclePromotionListener' ],
+        
+        // 设备质检完成事件
+        'AfterDeviceCheckComplete' => [ 'addon\hsx_recycle\app\listener\device\DeviceCheckCompleteListener' ],
+        // 承接 ERP 设备成本调整事件，在回收设备上留痕(未打款时提醒是否同步回收价)
+        'ErpAssetCostAdjusted' => [ 'addon\hsx_recycle\app\listener\ErpCostAdjustedListener' ],
+        'ErpPurchasePriceAdjustmentRequested' => [ 'addon\hsx_recycle\app\listener\erp\ErpPurchasePriceAdjustmentRequested' ],
+
+        // ERP 动态业务来源：只有当前站点套餐包含回收插件时才贡献“回收插件采购”。
+        'HsxErpBusinessSourceOptions' => [ 'addon\hsx_recycle\app\listener\erp\ErpBusinessSourceOptionsListener' ],
+        'HsxErpSourceCatalogRequested' => [ 'addon\hsx_recycle\app\listener\erp\ErpSourceCatalogRequested' ],
+        'GetRecyclePaymentMethods' => [ 'addon\hsx_recycle\app\listener\erp\RecyclePaymentMethodsProvider' ],
+        'ErpSourcePaymentGuardRequested' => [ 'addon\hsx_recycle\app\listener\erp\ErpSourcePaymentGuardRequested' ],
+        'HsxBusinessReportMetricsRequested' => [ 'addon\hsx_recycle\app\listener\report\RecycleBusinessReportMetricsProvider' ],
+        'HsxBusinessTaskValidate' => [ 'addon\hsx_recycle\app\listener\BusinessTaskValidate' ],
+        // 用户确认回收报价后的扩展点。核心确认事务已提交，ERP/财务等下游按契约消费。
+        'RecycleDeviceConfirmed' => [ 'addon\hsx_recycle\app\listener\order\RecycleDeviceConfirmedListener' ],
+        'HsxAiIntegrationRegistryRequested' => [ 'addon\hsx_recycle\app\listener\ai\AiIntegrationRegistryRequested' ],
+        'HsxAiAdminAgentRegistryRequested' => [ 'addon\hsx_recycle\app\listener\ai\AiAdminAgentRegistryRequested' ],
+        'HsxAiToolRegistryRequested' => [ 'addon\hsx_recycle\app\listener\ai\AiToolRegistryRequested' ],
+        'HsxAiToolExecuteRequested' => [ 'addon\hsx_recycle\app\listener\ai\AiToolExecuteRequested' ],
+        'HsxAiDefaultToolArgumentsRequested' => [ 'addon\hsx_recycle\app\listener\ai\AiDefaultToolArgumentsRequested' ],
+        'HsxAiToolIntentRequested' => [ 'addon\hsx_recycle\app\listener\ai\AiToolIntentRequested' ],
+
+        // 下游流转回流：订阅 ERP/数据中台事件，把设备下游生命周期(已入库/转中台/已定价)镜像回回收设备
+        'ErpDomainEvent' => [
+            'addon\hsx_recycle\app\listener\downstream\ErpAssetDownstreamListener',
+            'addon\hsx_recycle\app\listener\downstream\ErpSettlementCompletedListener',
+            'addon\hsx_recycle\app\listener\downstream\ConsignDeviceBoughtOutListener',
+        ],
+        'DeviceAssetPriceCompleted' => [ 'addon\hsx_recycle\app\listener\downstream\DeviceAssetPricedListener' ],
+
+        // 代卖转回收：ERP 把代卖设备买断为自有时，回收侧把该设备由代卖标记为回收（成本转移到我方）
+        'ErpConsignDeviceBoughtOut' => [ 'addon\hsx_recycle\app\listener\downstream\ConsignDeviceBoughtOutListener' ],
+        // ERP 执行代卖买断前的只读校验，防止已成交/待结算代卖单被错误转为自有。
+        'HsxErpConsignmentBuyoutValidate' => [ 'addon\hsx_recycle\app\listener\downstream\ConsignmentBuyoutValidateListener' ],
+
+        // ERP 财务中心折账结清回收应付 → 回写设备打款状态(折账)+备注结算单号，形成闭环
+        'FinanceSettlementCompleted' => [ 'addon\hsx_recycle\app\listener\downstream\FinanceSettlementCompletedListener' ],
+
+        // 设备全链路追溯：ERP 汇总时向回收取"回收段"数据(列表/时间线)
+        'CollectRecycleDeviceTrace' => [ 'addon\hsx_recycle\app\listener\downstream\CollectDeviceTraceListener' ],
+
+        // 快递回调事件。易速推送统一在此分发，后续 ERP、通知、财务流水可挂载扩展。
+        'RecycleExpressEvent' => [ 'addon\hsx_recycle\app\listener\express\RecycleExpressEventListener' ],
+        // 快递供应商注册钩子。后续快递鸟、快递100、京东/顺丰官方能力均通过此契约热插拔。
+        'HsxExpressProviderRegistry' => [ 'addon\hsx_recycle\app\listener\express\ExpressProviderRegistryListener' ],
+        // 快递轨迹、设备查询、地址解析分别注册，调用方只依赖能力契约，不依赖具体厂商。
+        'HsxExpressQueryProviderRegistry' => [ 'addon\hsx_recycle\app\listener\express\ExpressQueryProviderRegistryListener' ],
+        'HsxDeviceQueryProviderRegistry' => [ 'addon\hsx_recycle\app\listener\third_party\DeviceQueryProviderRegistryListener' ],
+        'HsxAddressParseProviderRegistry' => [ 'addon\hsx_recycle\app\listener\third_party\AddressParseProviderRegistryListener' ],
+        
+        // 微信转账场景
+        'GetWechatTransferTradeScene' => [ 'addon\hsx_recycle\app\listener\pay\RecycleTransferSceneListener' ],
+        
+        // 导出数据类型
+        'ExportDataType' => [ 'addon\hsx_recycle\app\listener\export\RecycleDeviceExportDataListener' ],
+        
+        // 导出数据
+        'ExportData' => [ 'addon\hsx_recycle\app\listener\export\RecycleDeviceExportListener' ],
+    ],
+    'subscribe' => [
+    ],
+];

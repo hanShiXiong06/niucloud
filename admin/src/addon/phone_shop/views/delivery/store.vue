@@ -1,30 +1,25 @@
 <template>
     <div class="main-container">
         <el-card class="box-card !border-none" shadow="never">
-            <div class="flex justify-between items-center">
-                <div class="detail-head !m-0">
-                    <div class="left" @click="router.push('/phone_shop/order/delivery')">
-                        <span class="iconfont iconxiangzuojiantou !text-xs"></span>
-                        <span class="ml-[1px]">{{ t('returnToPreviousPage') }}</span>
-                    </div>
-                    <span class="adorn">|</span>
-                    <span class="right">{{ pageName }}</span>
-                </div>
-                <el-button type="primary" @click="addEvent">
-                    {{ t('addStore') }}
-                </el-button>
-            </div>
+            <el-page-header :content="pageName" :icon="ArrowLeft" @back="router.push('/phone_shop/order/delivery')" />
+        </el-card>
 
+        <el-card class="box-card mt-[15px] !border-none" shadow="never">
             <el-card class="box-card !border-none my-[10px] table-search-wrap" shadow="never">
-                <el-form :inline="true" :model="storeTable.searchParam" ref="searchFormRef">
-                    <el-form-item :label="t('storeName')" prop="store_name">
-                        <el-input v-model.trim="storeTable.searchParam.store_name" :placeholder="t('storeNamePlaceholder')" />
-                    </el-form-item>
-                    <el-form-item>
-                        <el-button type="primary" @click="loadStoreList()">{{ t('search') }}</el-button>
-                        <el-button @click="resetForm(searchFormRef)">{{ t('reset') }}</el-button>
-                    </el-form-item>
-                </el-form>
+                <div class="flex justify-between items-center">
+                    <el-form :inline="true" :model="storeTable.searchParam" ref="searchFormRef">
+                        <el-form-item :label="t('storeName')" prop="store_name">
+                            <el-input v-model.trim="storeTable.searchParam.store_name" :placeholder="t('storeNamePlaceholder')" />
+                        </el-form-item>
+                        <el-form-item>
+                            <el-button type="primary" @click="loadStoreList()">{{ t('search') }}</el-button>
+                            <el-button @click="resetForm(searchFormRef)">{{ t('reset') }}</el-button>
+                        </el-form-item>
+                    </el-form>
+                    <el-button type="primary" @click="addEvent">
+                        {{ t('addStore') }}
+                    </el-button>
+                </div>
             </el-card>
 
             <div class="mt-[10px]">
@@ -80,7 +75,9 @@ import { t } from '@/lang'
 import { getStoreList, deleteStore } from '@/addon/phone_shop/api/delivery'
 import { img } from '@/utils/common'
 import { ElMessageBox, FormInstance } from 'element-plus'
+import { ArrowLeft } from '@element-plus/icons-vue'
 import { useRouter, useRoute } from 'vue-router'
+import { setTablePageStorage,getTablePageStorage } from "@/utils/common";
 
 const route = useRoute()
 const pageName = route.meta.title
@@ -114,11 +111,12 @@ const loadStoreList = (page: number = 1) => {
         storeTable.loading = false
         storeTable.data = res.data.data
         storeTable.total = res.data.total
+        setTablePageStorage(storeTable.page, storeTable.limit, storeTable.searchParam);
     }).catch(() => {
         storeTable.loading = false
     })
 }
-loadStoreList()
+loadStoreList(getTablePageStorage(storeTable.searchParam).page);
 
 const router = useRouter()
 
@@ -149,7 +147,7 @@ const deleteEvent = (id: number) => {
         }
     ).then(() => {
         deleteStore(id).then(() => {
-            loadStoreList()
+            loadStoreList(getTablePageStorage(storeTable.searchParam).page);
         }).catch(() => {
         })
     })

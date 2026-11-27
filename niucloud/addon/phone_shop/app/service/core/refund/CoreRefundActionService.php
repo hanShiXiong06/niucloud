@@ -20,6 +20,7 @@ use addon\phone_shop\app\model\order\OrderRefund;
 use addon\phone_shop\app\model\shop_address\ShopAddress;
 use core\base\BaseCoreService;
 use core\exception\CommonException;
+use think\facade\Db;
 
 /**
  * 订单退款服务层
@@ -61,6 +62,8 @@ class CoreRefundActionService extends BaseCoreService
         $order_id = $order_goods_info[ 'order_id' ];//订单id
         $order = ( new Order() )->where([ [ 'order_id', '=', $order_id ] ])->findOrEmpty();
         if ($order->isEmpty()) throw new CommonException('SHOP_ORDER_IS_INVALID');//订单已失效
+        // ERP 托管单(有 relate_source):退款/退货由 ERP 管控,商城侧禁止
+        if (!empty($order[ 'relate_source' ])) throw new CommonException('此订单由 ERP 统一管理,退款 / 退货请到 ERP 操作');
 
         //根据退款方式来判断下一步的状态
         $update_data = [];
@@ -75,7 +78,8 @@ class CoreRefundActionService extends BaseCoreService
         if ($is_agree) {
             $money = $data[ 'money' ];
             //退款金额不能大于可退款总额
-            if ($money > $max_refund_money) throw new CommonException('SHOP_ORDER_REFUND_MONEY_GT_ORDER_MONEY');//退款金额不能大于可退款总额
+            $comparison = bccomp(bcsub($money, $max_refund_money), 0);//浮点数直接进行比较会出现精度问题
+            if ($comparison > 0) throw new CommonException('SHOP_ORDER_REFUND_MONEY_GT_ORDER_MONEY');//退款金额不能大于可退款总额
             $update_data[ 'money' ] = $money;
             //只退款
             if ($order_refund_info[ 'refund_type' ] == OrderRefundDict::ONLY_REFUND) {
@@ -94,12 +98,22 @@ class CoreRefundActionService extends BaseCoreService
             $update_data[ 'status' ] = OrderRefundDict::STORE_REFUSE_REFUND_GOODS_APPLY_WAIT_BUYER;
             $update_data[ 'shop_reason' ] = $data[ 'shop_reason' ];
         }
-        $order_refund_info->save($update_data);
-        //审核通过后事件
-        $data[ 'order_refund_no' ] = $order_refund_no;
-        $data[ 'refund_data' ] = array_merge($order_refund_info->toArray(), $update_data);
-        event('AfterPhoneShopOrderRefundAuditApply', $data);
-        return true;
+
+        Db::startTrans();
+        try {
+            $order_refund_info->save($update_data);
+            //审核完毕后续事件
+            $data[ 'order_refund_no' ] = $order_refund_no;
+            $data[ 'refund_data' ] = array_merge($order_refund_info->toArray(), $update_data);
+
+            event('AfterPhoneShopOrderRefundAuditApply', $data);
+
+            Db::commit();
+            return true;
+        } catch ( \Exception $e ) {
+            Db::rollback();
+            throw new CommonException($e->getMessage());
+        }
     }
 
     /**
@@ -137,9 +151,7 @@ class CoreRefundActionService extends BaseCoreService
         $order_refund_info->save($update_data);
         $data[ 'order_refund_no' ] = $order_refund_no;
         $data[ 'refund_data' ] = array_merge($order_refund_info->toArray(), $update_data);
-        //审核通过后事件
-        $data[ 'order_refund_no' ] = $order_refund_no;
-        $data[ 'refund_data' ] = array_merge($order_refund_info->toArray(), $update_data);
+        //确认收货审核完毕后续事件
         event('AfterPhoneShopOrderRefundAuditRefundGoods', $data);
         return true;
     }
@@ -149,7 +161,7 @@ class CoreRefundActionService extends BaseCoreService
      * @param $data
      * @return void
      */
-    public function close($data)
+    public function close($data,$refund_status=OrderRefundDict::CLOSE)
     {
         $order_refund_no = $data[ 'order_refund_no' ];
         //查询订单项信息
@@ -163,9 +175,9 @@ class CoreRefundActionService extends BaseCoreService
         }
         $order_refund_info = $this->model->where($where)->findOrEmpty();
         if ($order_refund_info->isEmpty()) throw new CommonException('SHOP_ORDER_REFUND_IS_INVALID');//退款已失效
-        if (in_array($order_refund_info[ 'status' ], [ OrderRefundDict::STORE_AGREE_REFUND_WAIT_TRANSFER, OrderRefundDict::STORE_REFUND_TRANSFERING, OrderRefundDict::FINISH, OrderRefundDict::CLOSE ])) throw new CommonException('SHOP_ORDER_REFUND_IS_INVALID_OR_FINISH');//退款已失效(退款已完成或已关闭)
+        if (in_array($order_refund_info[ 'status' ], [ OrderRefundDict::STORE_AGREE_REFUND_WAIT_TRANSFER, OrderRefundDict::STORE_REFUND_TRANSFERING, OrderRefundDict::FINISH, OrderRefundDict::CLOSE, OrderRefundDict::SHOP_ACTIVE_CLOSE_REFUND ])) throw new CommonException('SHOP_ORDER_REFUND_IS_INVALID_OR_FINISH');//退款已失效(退款已完成或已关闭)
         $update_data = array(
-            'status' => OrderRefundDict::CLOSE,
+            'status' => $refund_status,
             'close_time' => time()
         );
         $order_refund_info->save($update_data);
@@ -178,7 +190,7 @@ class CoreRefundActionService extends BaseCoreService
             'status' => OrderGoodsDict::NORMAL
         );
         ( new OrderGoods() )->where($order_goods_where)->update($order_goods_update_data);
-        //关闭后事件
+        //订单申请退款后事件
         $data[ 'order_refund_no' ] = $order_refund_no;
         $data[ 'refund_data' ] = array_merge($order_refund_info->toArray(), $update_data);
         event('AfterPhoneShopOrderRefundClose', $data);
@@ -192,48 +204,65 @@ class CoreRefundActionService extends BaseCoreService
      */
     public function shopActiveRefund($data)
     {
-        $site_id = $data['site_id'];
-        $order_goods_ids = $data['order_goods_ids'];
-        $shop_active_refund_money = $data['shop_active_refund_money'];
+        $site_id = $data[ 'site_id' ];
+        $order_goods_ids = $data[ 'order_goods_ids' ];
+        $shop_active_refund_money = $data[ 'shop_active_refund_money' ];
 
         $check_data = ( new CoreRefundService() )->refundCheck($order_goods_ids, $shop_active_refund_money);
-        $order_goods_list = $check_data['order_goods_list'];
+        $order_goods_list = $check_data[ 'order_goods_list' ];
+
+        // ERP 托管单(有 relate_source):退款由 ERP 管控,商城侧禁止
+        $order_ids = array_values(array_unique($order_goods_list->column('order_id')));
+        if (!empty($order_ids) && ( new Order() )->whereIn('order_id', $order_ids)->where('relate_source', '<>', '')->count() > 0) {
+            throw new CommonException('此订单由 ERP 统一管理,退款 / 退货请到 ERP 操作');
+        }
+
+        // 商家主动退款按勾选商品逐项全退；金额已变化时需要重新确认。
+        if (bccomp((string) $shop_active_refund_money, number_format($check_data['refund_money'], 2, '.', ''), 2) !== 0) {
+            throw new CommonException('退款金额与所选商品当前可退金额不一致，请刷新订单、核对金额后重试');
+        }
 
         foreach ($order_goods_list as $order_goods_info) {
-            $order_refund_no = create_no();
-            $insert_data = [
-                'order_id' => $order_goods_info['order_id'],
-                'site_id' => $site_id,
-                'order_goods_id' => $order_goods_info['order_goods_id'],
-                'order_refund_no' => $order_refund_no,
-                'refund_type' => OrderRefundDict::ONLY_REFUND,
-                'reason' => get_lang('dict_shop_order_refund_action.shop_active_refund'),
-                'member_id' => $order_goods_info['member_id'],
-                'apply_money' => $order_goods_info['item_refund_money'],
-                'money' => $order_goods_info['item_refund_money'],
-                'status' => OrderRefundDict::STORE_AGREE_REFUND_WAIT_TRANSFER,
-                'remark' => $data['shop_active_refund_remark'],
-                'voucher' => [],
-                'source' => OrderRefundDict::ACTIVE_REFUND,
-                'is_refund_delivery' => $order_goods_info['is_refund_delivery'],
-            ];
-            $order_refund_info = $this->model->create($insert_data);
+            Db::startTrans();
+            try {
+                $order_refund_no = create_no();
+                $insert_data = [
+                    'order_id' => $order_goods_info[ 'order_id' ],
+                    'site_id' => $site_id,
+                    'order_goods_id' => $order_goods_info[ 'order_goods_id' ],
+                    'order_refund_no' => $order_refund_no,
+                    'refund_type' => OrderRefundDict::ONLY_REFUND,
+                    'reason' => get_lang('dict_shop_order_refund_action.shop_active_refund'),
+                    'member_id' => $order_goods_info[ 'member_id' ],
+                    'apply_money' => $order_goods_info[ 'item_refund_money' ],
+                    'money' => $order_goods_info[ 'item_refund_money' ],
+                    'status' => OrderRefundDict::STORE_AGREE_REFUND_WAIT_TRANSFER,
+                    'remark' => $data[ 'shop_active_refund_remark' ],
+                    'voucher' => [],
+                    'source' => OrderRefundDict::ACTIVE_REFUND,
+                    'is_refund_delivery' => $order_goods_info[ 'is_refund_delivery' ],
+                ];
+                $order_refund_info = $this->model->create($insert_data);
 
-            //将订单项的退款单号覆盖
-            $order_goods_info->save([
-                'order_refund_no' => $order_refund_no,
-                'shop_active_refund' => 1,
-                'shop_active_refund_money' => $order_goods_info['item_refund_money'],
-                'status' => OrderGoodsDict::REFUNDING
-            ]);
+                //将订单项的退款单号覆盖
+                $order_goods_info->save([
+                    'order_refund_no' => $order_refund_no,
+                    'shop_active_refund' => 1,
+                    'shop_active_refund_money' => $order_goods_info[ 'item_refund_money' ],
+                    'status' => OrderGoodsDict::REFUNDING
+                ]);
 
-            $data[ 'refund_data' ] = $order_refund_info->toArray();
-            $data[ 'order_goods_data' ] = $order_goods_info->toArray();
-            //创建后事件
-            $data[ 'order_refund_no' ] = $order_refund_no;
-            $data[ 'refund_data' ] = $insert_data;
-            event('AfterPhoneShopOrderRefundActiveCreate', $data);
+                $data[ 'refund_data' ] = $order_refund_info->toArray();
+                $data[ 'order_goods_data' ] = $order_goods_info->toArray();
+                event('AfterPhoneShopOrderRefundActiveCreate', $data);
+                Db::commit();
+            } catch ( \Exception $e ) {
+                Db::rollback();
+                throw new CommonException($e->getMessage());
+            }
         }
         return true;
     }
+
+
 }

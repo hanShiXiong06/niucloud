@@ -69,6 +69,7 @@ return [
     'CLOUD_BUILD_AUTH_CODE_NOT_FOUND' => '请先填写授权码',
     'TASK_CYCLE_ERROR' => '任务周期填写错误',
     'UPGRADE_TASK_EXIST' => '有正在执行的升级任务，可以展开正在升级的任务，也可以在开发>更新缓存中清除缓存重新开始升级',
+    'ZIP_ARCHIVE_NOT_EXIST' => '请先安装或启用zip扩展',
     //登录注册重置账号....
 
     'LOGIN_SUCCESS' => '登录成功',
@@ -121,7 +122,7 @@ return [
     'ATTACHMENT_GROUP_HAS_IMAGE' => '附件组中存在图片不允许删除',
     'OSS_TYPE_NOT_EXIST' => '云存储类型不存在',
     'URL_FILE_NOT_EXIST' => '获取不到网址指向的文件',
-    'PLEACE_SELECT_IMAGE' => '请选择要删除的图片',
+    'PLEASE_SELECT_IMAGE' => '请选择要删除的图片',
     'UPLOAD_TYPE_ERROR' => '不是有效的上传类型',
     'OSS_FILE_URL_NOT_EXIST' => '远程资源文件地址不能为空',
     'BASE_IMAGE_FILE_NOT_EXIST' => 'base图片资源不能为空',
@@ -133,6 +134,7 @@ return [
 
 
     //消息管理
+    'NEED_BIND_MERCHANT' => '未绑定【商家信息】接收者账号',
     'NOTICE_TYPE_NOT_EXIST' => '消息类型不存在',
     'SMS_TYPE_NOT_EXIST' => '短信类型不存在',
     'SMS_DRIVER_NOT_EXIST' => '短信驱动不存在',
@@ -269,6 +271,7 @@ return [
     'PAY_NOT_FOUND_TRADE' => '找不到可支付的交易',
 
     'MERCHANT_TRANSFER_SCENARIOS_THAT_DO_NOT_EXIST' => '不存在的商户转账场景',
+    'MERCHANT_TRANSFER_SCENE_ID_MIN_4' => '场景ID最短为4位',
     //退款相关
     'REFUND_NOT_EXIST' => '退款单据不存在',
     //订单相关  8***
@@ -317,7 +320,7 @@ return [
     'NEED_TO_AUTHORIZE_FIRST' => '使用云服务需先进行授权',
     'WEAPP_UPLOADING' => '小程序有正在上传的版本，请等待上一版本上传完毕后再进行操作',
     'CLOUD_BUILD_TASK_EXIST' => '已有正在执行中的编译任务',
-    'CONNECT_FAIL' => '连接失败',
+    'CONNECT_FAIL' => '云编译服务连接失败',
 
     //核销相关
     'VERIFY_TYPE_ERROR' => '核销类型错误',

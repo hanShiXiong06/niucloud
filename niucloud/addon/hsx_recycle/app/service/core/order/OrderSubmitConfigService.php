@@ -1,0 +1,887 @@
+<?php
+declare(strict_types=1);
+
+namespace addon\hsx_recycle\app\service\core\order;
+
+use addon\hsx_recycle\app\dict\config\RecycleConfigKeyDict;
+use addon\hsx_recycle\app\dict\express\ExpressProviderDict;
+use addon\hsx_recycle\app\dict\order\RecycleOrderDict;
+use addon\hsx_recycle\app\model\express\ExpressProviderConfig;
+use addon\hsx_recycle\app\service\core\express\ExpressProductCatalogService;
+use addon\hsx_recycle\app\service\core\express\ExpressGatewayService;
+use addon\hsx_recycle\app\service\core\express\PickupAppointmentPolicy;
+use addon\hsx_recycle\app\service\core\third_party\RecycleThirdPartyConfigService;
+use addon\hsx_recycle\app\dict\third_party\ThirdPartyDict;
+use app\model\diy\DiyTheme;
+use app\service\core\sys\CoreConfigService;
+use core\exception\CommonException;
+
+/**
+ * 回收下单配置
+ */
+class OrderSubmitConfigService
+{
+    private CoreConfigService $configService;
+
+    public function __construct()
+    {
+        $this->configService = new CoreConfigService();
+    }
+
+    public function getConfig(int $siteId): array
+    {
+        $saved = $this->configService->getConfigValue($siteId, RecycleConfigKeyDict::ORDER_SUBMIT);
+        $providers = $this->getPlatformDeliveryProviderOptions($siteId);
+        $products = $this->getPlatformDeliveryProductOptions($siteId);
+        $config = $this->sanitizeConfig(is_array($saved) ? $saved : [], false, $providers, $products);
+        $config['platform_delivery']['provider_options'] = $providers;
+        $config['platform_delivery']['product_options'] = $products;
+        $config['price_detail_theme'] = $this->getFrameworkPriceDetailTheme($siteId);
+
+        return $config;
+    }
+
+    public function setConfig(int $siteId, array $data): bool
+    {
+        $config = $this->sanitizeConfig(
+            $data,
+            true,
+            $this->getPlatformDeliveryProviderOptions($siteId),
+            $this->getPlatformDeliveryProductOptions($siteId)
+        );
+        $config['price_detail_theme'] = $this->getFrameworkPriceDetailTheme($siteId);
+
+        (new CustomerQuoteService())->validateConfig($siteId, $config);
+        return (bool)$this->configService->setConfig(
+            $siteId,
+            RecycleConfigKeyDict::ORDER_SUBMIT,
+            $config
+        );
+    }
+
+    public function defaultConfig(): array
+    {
+        return [
+            'device_add_enabled' => 1,
+            'device_pricing' => ['enabled' => 1, 'assign_to_quote_user' => 0, 'quote_user_ids' => []],
+            'notice' => [
+                'enabled' => 0,
+                'title' => '下单提示',
+                'content' => '',
+                'url' => '',
+                'link_text' => '查看详情',
+            ],
+            'default_count' => 1,
+            'delivery_modes' => [
+                'mail' => 1,
+                'self' => 1,
+                'logistics_vehicle' => 0,
+            ],
+            'logistics_vehicle' => [
+                'arrival_mode' => 'half_day',
+                'morning_cutoff' => '12:00',
+                'same_day_time' => '16:00',
+                'next_day_time' => '09:00',
+            ],
+            'profile' => [
+                'enabled' => 1,
+                'payment_required' => 1,
+                'payment_min_count' => 1,
+                'id_card_required' => 1,
+            ],
+            'payment' => [
+                'mode' => RecycleOrderDict::FLOW_MODE_ORDER,
+            ],
+            'flow' => [
+                'mode' => RecycleOrderDict::FLOW_MODE_ORDER,
+            ],
+            'platform_delivery' => [
+                'display_name' => '',
+                'free_shipping_min_count' => 1,
+                'payment_tips' => '',
+                'pickup_schedule' => PickupAppointmentPolicy::DEFAULTS,
+                'provider' => ExpressProviderDict::PROVIDER_YISU,
+                'provider_name' => ExpressProviderDict::getProviderName(ExpressProviderDict::PROVIDER_YISU),
+                'product_code' => '',
+                'product_name' => '',
+            ],
+            'follow_official_account' => [
+                'enabled' => 0,
+                'wechat_name' => '',
+                'qr_code' => '',
+                'title' => '关注公众号',
+                'content' => '关注公众号，及时接收订单状态通知',
+            ],
+            'customer_service' => [
+                'enabled' => 0,
+                'type' => 'wechat',
+                'qrcode' => '',
+                'title' => '联系客服',
+                'content' => '如需议价或咨询订单进度，请联系客服处理',
+            ],
+            'allow_user_reject_sale' => 1,
+            'order_detail' => [
+                'show_inspection_result' => 1,
+                'show_inspection_images' => 1,
+            ],
+            'consignment' => [
+                'enabled' => 0,
+                'user_entry_enabled' => 1,
+                'user_view_enabled' => 1,
+                'transfer_confirm_required' => 1,
+                'notice_enabled' => 1,
+                'print_enabled' => 1,
+                'show_service_fee' => 0,
+                'user_title' => '代卖订单',
+                'user_desc' => '查看代卖进度、成交与结算结果',
+            ],
+            'work_wechat' => [
+                'enabled' => 0,
+                'channels' => [
+                    'order_notice' => [
+                        'enabled' => 0,
+                        'name' => '订单通知群',
+                        'webhook_url' => '',
+                        'dedupe_minutes' => 10,
+                        'daily_limit' => 0,
+                    ],
+                    'order_urge' => [
+                        'enabled' => 1,
+                        'name' => '订单催办群',
+                        'webhook_url' => '',
+                        'dedupe_minutes' => 10,
+                        'daily_limit' => 5,
+                        'user_cooldown_hours' => 12,
+                    ],
+                    'return_order' => [
+                        'enabled' => 0,
+                        'name' => '退货处理群',
+                        'webhook_url' => '',
+                        'dedupe_minutes' => 10,
+                        'daily_limit' => 0,
+                    ],
+                    'finance' => [
+                        'enabled' => 0,
+                        'name' => '财务打款群',
+                        'webhook_url' => '',
+                        'dedupe_minutes' => 10,
+                        'daily_limit' => 0,
+                    ],
+                    'exception' => [
+                        'enabled' => 0,
+                        'name' => '异常预警群',
+                        'webhook_url' => '',
+                        'dedupe_minutes' => 30,
+                        'daily_limit' => 0,
+                    ],
+                ],
+            ],
+            'price_detail_theme' => $this->defaultPriceDetailTheme(),
+        ];
+    }
+
+    public function sanitizeConfig(array $data, bool $strict = false, array $platformDeliveryProviders = [], array $platformDeliveryProducts = []): array
+    {
+        $default = $this->defaultConfig();
+        $devicePricing = is_array($data['device_pricing'] ?? null) ? $data['device_pricing'] : [];
+        $deliveryModes = is_array($data['delivery_modes'] ?? null) ? $data['delivery_modes'] : [];
+        $logisticsVehicle = is_array($data['logistics_vehicle'] ?? null) ? $data['logistics_vehicle'] : [];
+        $notice = is_array($data['notice'] ?? null) ? $data['notice'] : [];
+        $profile = is_array($data['profile'] ?? null) ? $data['profile'] : [];
+        $payment = is_array($data['payment'] ?? null) ? $data['payment'] : [];
+        $flow = is_array($data['flow'] ?? null) ? $data['flow'] : [];
+        $platformDelivery = is_array($data['platform_delivery'] ?? null) ? $data['platform_delivery'] : [];
+        $followOfficialAccount = is_array($data['follow_official_account'] ?? null) ? $data['follow_official_account'] : [];
+        $customerService = is_array($data['customer_service'] ?? null) ? $data['customer_service'] : [];
+        $consignment = is_array($data['consignment'] ?? null) ? $data['consignment'] : [];
+        $orderDetail = is_array($data['order_detail'] ?? null) ? $data['order_detail'] : [];
+        $workWechat = is_array($data['work_wechat'] ?? null) ? $data['work_wechat'] : [];
+        $priceDetailTheme = is_array($data['price_detail_theme'] ?? null) ? $data['price_detail_theme'] : [];
+        $platformDeliveryProviders = !empty($platformDeliveryProviders)
+            ? array_values($platformDeliveryProviders)
+            : $this->getDefaultPlatformDeliveryProviders();
+        $providerMap = [];
+        foreach ($platformDeliveryProviders as $provider) {
+            if (!empty($provider['provider'])) {
+                $providerMap[(string)$provider['provider']] = $provider;
+            }
+        }
+        $platformDeliveryProducts = array_values($platformDeliveryProducts);
+        $productMap = [];
+        foreach ($platformDeliveryProducts as $product) {
+            $provider = (string)($product['provider'] ?? '');
+            $productCode = (string)($product['product_code'] ?? '');
+            if ($provider !== '' && $productCode !== '') {
+                $productMap[$provider][$productCode] = $product;
+            }
+        }
+        $defaultCount = max(1, min(99, (int)($data['default_count'] ?? $default['default_count'])));
+        $paymentMinCount = max(1, min(5, (int)($profile['payment_min_count'] ?? $default['profile']['payment_min_count'])));
+        $freeShippingMinCount = max(1, min(99, (int)($platformDelivery['free_shipping_min_count'] ?? $default['platform_delivery']['free_shipping_min_count'])));
+        $platformDeliveryDisplayName = mb_substr(trim((string)($platformDelivery['display_name'] ?? '')), 0, 20);
+        $platformDeliveryProvider = trim((string)($platformDelivery['provider'] ?? $default['platform_delivery']['provider']));
+        if ($platformDeliveryProvider === '' || !isset($providerMap[$platformDeliveryProvider])) {
+            $platformDeliveryProvider = (string)($platformDeliveryProviders[0]['provider'] ?? $default['platform_delivery']['provider']);
+        }
+        $platformDeliveryProviderName = trim((string)($platformDelivery['provider_name'] ?? ($providerMap[$platformDeliveryProvider]['provider_name'] ?? '')));
+        if ($platformDeliveryProviderName === '') {
+            $platformDeliveryProviderName = (string)($providerMap[$platformDeliveryProvider]['provider_name'] ?? ExpressProviderDict::getProviderName($platformDeliveryProvider));
+        }
+        $platformDeliveryProductCode = trim((string)($platformDelivery['product_code'] ?? $default['platform_delivery']['product_code']));
+        if ($platformDeliveryProductCode === '' || !isset($productMap[$platformDeliveryProvider][$platformDeliveryProductCode])) {
+            $platformDeliveryProductCode = (string)array_key_first($productMap[$platformDeliveryProvider] ?? []);
+        }
+        $platformDeliveryProductName = trim((string)($platformDelivery['product_name'] ?? ($productMap[$platformDeliveryProvider][$platformDeliveryProductCode]['product_name'] ?? '')));
+        if ($platformDeliveryProductName === '') {
+            $platformDeliveryProductName = (string)($productMap[$platformDeliveryProvider][$platformDeliveryProductCode]['product_name'] ?? '');
+        }
+        // 顺丰的渠道、产品和客户展示名只跟随本站取件配置，不能沿用旧易速名称，
+        // 也不能通过下单设置再次覆盖物流中心的选择。最低数量规则仍在本页维护。
+        if ($platformDeliveryProvider === ExpressProviderDict::PROVIDER_SF_DIRECT) {
+            $platformDeliveryProviderName = (string)($providerMap[$platformDeliveryProvider]['provider_name'] ?? '顺丰直连');
+            $platformDeliveryProductName = (string)($productMap[$platformDeliveryProvider][$platformDeliveryProductCode]['product_name'] ?? '');
+            $platformDeliveryDisplayName = '顺丰速运';
+        }
+        $customerServiceType = (string)($customerService['type'] ?? $default['customer_service']['type']);
+        if (!in_array($customerServiceType, ['wechat', 'qrcode'], true)) {
+            $customerServiceType = $default['customer_service']['type'];
+        }
+        $flowMode = (string)($flow['mode'] ?? $payment['mode'] ?? $default['flow']['mode']);
+        if (!in_array($flowMode, [RecycleOrderDict::FLOW_MODE_ORDER, RecycleOrderDict::FLOW_MODE_DEVICE], true)) {
+            $flowMode = $default['flow']['mode'];
+        }
+
+        $config = [
+            'device_add_enabled' => !empty($data['device_add_enabled']) ? 1 : 0,
+            'device_pricing' => [
+                'enabled' => !empty($devicePricing['enabled'] ?? $default['device_pricing']['enabled']) ? 1 : 0,
+                'assign_to_quote_user' => !empty($devicePricing['assign_to_quote_user']) ? 1 : 0,
+                'quote_user_ids' => CustomerQuoteService::normalizeUserIds($devicePricing['quote_user_ids'] ?? [], $strict),
+            ],
+            'notice' => [
+                'enabled' => !empty($notice['enabled']) ? 1 : 0,
+                'title' => mb_substr(trim((string)($notice['title'] ?? $default['notice']['title'])), 0, 30),
+                'content' => mb_substr(trim((string)($notice['content'] ?? '')), 0, 500),
+                'url' => $this->sanitizeNoticeUrl($notice['url'] ?? '', $strict),
+                'link_text' => mb_substr(trim((string)($notice['link_text'] ?? '')), 0, 12) ?: '查看详情',
+            ],
+            'default_count' => $defaultCount,
+            'delivery_modes' => [
+                'mail' => !empty($deliveryModes['mail']) ? 1 : 0,
+                'self' => !empty($deliveryModes['self']) ? 1 : 0,
+                'logistics_vehicle' => !empty($deliveryModes['logistics_vehicle']) ? 1 : 0,
+            ],
+            'logistics_vehicle' => [
+                'arrival_mode' => in_array((string)($logisticsVehicle['arrival_mode'] ?? ''), ['half_day', 'next_day'], true)
+                    ? (string)$logisticsVehicle['arrival_mode']
+                    : $default['logistics_vehicle']['arrival_mode'],
+                'morning_cutoff' => $this->sanitizeClock((string)($logisticsVehicle['morning_cutoff'] ?? ''), $default['logistics_vehicle']['morning_cutoff']),
+                'same_day_time' => $this->sanitizeClock((string)($logisticsVehicle['same_day_time'] ?? ''), $default['logistics_vehicle']['same_day_time']),
+                'next_day_time' => $this->sanitizeClock((string)($logisticsVehicle['next_day_time'] ?? ''), $default['logistics_vehicle']['next_day_time']),
+            ],
+            'profile' => [
+                'enabled' => !empty($profile['enabled']) ? 1 : 0,
+                'payment_required' => !empty($profile['payment_required']) ? 1 : 0,
+                'payment_min_count' => $paymentMinCount,
+                'id_card_required' => !empty($profile['id_card_required']) ? 1 : 0,
+            ],
+            'payment' => [
+                'mode' => $flowMode,
+            ],
+            'flow' => [
+                'mode' => $flowMode,
+            ],
+            'platform_delivery' => [
+                'display_name' => $platformDeliveryDisplayName ?: ($platformDeliveryProductName ?: '京东快递'),
+                'free_shipping_min_count' => $freeShippingMinCount,
+                'payment_tips' => mb_substr(trim(is_string($platformDelivery['payment_tips'] ?? null) ? $platformDelivery['payment_tips'] : ''), 0, 120),
+                'pickup_schedule' => PickupAppointmentPolicy::normalize(is_array($platformDelivery['pickup_schedule'] ?? null) ? $platformDelivery['pickup_schedule'] : [], $strict),
+                'provider' => $platformDeliveryProvider,
+                'provider_name' => $platformDeliveryProviderName ?: $default['platform_delivery']['provider_name'],
+                'product_code' => $platformDeliveryProductCode,
+                'product_name' => $platformDeliveryProductName,
+            ],
+            'follow_official_account' => [
+                'enabled' => !empty($followOfficialAccount['enabled']) ? 1 : 0,
+                'wechat_name' => mb_substr(trim((string)($followOfficialAccount['wechat_name'] ?? '')), 0, 30),
+                'qr_code' => trim((string)($followOfficialAccount['qr_code'] ?? '')),
+                'title' => mb_substr(trim((string)($followOfficialAccount['title'] ?? $default['follow_official_account']['title'])), 0, 30),
+                'content' => mb_substr(trim((string)($followOfficialAccount['content'] ?? $default['follow_official_account']['content'])), 0, 120),
+            ],
+            'customer_service' => [
+                'enabled' => !empty($customerService['enabled']) ? 1 : 0,
+                'type' => $customerServiceType,
+                'qrcode' => trim((string)($customerService['qrcode'] ?? '')),
+                'title' => mb_substr(trim((string)($customerService['title'] ?? $default['customer_service']['title'])), 0, 30),
+                'content' => mb_substr(trim((string)($customerService['content'] ?? $default['customer_service']['content'])), 0, 120),
+            ],
+            'allow_user_reject_sale' => array_key_exists('allow_user_reject_sale', $data)
+                ? (!empty($data['allow_user_reject_sale']) ? 1 : 0)
+                : $default['allow_user_reject_sale'],
+            'order_detail' => [
+                'show_inspection_result' => array_key_exists('show_inspection_result', $orderDetail)
+                    ? (!empty($orderDetail['show_inspection_result']) ? 1 : 0)
+                    : $default['order_detail']['show_inspection_result'],
+                'show_inspection_images' => array_key_exists('show_inspection_images', $orderDetail)
+                    ? (!empty($orderDetail['show_inspection_images']) ? 1 : 0)
+                    : $default['order_detail']['show_inspection_images'],
+            ],
+            'consignment' => [
+                'enabled' => !empty($consignment['enabled']) ? 1 : 0,
+                'user_entry_enabled' => array_key_exists('user_entry_enabled', $consignment) ? (!empty($consignment['user_entry_enabled']) ? 1 : 0) : $default['consignment']['user_entry_enabled'],
+                'user_view_enabled' => array_key_exists('user_view_enabled', $consignment) ? (!empty($consignment['user_view_enabled']) ? 1 : 0) : $default['consignment']['user_view_enabled'],
+                'transfer_confirm_required' => array_key_exists('transfer_confirm_required', $consignment) ? (!empty($consignment['transfer_confirm_required']) ? 1 : 0) : $default['consignment']['transfer_confirm_required'],
+                'notice_enabled' => array_key_exists('notice_enabled', $consignment) ? (!empty($consignment['notice_enabled']) ? 1 : 0) : $default['consignment']['notice_enabled'],
+                'print_enabled' => array_key_exists('print_enabled', $consignment) ? (!empty($consignment['print_enabled']) ? 1 : 0) : $default['consignment']['print_enabled'],
+                'show_service_fee' => !empty($consignment['show_service_fee']) ? 1 : 0,
+                'user_title' => mb_substr(trim((string)($consignment['user_title'] ?? $default['consignment']['user_title'])), 0, 20),
+                'user_desc' => mb_substr(trim((string)($consignment['user_desc'] ?? $default['consignment']['user_desc'])), 0, 80),
+            ],
+            'work_wechat' => $this->sanitizeWorkWechatConfig($workWechat, $strict),
+            'price_detail_theme' => $this->sanitizePriceDetailTheme($priceDetailTheme),
+        ];
+
+        if ($config['notice']['title'] === '') {
+            $config['notice']['title'] = $default['notice']['title'];
+        }
+
+        if ($config['notice']['content'] === '') {
+            $config['notice']['enabled'] = 0;
+        }
+
+        if ($config['follow_official_account']['title'] === '') {
+            $config['follow_official_account']['title'] = $default['follow_official_account']['title'];
+        }
+        if ($config['follow_official_account']['content'] === '') {
+            $config['follow_official_account']['content'] = $default['follow_official_account']['content'];
+        }
+        if ($config['follow_official_account']['enabled'] && $config['follow_official_account']['qr_code'] === '') {
+            if ($strict) {
+                throw new CommonException('开启公众号关注提醒前，请先上传公众号二维码图片');
+            }
+            $config['follow_official_account']['enabled'] = 0;
+        }
+
+        if ($config['customer_service']['title'] === '') {
+            $config['customer_service']['title'] = $default['customer_service']['title'];
+        }
+        if ($config['customer_service']['content'] === '') {
+            $config['customer_service']['content'] = $default['customer_service']['content'];
+        }
+        if ($config['customer_service']['enabled'] && $config['customer_service']['type'] === 'qrcode' && $config['customer_service']['qrcode'] === '') {
+            if ($strict) {
+                throw new CommonException('选择客服二维码模式前，请先上传客服二维码图片');
+            }
+            $config['customer_service']['enabled'] = 0;
+        }
+
+        if (empty($config['delivery_modes']['mail'])
+            && empty($config['delivery_modes']['self'])
+            && empty($config['delivery_modes']['logistics_vehicle'])) {
+            $config['delivery_modes'] = $default['delivery_modes'];
+        }
+
+        if ($config['consignment']['user_title'] === '') {
+            $config['consignment']['user_title'] = $default['consignment']['user_title'];
+        }
+        if ($config['consignment']['user_desc'] === '') {
+            $config['consignment']['user_desc'] = $default['consignment']['user_desc'];
+        }
+        if (!$config['consignment']['enabled']) {
+            $config['consignment']['user_entry_enabled'] = 0;
+            $config['consignment']['user_view_enabled'] = 0;
+            $config['consignment']['notice_enabled'] = 0;
+            $config['consignment']['print_enabled'] = 0;
+        }
+
+        return $config;
+    }
+
+    private function sanitizeWorkWechatConfig(array $data, bool $strict = false): array
+    {
+        $default = $this->defaultConfig()['work_wechat'];
+        $channels = is_array($data['channels'] ?? null) ? $data['channels'] : [];
+        $config = [
+            'enabled' => !empty($data['enabled']) ? 1 : 0,
+            'channels' => [],
+        ];
+
+        foreach ($default['channels'] as $key => $defaultChannel) {
+            $channel = is_array($channels[$key] ?? null) ? $channels[$key] : [];
+            $name = mb_substr(trim((string)($channel['name'] ?? $defaultChannel['name'])), 0, 30);
+            $webhookUrl = trim((string)($channel['webhook_url'] ?? ''));
+            $dedupeMinutes = max(0, min(1440, (int)($channel['dedupe_minutes'] ?? $defaultChannel['dedupe_minutes'])));
+            $dailyLimit = max(0, min(999, (int)($channel['daily_limit'] ?? $defaultChannel['daily_limit'])));
+
+            $config['channels'][$key] = [
+                'enabled' => !empty($channel['enabled']) ? 1 : 0,
+                'name' => $name !== '' ? $name : $defaultChannel['name'],
+                'webhook_url' => mb_substr($webhookUrl, 0, 1000),
+                'dedupe_minutes' => $dedupeMinutes,
+                'daily_limit' => $dailyLimit,
+            ];
+
+            // 订单催办群：额外保存用户端“催一下”冷却时间（小时），0 表示不限制
+            if (array_key_exists('user_cooldown_hours', $defaultChannel)) {
+                $config['channels'][$key]['user_cooldown_hours'] = max(0, min(720, (int)($channel['user_cooldown_hours'] ?? $defaultChannel['user_cooldown_hours'])));
+            }
+
+            if ($strict && $config['enabled'] && $config['channels'][$key]['enabled'] && $config['channels'][$key]['webhook_url'] === '') {
+                throw new CommonException($config['channels'][$key]['name'] . '已启用，请填写企业微信群机器人 Webhook 地址');
+            }
+        }
+
+        return $config;
+    }
+
+    private function defaultPriceDetailTheme(): array
+    {
+        return [
+            'template_key' => 'classic_blue',
+            'theme_name' => '默认蓝',
+            'colors' => $this->priceDetailThemePresets()['classic_blue']['colors'],
+        ];
+    }
+
+    private function getFrameworkPriceDetailTheme(int $siteId): array
+    {
+        $default = $this->defaultPriceDetailTheme();
+        $selectedTheme = (new DiyTheme())->where([
+            ['site_id', '=', $siteId],
+            ['addon', '=', 'hsx_recycle'],
+            ['is_selected', '=', 1],
+        ])->field('title,theme')->findOrEmpty()->toArray();
+
+        if (!empty($selectedTheme) && is_array($selectedTheme['theme'] ?? null)) {
+            return $this->frameworkThemeToPriceDetailTheme(
+                (string)($selectedTheme['title'] ?? $default['theme_name']),
+                $selectedTheme['theme']
+            );
+        }
+
+        $themeConfig = array_values(array_filter(event('ThemeColor', ['key' => 'hsx_recycle'])))[0] ?? [];
+        $themeColor = $themeConfig['theme_color'][0] ?? [];
+        if (!empty($themeColor) && is_array($themeColor['theme'] ?? null)) {
+            return $this->frameworkThemeToPriceDetailTheme(
+                (string)($themeColor['title'] ?? $default['theme_name']),
+                $themeColor['theme']
+            );
+        }
+
+        return $default;
+    }
+
+    private function frameworkThemeToPriceDetailTheme(string $themeName, array $theme): array
+    {
+        $defaultColors = $this->defaultPriceDetailTheme()['colors'];
+        $pick = function (array $keys, string $default) use ($theme): string {
+            foreach ($keys as $key) {
+                $value = $this->sanitizeCssColor((string)($theme[$key] ?? ''));
+                if ($value !== '') {
+                    return $value;
+                }
+            }
+            return $default;
+        };
+
+        $brand = $pick(['--primary-color'], $defaultColors['brand']);
+        $brandDeep = $pick(['--primary-color-dark', '--primary-color'], $defaultColors['brand_deep']);
+        $softBg = $pick(['--primary-color-light2', '--primary-color-light'], $defaultColors['soft_bg']);
+        $line = $pick(['--primary-color-light'], $defaultColors['line']);
+        $price = $pick(['--price-text-color', '--primary-color'], $defaultColors['price']);
+
+        return [
+            'template_key' => 'framework_theme',
+            'theme_name' => mb_substr(trim($themeName), 0, 20) ?: '主题风格',
+            'colors' => [
+                'page_bg' => $pick(['--page-bg-color'], $defaultColors['page_bg']),
+                'card_bg' => '#FFFFFF',
+                'soft_bg' => $softBg,
+                'line' => $line,
+                'text_main' => $defaultColors['text_main'],
+                'text_sub' => $defaultColors['text_sub'],
+                'brand' => $brand,
+                'brand_deep' => $brandDeep,
+                'price' => $price,
+                'notice_bg' => $softBg,
+                'notice_text' => $pick(['--primary-help-color2', '--primary-help-color', '--primary-color'], $defaultColors['notice_text']),
+                'toolbar_bg' => '#FFFFFF',
+                'button_bg' => $brand,
+                'button_text' => '#FFFFFF',
+                'series_active_bg' => $brand,
+                'series_active_text' => '#FFFFFF',
+                'series_inactive_bg' => $softBg,
+                'series_inactive_text' => $brandDeep,
+                'model_head_bg' => $softBg,
+                'model_brand_bg' => $brand,
+                'model_brand_text' => '#FFFFFF',
+            ],
+        ];
+    }
+
+    private function sanitizeCssColor(string $value): string
+    {
+        $value = trim($value);
+        if (preg_match('/^#[0-9a-fA-F]{6}$/', $value) === 1) {
+            return strtoupper($value);
+        }
+        if (preg_match('/^rgba?\(\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}\s*(,\s*(0|1|0?\.\d+))?\s*\)$/i', $value) === 1) {
+            return $value;
+        }
+        return '';
+    }
+
+    private function sanitizePriceDetailTheme(array $theme): array
+    {
+        $presets = $this->priceDetailThemePresets();
+        $templateKey = trim((string)($theme['template_key'] ?? 'classic_blue'));
+        if (!isset($presets[$templateKey])) {
+            $templateKey = 'classic_blue';
+        }
+
+        $preset = $presets[$templateKey];
+        $colors = is_array($theme['colors'] ?? null) ? $theme['colors'] : [];
+        $resultColors = $preset['colors'];
+        foreach ($resultColors as $key => $defaultValue) {
+            $resultColors[$key] = $this->sanitizeColor((string)($colors[$key] ?? $defaultValue), $defaultValue);
+        }
+
+        return [
+            'template_key' => $templateKey,
+            'theme_name' => mb_substr(trim((string)($theme['theme_name'] ?? $preset['name'])), 0, 20) ?: $preset['name'],
+            'colors' => $resultColors,
+        ];
+    }
+
+    private function sanitizeNoticeUrl($value, bool $strict): string
+    {
+        $url = is_string($value) ? trim($value) : '';
+        if ($url === '') return '';
+        $valid = strlen($url) <= 1000 && !preg_match('/[\s\\\\<>"\x00-\x1f]/u', $url);
+        $parts = parse_url($url);
+        if (str_starts_with($url, '/')) {
+            $valid = $valid && is_array($parts)
+                && preg_match('~^/(addon|app)/[a-zA-Z0-9_/-]+$~D', $parts['path'] ?? '')
+                && !str_contains($parts['path'] ?? '', '//')
+                && !isset($parts['host']) && !isset($parts['fragment']);
+        } else {
+            $valid = $valid && is_array($parts) && filter_var($url, FILTER_VALIDATE_URL)
+                && in_array(strtolower($parts['scheme'] ?? ''), ['http', 'https'], true)
+                && !isset($parts['user']) && !isset($parts['pass']);
+        }
+        if ($valid) return $url;
+        if ($strict) throw new CommonException('通知跳转地址请填写 /addon/ 或 /app/ 开头的页面路径，或完整的 http(s) 网址；不要包含空格或账号密码');
+        return '';
+    }
+
+    private function sanitizeColor(string $value, string $default): string
+    {
+        $value = trim($value);
+        if (preg_match('/^#[0-9a-fA-F]{6}$/', $value) === 1) {
+            return strtoupper($value);
+        }
+        return strtoupper($default);
+    }
+
+    private function priceDetailThemePresets(): array
+    {
+        return [
+            'classic_blue' => [
+                'name' => '默认蓝',
+                'colors' => [
+                    'page_bg' => '#F3F4F6',
+                    'card_bg' => '#FFFFFF',
+                    'soft_bg' => '#F7F7F8',
+                    'line' => '#E5E7EB',
+                    'text_main' => '#1F2937',
+                    'text_sub' => '#6B7280',
+                    'brand' => '#3B82F6',
+                    'brand_deep' => '#4F46E5',
+                    'price' => '#2563EB',
+                    'notice_bg' => '#FFF8ED',
+                    'notice_text' => '#F59E0B',
+                    'toolbar_bg' => '#FFFFFF',
+                    'button_bg' => '#111827',
+                    'button_text' => '#FFFFFF',
+                    'series_active_bg' => '#111827',
+                    'series_active_text' => '#FFFFFF',
+                    'series_inactive_bg' => '#F8FAFC',
+                    'series_inactive_text' => '#475569',
+                    'model_head_bg' => '#F8FAFC',
+                    'model_brand_bg' => '#111827',
+                    'model_brand_text' => '#FFFFFF',
+                ],
+            ],
+            'eco_green' => [
+                'name' => '绿色环保',
+                'colors' => [
+                    'page_bg' => '#F0FDF4',
+                    'card_bg' => '#FFFFFF',
+                    'soft_bg' => '#DCFCE7',
+                    'line' => '#BBF7D0',
+                    'text_main' => '#14532D',
+                    'text_sub' => '#4B7560',
+                    'brand' => '#16A34A',
+                    'brand_deep' => '#15803D',
+                    'price' => '#15803D',
+                    'notice_bg' => '#ECFDF5',
+                    'notice_text' => '#047857',
+                    'toolbar_bg' => '#FFFFFF',
+                    'button_bg' => '#166534',
+                    'button_text' => '#FFFFFF',
+                    'series_active_bg' => '#166534',
+                    'series_active_text' => '#FFFFFF',
+                    'series_inactive_bg' => '#ECFDF5',
+                    'series_inactive_text' => '#166534',
+                    'model_head_bg' => '#F0FDF4',
+                    'model_brand_bg' => '#166534',
+                    'model_brand_text' => '#FFFFFF',
+                ],
+            ],
+            'warm_orange' => [
+                'name' => '橙色回收',
+                'colors' => [
+                    'page_bg' => '#FFF7ED',
+                    'card_bg' => '#FFFFFF',
+                    'soft_bg' => '#FFEDD5',
+                    'line' => '#FED7AA',
+                    'text_main' => '#431407',
+                    'text_sub' => '#9A5B21',
+                    'brand' => '#F97316',
+                    'brand_deep' => '#EA580C',
+                    'price' => '#EA580C',
+                    'notice_bg' => '#FFFBEB',
+                    'notice_text' => '#D97706',
+                    'toolbar_bg' => '#FFFFFF',
+                    'button_bg' => '#C2410C',
+                    'button_text' => '#FFFFFF',
+                    'series_active_bg' => '#C2410C',
+                    'series_active_text' => '#FFFFFF',
+                    'series_inactive_bg' => '#FFEDD5',
+                    'series_inactive_text' => '#9A3412',
+                    'model_head_bg' => '#FFF7ED',
+                    'model_brand_bg' => '#C2410C',
+                    'model_brand_text' => '#FFFFFF',
+                ],
+            ],
+            'dark_business' => [
+                'name' => '深色商务',
+                'colors' => [
+                    'page_bg' => '#111827',
+                    'card_bg' => '#1F2937',
+                    'soft_bg' => '#374151',
+                    'line' => '#4B5563',
+                    'text_main' => '#F9FAFB',
+                    'text_sub' => '#CBD5E1',
+                    'brand' => '#60A5FA',
+                    'brand_deep' => '#818CF8',
+                    'price' => '#93C5FD',
+                    'notice_bg' => '#1E3A8A',
+                    'notice_text' => '#DBEAFE',
+                    'toolbar_bg' => '#1F2937',
+                    'button_bg' => '#60A5FA',
+                    'button_text' => '#0F172A',
+                    'series_active_bg' => '#60A5FA',
+                    'series_active_text' => '#0F172A',
+                    'series_inactive_bg' => '#374151',
+                    'series_inactive_text' => '#E5E7EB',
+                    'model_head_bg' => '#1F2937',
+                    'model_brand_bg' => '#60A5FA',
+                    'model_brand_text' => '#0F172A',
+                ],
+            ],
+            'premium_red' => [
+                'name' => '红色高价',
+                'colors' => [
+                    'page_bg' => '#FFF1F2',
+                    'card_bg' => '#FFFFFF',
+                    'soft_bg' => '#FFE4E6',
+                    'line' => '#FECDD3',
+                    'text_main' => '#4C0519',
+                    'text_sub' => '#9F1239',
+                    'brand' => '#E11D48',
+                    'brand_deep' => '#BE123C',
+                    'price' => '#E11D48',
+                    'notice_bg' => '#FFF1F2',
+                    'notice_text' => '#BE123C',
+                    'toolbar_bg' => '#FFFFFF',
+                    'button_bg' => '#BE123C',
+                    'button_text' => '#FFFFFF',
+                    'series_active_bg' => '#BE123C',
+                    'series_active_text' => '#FFFFFF',
+                    'series_inactive_bg' => '#FFE4E6',
+                    'series_inactive_text' => '#BE123C',
+                    'model_head_bg' => '#FFF1F2',
+                    'model_brand_bg' => '#BE123C',
+                    'model_brand_text' => '#FFFFFF',
+                ],
+            ],
+        ];
+    }
+
+    private function getDefaultPlatformDeliveryProviders(): array
+    {
+        $providers = ExpressProviderDict::getProviders();
+        $result = [];
+
+        foreach ($providers as $key => $provider) {
+            // 旧目录只能兜底旧易速；不能因它为空就默认选择尚未启用的顺丰。
+            if ($key !== ExpressProviderDict::PROVIDER_YISU) continue;
+            $result[] = [
+                'provider' => $key,
+                'provider_name' => $provider['name'] ?? $key,
+                'is_default' => 1,
+                'support_quote' => !empty($provider['support_quote']),
+                'support_cancel' => !empty($provider['support_cancel']),
+                'support_track' => !empty($provider['support_track']),
+            ];
+        }
+
+        return $result;
+    }
+
+    private function getPlatformDeliveryProviderOptions(int $siteId): array
+    {
+        if ($this->usesSfPickup($siteId)) {
+            return [[
+                'provider' => ExpressProviderDict::PROVIDER_SF_DIRECT,
+                'provider_name' => '顺丰直连',
+                'is_default' => 1,
+                'support_quote' => false,
+                'support_cancel' => true,
+                'support_track' => false,
+            ]];
+        }
+        $list = ExpressProviderConfig::getEnabledProviders($siteId);
+        if (empty($list)) {
+            ExpressProviderConfig::initSiteConfig($siteId);
+            $list = ExpressProviderConfig::getEnabledProviders($siteId);
+        }
+
+        $providers = ExpressProviderDict::getProviders();
+        $result = [];
+        foreach ($list as $item) {
+            $provider = (string)($item['provider'] ?? '');
+            if ($provider === '') {
+                continue;
+            }
+            $providerInfo = $providers[$provider] ?? [];
+            $result[] = [
+                'provider' => $provider,
+                'provider_name' => (string)($item['provider_name'] ?? ($providerInfo['name'] ?? $provider)),
+                'is_default' => (int)($item['is_default'] ?? 0),
+                'support_quote' => !empty($providerInfo['support_quote']),
+                'support_cancel' => !empty($providerInfo['support_cancel']),
+                'support_track' => !empty($providerInfo['support_track']),
+            ];
+        }
+
+        if (empty($result)) {
+            return $this->getDefaultPlatformDeliveryProviders();
+        }
+
+        return $result;
+    }
+
+    private function getPlatformDeliveryProductOptions(int $siteId): array
+    {
+        if ($this->usesSfPickup($siteId)) {
+            // 与实际预约使用同一入口，只读取本站已启用的正式取件产品。
+            // 插件缺失、取件停用或沙箱配置都不回退到易速，也不伪造可用线路。
+            try {
+                $products = (new ExpressGatewayService())->products($siteId);
+            } catch (\Throwable $e) {
+                return [];
+            }
+            $result = [];
+            foreach ($products as $product) {
+                if (($product['provider'] ?? '') !== ExpressProviderDict::PROVIDER_SF_DIRECT
+                    || empty($product['enabled']) || empty($product['product_code'])) continue;
+                $result[] = [
+                    'provider' => ExpressProviderDict::PROVIDER_SF_DIRECT,
+                    'product_code' => (string)$product['product_code'],
+                    'product_name' => (string)($product['product_name'] ?? '顺丰上门取件'),
+                    'express_type' => (string)($product['express_type'] ?? ''),
+                    'logo' => (string)($product['logo'] ?? ''),
+                ];
+            }
+            return $result;
+        }
+        $products = (new ExpressProductCatalogService())->getEnabledProducts(
+            $siteId,
+            ExpressProviderDict::PROVIDER_YISU
+        );
+        $result = [];
+
+        foreach ($products as $product) {
+            $productCode = (string)($product['product_code'] ?? '');
+            if ($productCode === '') {
+                continue;
+            }
+
+            $result[] = [
+                'provider' => ExpressProviderDict::PROVIDER_YISU,
+                'product_code' => $productCode,
+                'product_name' => (string)($product['product_name'] ?? $productCode),
+                'express_type' => (string)($product['express_type'] ?? ''),
+                'logo' => (string)($product['logo'] ?? ''),
+            ];
+        }
+
+        return $result;
+    }
+
+    private function usesSfPickup(int $siteId): bool
+    {
+        return (new RecycleThirdPartyConfigService())->getActiveProvider($siteId, ThirdPartyDict::SERVICE_TYPE_EXPRESS_ORDER)
+            === ExpressProviderDict::PROVIDER_SF_DIRECT;
+    }
+
+    public function isDeliveryModeEnabled(int $siteId, int $deliveryType): bool
+    {
+        $config = $this->getConfig($siteId);
+        $key = match ($deliveryType) {
+            (int)RecycleOrderDict::DELIVERY_TYPE_SELF => 'self',
+            (int)RecycleOrderDict::DELIVERY_TYPE_LOGISTICS_VEHICLE => 'logistics_vehicle',
+            default => 'mail',
+        };
+        return !empty($config['delivery_modes'][$key]);
+    }
+
+    private function sanitizeClock(string $value, string $fallback): string
+    {
+        $value = trim($value);
+        return preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/', $value) ? $value : $fallback;
+    }
+
+    public function canUsePlatformDelivery(int $siteId, int $count): bool
+    {
+        $config = $this->getConfig($siteId);
+        $minCount = max(1, (int)($config['platform_delivery']['free_shipping_min_count'] ?? 1));
+        return $count >= $minCount;
+    }
+
+    public function isConsignmentEnabled(int $siteId): bool
+    {
+        $config = $this->getConfig($siteId);
+        return !empty($config['consignment']['enabled']);
+    }
+
+    public function canUserViewConsignment(int $siteId): bool
+    {
+        $config = $this->getConfig($siteId);
+        return !empty($config['consignment']['enabled']) && !empty($config['consignment']['user_view_enabled']);
+    }
+
+    public function isConsignmentNoticeEnabled(int $siteId): bool
+    {
+        $config = $this->getConfig($siteId);
+        return !empty($config['consignment']['enabled']) && !empty($config['consignment']['notice_enabled']);
+    }
+
+    public function isConsignmentPrintEnabled(int $siteId): bool
+    {
+        $config = $this->getConfig($siteId);
+        return !empty($config['consignment']['enabled']) && !empty($config['consignment']['print_enabled']);
+    }
+}

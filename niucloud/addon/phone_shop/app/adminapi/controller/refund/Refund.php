@@ -20,6 +20,7 @@ class Refund extends BaseAdminController
 {
     /**
      * 列表
+     * @description 查看订单退款列表-分页
      * @return Response
      */
     public function lists()
@@ -34,6 +35,7 @@ class Refund extends BaseAdminController
 
     /**
      * 详情
+     * @description 查看订单退款详情
      * @param string $order_refund_no
      * @return Response
      */
@@ -44,6 +46,7 @@ class Refund extends BaseAdminController
 
     /**
      * 审核退款
+     * @description 操作审核订单退款
      * @return Response
      */
     public function auditApply($order_refund_no)
@@ -61,6 +64,7 @@ class Refund extends BaseAdminController
 
     /**
      * 确认收货
+     * @description 操作确认收货
      * @return Response
      */
     public function auditRefundGoods($order_refund_no)
@@ -73,8 +77,10 @@ class Refund extends BaseAdminController
         ( new RefundActionService() )->auditRefundGoods($data);
         return success();
     }
+
     /**
      * 商家主动退款
+     * @description 操作订单主动退款
      * @return Response
      */
     public function shopActiveRefund()
@@ -90,6 +96,7 @@ class Refund extends BaseAdminController
 
     /**
      * 获取订单项可退款金额
+     * @description 查看订单项可退款金额
      * @return Response
      */
     public function getOrderRefundMoney()
@@ -98,6 +105,17 @@ class Refund extends BaseAdminController
             [ 'order_goods_ids', [] ]
         ]);
         return success(data: ( new RefundActionService() )->getOrderRefundMoney($data));
+    }
+
+    /**
+     * 关闭售后
+     * @description 操作关闭售后
+     * @return void
+     */
+    public function closeRefund($order_refund_no)
+    {
+        (new RefundActionService())->closeRefund($order_refund_no);
+        return success();
     }
 
 

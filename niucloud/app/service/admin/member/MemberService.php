@@ -16,6 +16,7 @@ use app\dict\member\MemberRegisterTypeDict;
 use app\model\member\Member;
 use app\service\admin\sys\ExportService;
 use app\service\core\member\CoreMemberService;
+use app\service\core\member\CoreMemberEntitlementDisplayService;
 use core\base\BaseAdminService;
 use core\dict\DictLoader;
 use core\exception\AdminException;
@@ -50,9 +51,14 @@ class MemberService extends BaseAdminService
             ->order('member_id desc')
             ->with('member_level_name_bind')
             ->append(['register_channel_name', 'register_type_name', 'sex_name', 'login_channel_name', 'login_type_name', 'status_name']);
-        return $this->pageQuery($search_model, function ($item, $key) {
+        $page = $this->pageQuery($search_model, function ($item, $key) {
             $item = $this->makeUp($item);
         });
+        $display = (new CoreMemberEntitlementDisplayService())->forMembers((int)$this->site_id, array_column($page['data'], 'member_id'));
+        foreach ($page['data'] as &$member) $member['member_entitlements'] = $display['members'][(int)$member['member_id']] ?? [];
+        unset($member);
+        $page['member_entitlement_sources'] = $display['sources'];
+        return $page;
     }
 
     /**
@@ -85,6 +91,9 @@ class MemberService extends BaseAdminService
         if (empty($info['member_level'])) {
             $info['member_level'] = '';
         }
+        $display = (new CoreMemberEntitlementDisplayService())->forMembers((int)$this->site_id, [(int)($info['member_id'] ?? 0)]);
+        $info['member_entitlement_sources'] = $display['sources'];
+        $info['member_entitlements'] = $display['members'][(int)($info['member_id'] ?? 0)] ?? [];
         return $info;
     }
 

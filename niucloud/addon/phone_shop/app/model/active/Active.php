@@ -128,6 +128,18 @@ class Active extends BaseModel
     }
 
     /**
+     * 搜索器:活动类型
+     * @param $value
+     * @param $data
+     */
+    public function searchActiveTypeAttr($query, $value, $data)
+    {
+        if ($value) {
+            $query->where("active_type", '=', $value);
+        }
+    }
+
+    /**
      * 搜索器:状态
      * @param $value
      * @param $data

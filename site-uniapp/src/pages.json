@@ -1,0 +1,784 @@
+{
+	"pages": [ // pages数组中第一项表示应用启动页，参考：https://uniapp.dcloud.io/collocation/pages
+		
+		{
+			"path": "app/pages/index/menu",
+			"style": {
+				"navigationBarTitleText": "%pages.index.menu%"
+			},
+			"needLogin": true
+		},
+		{
+			"path": "app/pages/index/index",
+			"style": {
+				// #ifndef H5
+                "navigationStyle": "custom",
+                // #endif
+				"navigationBarTitleText": "%pages.index.index%"
+			},
+			"needLogin": true
+		},
+		{
+			"path": "app/pages/wecom/entry",
+			"style": {
+				"navigationBarTitleText": "正在打开任务"
+			}
+		},
+		{
+			"path": "app/pages/site/index",
+			"style": {
+				"navigationBarTitleText": "%pages.site.index%"
+			},
+			"needLogin": true
+		},
+		{
+			"path": "app/pages/site/account",
+			"style": {
+				"navigationBarTitleText": "%pages.site.account%"
+			},
+			"needLogin": true
+		},
+		{
+			"path": "app/pages/site/about",
+			"style": {
+				"navigationBarTitleText": "%pages.site.about%"
+			},
+			"needLogin": true
+		},
+		{
+			"path": "app/pages/site/setting",
+			"style": {
+				"navigationBarTitleText": "%pages.site.setting%"
+			},
+			"needLogin": true
+		},
+		{
+			"path": "app/pages/site/info",
+			"style": {
+				"navigationBarTitleText": "%pages.site.info%"
+			},
+			"needLogin": true
+		},
+		{
+			"path": "app/pages/site/store",
+			"style": {
+				"navigationBarTitleText": "%pages.site.store%"
+			},
+			"needLogin": true
+		},
+		{
+			"path": "app/pages/permission/user-list",
+			"style": {
+				"navigationBarTitleText": "管理员"
+			},
+			"needLogin": true
+		},
+		{
+			"path": "app/pages/permission/user-edit",
+			"style": {
+				"navigationBarTitleText": "管理员信息"
+			},
+			"needLogin": true
+		},
+		{
+			"path": "app/pages/permission/role-list",
+			"style": {
+				"navigationBarTitleText": "角色管理"
+			},
+			"needLogin": true
+		},
+		{
+			"path": "app/pages/permission/role-edit",
+			"style": {
+				"navigationBarTitleText": "角色权限"
+			},
+			"needLogin": true
+		},
+		{
+			"path": "app/pages/verify/index",
+			"style": {
+				"navigationBarTitleText": "%pages.verify.index%"
+			},
+			"needLogin": true
+		},
+		{
+			"path": "app/pages/verify/verify",
+			"style": {
+				"navigationBarTitleText": "%pages.verify.verify%"
+			},
+			"needLogin": true
+		},
+		{
+			"path": "app/pages/verify/detail",
+			"style": {
+				"navigationBarTitleText": "%pages.verify.detail%"
+			},
+			"needLogin": true
+		},
+		{
+			"path": "app/pages/verify/record",
+			"style": {
+				"navigationBarTitleText": "%pages.verify.record%"
+			},
+			"needLogin": true
+		},
+		{
+			"path": "app/pages/verify/manual",
+			"style": {
+				"navigationBarTitleText": "%pages.verify.manual%"
+			},
+			"needLogin": true
+		},
+		{
+			"path": "app/pages/member/index",
+			"style": {
+				"navigationBarTitleText": "%pages.member.index%"
+			},
+			"needLogin": true
+		},
+		{
+			"path": "app/pages/member/detail",
+			"style": {
+				"navigationBarTitleText": "%pages.member.detail%"
+			},
+			"needLogin": true
+		},
+		{
+			"path": "app/pages/member/coupon",
+			"style": {
+				"navigationBarTitleText": "%pages.member.coupon%"
+			},
+			"needLogin": true
+		},
+		{
+			"path": "app/pages/auth/login",
+			"style": {
+				// #ifndef H5
+                "navigationStyle": "custom",
+                // #endif
+				"navigationBarTitleText": "%pages.auth.login%"
+			}
+		},
+		{
+			"path": "app/pages/auth/register",
+			"style": {
+				// #ifndef H5
+                "navigationStyle": "custom",
+                // #endif
+				"navigationBarTitleText": "%pages.auth.register%"
+			}
+		},
+		{
+			"path": "app/pages/auth/updatepwd",
+			"style": {
+
+				"navigationBarTitleText": "%pages.auth.updatepwd%"
+			},
+			"needLogin": true
+		},
+		{
+			"path": "app/pages/webview/index",
+			"style": {
+				"navigationBarTitleText": "%pages.webview.index%"
+			}
+		},
+		{
+			"path": "app/pages/weapp/order_shipping",
+			"style": {
+				"navigationBarTitleText": "%pages.weapp.order_shipping%"
+			},
+			"needLogin": true
+		}
+		,
+		{
+			"path": "app/pages/article/list",
+			"style": {
+				"navigationBarTitleText": "%pages.article.list%"
+			},
+			"needLogin": true
+		},
+		{
+			"path": "app/pages/article/detail",
+			"style": {
+				"navigationBarTitleText": "%pages.article.detail%"
+			},
+			"needLogin": true
+
+		},
+		{
+			"path": "app/pages/sys/album",
+			"style": {
+				"navigationBarTitleText": "图片空间"
+			},
+			"needLogin": true
+		}
+
+	],
+	"subPackages": [
+		{
+			"root": "addon/phone_shop",
+			"pages": [
+				{
+					"path": "pages/order/list",
+					"style": {
+						// #ifndef H5
+						"navigationStyle": "custom",
+						// #endif
+                        "navigationBarTitleText": "商城订单"
+					},
+					"needLogin": true
+				},
+				{
+					"path": "pages/order/detail",
+					"style": { "navigationBarTitleText": "订单详情" },
+					"needLogin": true
+				},
+				{
+					"path": "pages/intake/list",
+					"style": {
+						// #ifndef H5
+						"navigationStyle": "custom",
+						// #endif
+						"navigationBarTitleText": "商城资料运营"
+					},
+					"needLogin": true
+				},
+				{
+					"path": "pages/goods/list",
+					"style": {
+						// #ifndef H5
+						"navigationStyle": "custom",
+						// #endif
+						"navigationBarTitleText": "商品管理"
+					},
+					"needLogin": true
+				},
+				{
+					"path": "pages/goods/add",
+					"style": {
+						"navigationBarTitleText": "发布商品"
+					},
+					"needLogin": true
+				},
+				{
+					"path": "pages/goods/category",
+					"style": {
+						"navigationBarTitleText": "分类管理"
+					},
+					"needLogin": true
+				}
+			]
+		},
+		// {{ PAGE_BEGAIN }}
+        // MALL_PAGE_BEGIN
+		// {
+		// 	"root": "addon/mall",
+		// 	"pages": [
+		// 		// *********************************** 商城 ***********************************
+		// 		{
+		// 			"path": "pages/goods/list",
+		// 			"style": {
+		// 				"navigationBarTitleText": "%mall.pages.goods.list%"
+		// 			},
+		// 			"needLogin": true
+		// 		},{
+		// 			"path": "pages/goods/album",
+		// 			"style": {
+		// 				"navigationBarTitleText": "%mall.pages.goods.album%"
+		// 			},
+		// 			"needLogin": true
+		// 		},
+		// 		{
+		// 			"path": "pages/goods/edit",
+		// 			"style": {
+		// 				"navigationBarTitleText": "%mall.pages.goods.edit%"
+		// 			},
+		// 			"needLogin": true
+		// 		},
+		// 		{
+		// 			"path": "pages/goods/spec",
+		// 			"style": {
+		// 				"navigationBarTitleText": "%mall.pages.goods.spec%"
+		// 			},
+		// 			"needLogin": true
+		// 		},
+		// 		{
+		// 			"path": "pages/goods/content",
+		// 			"style": {
+		// 				"navigationBarTitleText": "%mall.pages.goods.content%"
+		// 			},
+		// 			"needLogin": true
+		// 		},
+		// 		{
+		// 			"path": "pages/order/detail",
+		// 			"style": {
+		// 				// #ifndef H5
+		// 				"navigationStyle": "custom",
+		// 				// #endif
+		// 				"navigationBarTitleText": "%mall.pages.order.detail%"
+		// 			},
+		// 			"needLogin": true
+		// 		},
+		// 		{
+		// 			"path": "pages/order/list",
+		// 			"style": {
+		// 				"navigationBarTitleText": "%mall.pages.order.list%"
+		// 			},
+		// 			"needLogin": true
+		// 		},
+		// 		{
+		// 			"path": "pages/order/adjust_price",
+		// 			"style": {
+		// 				"navigationBarTitleText": "%mall.pages.order.adjust_price%"
+		// 			},
+		// 			"needLogin": true
+		// 		},
+		// 		{
+		// 			"path": "pages/order/edit_address",
+		// 			"style": {
+		// 				"navigationBarTitleText": "%mall.pages.order.edit_address%"
+		// 			},
+		// 			"needLogin": true
+		// 		},
+		// 		{
+		// 			"path": "pages/order/delivery",
+		// 			"style": {
+		// 				"navigationBarTitleText": "%mall.pages.order.delivery%"
+		// 			},
+		// 			"needLogin": true
+		// 		},
+		// 		{
+		// 			"path": "pages/refund/list",
+		// 			"style": {
+		// 				"navigationBarTitleText": "%mall.pages.refund.list%"
+		// 			},
+		// 			"needLogin": true
+		// 		},
+		// 		{
+		// 			"path": "pages/refund/detail",
+		// 			"style": {
+		// 				"navigationBarTitleText": "%mall.pages.refund.detail%"
+		// 			},
+		// 			"needLogin": true
+		// 		},
+		// 		{
+		// 			"path": "pages/refund/log",
+		// 			"style": {
+		// 				"navigationBarTitleText": "%mall.pages.refund.log%"
+		// 			},
+		// 			"needLogin": true
+		// 		}
+		// 	]
+            
+		// },
+		// MALL_PAGE_END
+		// {{ PAGE_BEGAIN }}
+        // RECYCLE_PAGE_BEGIN
+		{
+			"root": "addon/hsx_recycle",
+			"pages": [
+				{
+					"path": "pages/quote/index",
+					"style": {
+						"navigationBarTitleText": "报价单"
+					},
+					"needLogin": true
+				},
+				{
+					"path": "pages/task/index",
+					"style": {
+						"navigationBarTitleText": "我的任务"
+					},
+					"needLogin": true
+				},
+				// *********************************** 商城 ***********************************
+				{
+					"path": "pages/index",
+					"style": {
+						"navigationBarTitleText": "首页"
+					},
+					"needLogin": true
+				},
+				{
+					"path": "pages/order/list",
+					"style": {
+						// #ifndef H5
+						"navigationStyle": "custom",
+						// #endif
+						"navigationBarTitleText": "回收订单"
+					},
+					"needLogin": true
+				},
+				{
+					"path": "pages/order/detail",
+					"style": {
+						// #ifndef H5
+						"navigationStyle": "custom",
+						// #endif
+						"navigationBarTitleText": "订单详情"
+					},
+					"needLogin": true
+				},
+				{
+					"path": "pages/check/scan",
+					"style": {
+						"navigationBarTitleText": "扫码处理"
+					},
+					"needLogin": true
+				},
+				{
+					"path": "pages/consignment/list",
+					"style": {
+						// #ifndef H5
+						"navigationStyle": "custom",
+						// #endif
+						"navigationBarTitleText": "代卖订单"
+					},
+					"needLogin": true
+				},
+				{
+					"path": "pages/consignment/detail",
+					"style": {
+						"navigationBarTitleText": "代卖详情"
+					},
+					"needLogin": true
+				},
+				{
+					"path": "pages/return/list",
+					"style": {
+						// #ifndef H5
+						"navigationStyle": "custom",
+						// #endif
+						"navigationBarTitleText": "退回订单"
+					},
+					"needLogin": true
+				},
+				{
+					"path": "pages/return/detail",
+					"style": {
+						"navigationBarTitleText": "退回详情"
+					},
+					"needLogin": true
+				},
+				{
+					"path": "pages/express/list",
+					"style": {
+						"navigationBarTitleText": "快递运单"
+					},
+					"needLogin": true
+				},
+				{
+					"path": "pages/express/detail",
+					"style": {
+						"navigationBarTitleText": "运单详情"
+					},
+					"needLogin": true
+				},
+				{
+					"path": "pages/stats/index",
+					"style": {
+						"navigationBarTitleText": "工作台"
+					},
+					"needLogin": true
+				}
+			]
+		},
+		// DEVICE_ASSET_PAGE_BEGIN
+		{
+			"root": "addon/hsx_device_asset",
+			"pages": [
+                {
+                    "path": "pages/task/list",
+                    "style": {
+                        "navigationBarTitleText": "资产任务"
+                    },
+                    "needLogin": true
+                },
+                {
+					"path": "pages/photo/scan",
+					"style": {
+						"navigationBarTitleText": "资产拍照"
+					},
+					"needLogin": true
+				},
+				{
+					"path": "pages/photo/capture",
+					"style": {
+						"navigationBarTitleText": "资产拍照"
+					},
+					"needLogin": true
+				},
+				{
+					"path": "pages/price/scan",
+					"style": {
+						"navigationBarTitleText": "资产定价"
+					},
+					"needLogin": true
+				},
+				{
+					"path": "pages/price/detail",
+					"style": {
+						"navigationBarTitleText": "资产定价"
+					},
+					"needLogin": true
+				}
+			]
+		}
+		// DEVICE_ASSET_PAGE_END
+		,
+		{
+			"root": "addon/hsx_performance",
+			"pages": [
+				{ "path": "pages/output/list", "style": { "navigationBarTitleText": "员工产出" }, "needLogin": true },
+				{ "path": "pages/output/detail", "style": { "navigationBarTitleText": "员工产出详情" }, "needLogin": true },
+				{ "path": "pages/report/list", "style": { "navigationBarTitleText": "经营报告" }, "needLogin": true },
+				{ "path": "pages/report/detail", "style": { "navigationBarTitleText": "经营报告详情" }, "needLogin": true }
+			]
+		}
+		,
+		// ERP_PAGE_BEGIN
+		{
+			"root": "addon/hsx_erp",
+			"pages": [
+				{
+					"path": "pages/dashboard/index",
+					"style": { "navigationBarTitleText": "ERP经营看板" },
+					"needLogin": true
+				},
+				{
+					"path": "pages/cost_adjust/list",
+					"style": {
+						// #ifdef MP
+						"navigationStyle": "custom",
+						// #endif
+						"navigationBarTitleText": "成本调整"
+					},
+					"needLogin": true
+				},
+				{
+					"path": "pages/cost_adjust/detail",
+					"style": { "navigationBarTitleText": "成本调整" },
+					"needLogin": true
+				},
+				{
+					"path": "pages/purchase/list",
+					"style": {
+						// #ifdef MP
+						"navigationStyle": "custom",
+						// #endif
+						"navigationBarTitleText": "采购管理"
+					},
+					"needLogin": true
+				},
+				{
+					"path": "pages/sale/list",
+					"style": {
+						// #ifdef MP
+						"navigationStyle": "custom",
+						// #endif
+						"navigationBarTitleText": "销售出库"
+					},
+					"needLogin": true
+				},
+				{
+					"path": "pages/payable/list",
+					"style": {
+						// #ifdef MP
+						"navigationStyle": "custom",
+						// #endif
+						"navigationBarTitleText": "应付款"
+					},
+					"needLogin": true
+				},
+				{
+					"path": "pages/payable/detail",
+					"style": { "navigationBarTitleText": "应付详情" },
+					"needLogin": true
+				},
+				{
+					"path": "pages/receivable/list",
+					"style": {
+						// #ifdef MP
+						"navigationStyle": "custom",
+						// #endif
+						"navigationBarTitleText": "应收款"
+					},
+					"needLogin": true
+				},
+				{
+					"path": "pages/receivable/detail",
+					"style": { "navigationBarTitleText": "应收详情" },
+					"needLogin": true
+				},
+				{
+					"path": "pages/operating_finance/list",
+					"style": {
+						// #ifdef MP
+						"navigationStyle": "custom",
+						// #endif
+						"navigationBarTitleText": "经营收支"
+					},
+					"needLogin": true
+				},
+				{
+					"path": "pages/stock/list",
+					"style": {
+						// #ifdef MP
+						"navigationStyle": "custom",
+						// #endif
+						"navigationBarTitleText": "库存设备"
+					},
+					"needLogin": true
+				},
+				{
+					"path": "pages/stocktake/list",
+					"style": {
+						// #ifdef MP
+						"navigationStyle": "custom",
+						// #endif
+						"navigationBarTitleText": "库存盘点"
+					},
+					"needLogin": true
+				},
+				{
+					"path": "pages/stocktake/detail",
+					"style": { "navigationBarTitleText": "盘点作业" },
+					"needLogin": true
+				},
+				{
+					"path": "pages/serial_trace/list",
+					"style": {
+						// #ifdef MP
+						"navigationStyle": "custom",
+						// #endif
+						"navigationBarTitleText": "串号追踪"
+					},
+					"needLogin": true
+				},
+				{
+					"path": "pages/serial_trace/detail",
+					"style": { "navigationBarTitleText": "串号生命周期" },
+					"needLogin": true
+				},
+				{
+					"path": "pages/purchase_return/list",
+					"style": {
+						// #ifdef MP
+						"navigationStyle": "custom",
+						// #endif
+						"navigationBarTitleText": "采购退货"
+					},
+					"needLogin": true
+				},
+				{
+					"path": "pages/purchase_return/create",
+					"style": { "navigationBarTitleText": "发起采购退货" },
+					"needLogin": true
+				},
+				{
+					"path": "pages/sale_return/list",
+					"style": {// #ifdef MP
+						"navigationStyle": "custom",
+						// #endif
+						"navigationBarTitleText": "销售退货"
+					},	
+					"needLogin": true
+				},
+				{
+					"path": "pages/sale_return/create",
+					"style": { "navigationBarTitleText": "发起销售退货" },
+					"needLogin": true
+				},
+				{
+					"path": "pages/sale_return/detail",
+					"style": { "navigationBarTitleText": "销售退货详情" },
+					"needLogin": true
+				},
+				{
+					"path": "pages/purchase/detail",
+					"style": { "navigationBarTitleText": "采购单详情" },
+					"needLogin": true
+				},
+				{
+					"path": "pages/purchase/create",
+					"style": { "navigationBarTitleText": "采购开单" },
+					"needLogin": true
+				},
+				{
+					"path": "pages/sale/detail",
+					"style": { "navigationBarTitleText": "销售单详情" },
+					"needLogin": true
+				},
+				{
+					"path": "pages/sale/create",
+					"style": { "navigationBarTitleText": "销售出库" },
+					"needLogin": true
+				},
+				{
+					"path": "pages/stock/detail",
+					"style": { "navigationBarTitleText": "设备档案" },
+					"needLogin": true
+				},
+				{
+					"path": "pages/stock/mall-category",
+					"style": { "navigationBarTitleText": "选择商城分类", "disableScroll": true },
+					"needLogin": true
+				},
+				{
+					"path": "pages/print/index",
+					"style": { "navigationBarTitleText": "移动打印台" },
+					"needLogin": true
+				}
+			]
+		}
+		// ERP_PAGE_END
+		,
+		{
+			"root": "addon/hsx_boyuan",
+			"pages": [{ "path": "pages/workbench/index", "style": { "navigationBarTitleText": "博远对接" }, "needLogin": true }]
+		},
+		{
+			"root": "addon/hsx_member_card",
+			"pages": [
+				{ "path": "pages/dashboard/index", "style": { "navigationBarTitleText": "会员卡工作台" }, "needLogin": true },
+				{ "path": "pages/order/create", "style": { "navigationBarTitleText": "快速开卡" }, "needLogin": true },
+				{ "path": "pages/card/search", "style": { "navigationBarTitleText": "手机号核销" }, "needLogin": true },
+				{ "path": "pages/order/list", "style": { "navigationBarTitleText": "开卡订单" }, "needLogin": true },
+				{ "path": "pages/redemption/list", "style": { "navigationBarTitleText": "核销记录" }, "needLogin": true },
+				{ "path": "pages/member/list", "style": { "navigationBarTitleText": "会员列表" }, "needLogin": true },
+				{ "path": "pages/member/detail", "style": { "navigationBarTitleText": "会员详情" }, "needLogin": true },
+				{ "path": "pages/product/list", "style": { "navigationBarTitleText": "卡种列表" }, "needLogin": true },
+				{ "path": "pages/product/edit", "style": { "navigationBarTitleText": "新增卡种" }, "needLogin": true },
+				{ "path": "pages/config/payment", "style": { "navigationBarTitleText": "收款与耗材" }, "needLogin": true }
+			]
+		}
+		// MEMBER_CARD_PAGE_END
+		// RECYCLE_PAGE_END
+	],
+	"globalStyle": {
+		"navigationBarTextStyle": "black",
+		"navigationBarTitleText": "",
+		"navigationBarBackgroundColor": "#ffffff",
+		"backgroundColor": "#F6F6F6",
+		"backgroundColorTop": "#F6F6F6",
+		"backgroundColorBottom": "#F6F6F6"
+	},
+	"tabBar": {
+		"list": [{
+				"pagePath": "app/pages/index/index"
+			},
+			{
+				"pagePath": "app/pages/site/index"
+			}
+		]
+	},
+	"uniIdRouter": {},
+	"easycom": {
+		"custom": {
+			"^u-(.*)": "uview-plus/components/u-$1/u-$1.vue",
+			"^up-(.*)": "uview-plus/components/u-$1/u-$1.vue",
+			"^u-([^-].*)": "uview-plus/components/u-$1/u-$1.vue",
+			"^z-paging$": "z-paging/components/z-paging/z-paging.vue"
+		}
+	}
+}

@@ -13,6 +13,9 @@ namespace addon\phone_shop\app\model\exchange;
 
 
 use addon\phone_shop\app\dict\active\ExchangeDict;
+use addon\phone_shop\app\model\goods\Brand;
+use addon\phone_shop\app\model\goods\Goods;
+use addon\phone_shop\app\model\goods\Label;
 use app\dict\sys\FileDict;
 use core\base\BaseModel;
 use think\db\Query;
@@ -28,6 +31,8 @@ class Exchange extends BaseModel
      * @var string
      */
     protected $pk = 'id';
+
+    protected $autoWriteTimestamp = false;
 
     /**
      * 模型名称
@@ -59,7 +64,6 @@ class Exchange extends BaseModel
         }
     }
 
-
     /**
      * 搜索器ids
      * @param $value
@@ -71,7 +75,6 @@ class Exchange extends BaseModel
             $query->where("id", 'in', $value);
         }
     }
-
 
     /**
      * 搜索器商品sku 查询订单使用
@@ -110,7 +113,6 @@ class Exchange extends BaseModel
         }
     }
 
-
     /**
      * 创建时间搜索器
      * @param Query $query
@@ -137,11 +139,10 @@ class Exchange extends BaseModel
      */
     public function searchStatusAttr($query, $value, $data)
     {
-        if ($value!='') {
+        if ($value != '') {
             $query->where("status", '=', $value);
         }
     }
-
 
     /**
      * 搜索器:ID in 查询
@@ -154,7 +155,6 @@ class Exchange extends BaseModel
             $query->where("id", 'in', $value);
         }
     }
-
 
     /**
      * 活动商品类型
@@ -170,7 +170,6 @@ class Exchange extends BaseModel
         return ExchangeDict::getType()[$data['type']] ?? '';
     }
 
-
     /**
      * 活动状态
      * @param $value
@@ -184,7 +183,6 @@ class Exchange extends BaseModel
         }
         return ExchangeDict::getStatus()[$data['status']] ?? '';
     }
-
 
     /**
      * 获取封面缩略图（小）
@@ -222,17 +220,16 @@ class Exchange extends BaseModel
         return [];
     }
 
-
-  /**
+    /**
      * 获取商品图片缩略图（小）
      */
     public function getGoodsImageThumbSmallAttr($value, $data)
     {
-        if (isset($data[ 'image' ]) && $data[ 'image' ] != '') {
-            $goods_image = explode(',', $data[ 'image' ]);
+        if (isset($data['image']) && $data['image'] != '') {
+            $goods_image = explode(',', $data['image']);
             $img_arr = [];
             foreach ($goods_image as $k => $v) {
-                $img = get_thumb_images($data[ 'site_id' ], $v, FileDict::SMALL);
+                $img = get_thumb_images($data['site_id'], $v, FileDict::SMALL);
                 if (!empty($img)) {
                     $img_arr[] = $img;
                 }
@@ -247,11 +244,11 @@ class Exchange extends BaseModel
      */
     public function getGoodsImageThumbMidAttr($value, $data)
     {
-        if (isset($data[ 'image' ]) && $data[ 'image' ] != '') {
-            $goods_image = explode(',', $data[ 'image' ]);
+        if (isset($data['image']) && $data['image'] != '') {
+            $goods_image = explode(',', $data['image']);
             $img_arr = [];
             foreach ($goods_image as $k => $v) {
-                $img = get_thumb_images($data[ 'site_id' ], $v, FileDict::MID);
+                $img = get_thumb_images($data['site_id'], $v, FileDict::MID);
                 if (!empty($img)) {
                     $img_arr[] = $img;
                 }
@@ -266,11 +263,11 @@ class Exchange extends BaseModel
      */
     public function getGoodsImageThumbBigAttr($value, $data)
     {
-        if (isset($data[ 'image' ]) && $data[ 'image' ] != '') {
-            $goods_image = explode(',', $data[ 'image' ]);
+        if (isset($data['image']) && $data['image'] != '') {
+            $goods_image = explode(',', $data['image']);
             $img_arr = [];
             foreach ($goods_image as $k => $v) {
-                $img = get_thumb_images($data[ 'site_id' ], $v, FileDict::BIG);
+                $img = get_thumb_images($data['site_id'], $v, FileDict::BIG);
                 if (!empty($img)) {
                     $img_arr[] = $img;
                 }
@@ -280,9 +277,42 @@ class Exchange extends BaseModel
         return [];
     }
 
+    public function getGoodsBrandAttr($value, $data)
+    {
+        $product_detail = !is_array($data['product_detail']) ? json_decode($data['product_detail'], true) : $data['product_detail'];
+        $goods_id = $product_detail[0]['goods_id'];
+        $brand_id = (new Goods())->where([
+            ['site_id', '=', $data['site_id']],
+            ['goods_id', '=', $goods_id],
+        ])->value('brand_id') ?? 0;
+        $brand = (new Brand())->where([['site_id', '=', $data['site_id']],
+            ['brand_id', '=', $brand_id]])->field('brand_name,brand_id,site_id,color_json,logo')->findOrEmpty();
+        return $brand->isEmpty() ? null : $brand->toArray();
+    }
 
+    public function getGoodsLabelAttr($value, $data)
+    {
+        $product_detail = !is_array($data['product_detail']) ? json_decode($data['product_detail'], true) : $data['product_detail'];
+        $goods_id = $product_detail[0]['goods_id'];
+        $label_ids = (new Goods())->where([
+            ['site_id', '=', $data['site_id']],
+            ['goods_id', '=', $goods_id],
+        ])->value('label_ids') ?? [];
+        return (new Label())->where([['site_id', '=', $data['site_id']],
+            ['label_id', 'in', $label_ids]])->field('label_id,label_name,color_json,style_type,icon')->select()->toArray();
 
+    }
 
-
+    /**
+     * 搜索器:id
+     * @param $value
+     * @param $data
+     */
+    public function searchActiveIdAttr($query, $value, $data)
+    {
+        if (!empty($value)) {
+            $query->where("id", 'in', $value);
+        }
+    }
 
 }

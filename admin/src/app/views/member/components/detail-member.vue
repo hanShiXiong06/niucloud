@@ -170,7 +170,7 @@
                     </span>
                 </div>
                 <div class="flex mt-[15px] w-[33.3%] break-all leading-[21px]">
-                    <span class="text-[14px] w-[130px] text-right flex-shrink-0 mr-[20px]">{{ t('memberLevel') }}</span>
+                    <span class="text-[14px] w-[130px] text-right flex-shrink-0 mr-[20px]">{{ entitlementSources.length ? '个人等级' : t('memberLevel') }}</span>
                     <span class="text-[14px] text-[#666666]">
                         {{ formData.member_level_name || t('notAvailable') }}<el-icon @click="editMemberInfo('member_level')" class="-bottom-[2px] -right-[4px] cursor-pointer">
                             <EditPen color="#273CE2" />
@@ -254,6 +254,9 @@
                     </span>
                 </div>
             </div>
+            <div v-if="entitlementSources.length" class="member-detail-entitlements">
+                <MemberEntitlements :items="formData.member_entitlements" :sources="entitlementSources" show-title />
+            </div>
         </div>
 
         <point-edit ref="pointDialog" @complete="getMemberInfoFn" />
@@ -263,7 +266,7 @@
 </template>
 
 <script lang="ts" setup>
-import { reactive, ref } from 'vue'
+import { computed, reactive, ref } from 'vue'
 import { t } from '@/lang'
 import { getMemberInfo } from '@/app/api/member'
 import { ElMessage } from 'element-plus'
@@ -272,16 +275,20 @@ import { img } from '@/utils/common'
 import PointEdit from '@/app/views/member/components/member-point-edit.vue'
 import BalanceEdit from '@/app/views/member/components/member-balance-edit.vue'
 import EditMember from '@/app/views/member/components/edit-member.vue'
+import MemberEntitlements from '@/app/views/member/components/member-entitlements.vue'
+import { normalizeMemberEntitlementSources } from '@/app/utils/member-entitlements'
 
 const showDialog = ref(false)
 const loading = ref(false)
 let popTitle: string = '会员详情'
 let id = '';
+let readGeneration = 0
 
 const router = useRouter()
 const emit = defineEmits(['load'])
 
 const handleClose = (done: () => void) => {
+    readGeneration++
     showDialog.value = false;
 }
 
@@ -295,9 +302,12 @@ const initialFormData = {
     init_member_no: '',
     mobile: '',
     password: '',
-    password_copy: ''
+    password_copy: '',
+    member_entitlements: [],
+    member_entitlement_sources: []
 }
 const formData: Record<string, any> = reactive({ ...initialFormData })
+const entitlementSources = computed(() => normalizeMemberEntitlementSources(formData.member_entitlement_sources))
 
 const pointDialog: Record<string, any> | null = ref(null)
 const balanceDialog: Record<string, any> | null = ref(null)
@@ -361,12 +371,27 @@ const infoCommission = () => {
 }
 
 const getMemberInfoFn = async (bool=false) => {
+    const generation = ++readGeneration, requestedId = id
+    formData.member_entitlements = []
+    formData.member_entitlement_sources = []
     loading.value = true
     if (id) {
-        const data = await (await getMemberInfo(id)).data
+        let data
+        try {
+            data = await (await getMemberInfo(requestedId)).data
+        } catch (_) {
+            if (generation === readGeneration && requestedId === id) {
+                loading.value = false
+                ElMessage.error('会员资料读取失败，请重新打开后重试')
+            }
+            return false
+        }
+        if (generation !== readGeneration || requestedId !== id) return false
         if (!data || Object.keys(data).length == 0) {
+            loading.value = false
             ElMessage.error(t('memberNull'))
             setTimeout(() => {
+                if (generation !== readGeneration || requestedId !== id) return
                 router.go(-1)
             }, 2000)
             return false
@@ -409,4 +434,6 @@ defineExpose({
 })
 </script>
 
-<style lang="scss" scoped></style>
+<style lang="scss" scoped>
+.member-detail-entitlements{margin-top:24px;padding:20px 24px;border:1px solid var(--el-border-color-lighter);border-radius:8px;background:var(--el-bg-color)}
+</style>

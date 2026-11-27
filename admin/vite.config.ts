@@ -8,8 +8,22 @@ import { ElementPlusResolver } from 'unplugin-vue-components/resolvers'
 // https://vitejs.dev/config/
 export default defineConfig({
     base: '',
+    build: {
+        // This disables size reporting, not minification or HTTP gzip.
+        reportCompressedSize: false,
+        sourcemap: false,
+        minify: 'esbuild'
+    },
     server: {
-        host: '0.0.0.0'
+        host: '0.0.0.0',
+        proxy: {
+            // 本地设备读取接口代理
+            '/api/local-device': {
+                target: 'http://localhost:8080',
+                changeOrigin: true,
+                rewrite: (path) => path.replace(/^\/api\/local-device/, '/api/devices')
+            }
+        }
     },
     plugins: [
         vue(),
@@ -21,6 +35,9 @@ export default defineConfig({
         })
     ],
     resolve: {
+        // Linked addon sources live outside admin. Resolve shared UI/runtime packages
+        // from the host, including Element Plus component and style subpaths.
+        dedupe: ['vue', 'vue-router', 'pinia', 'element-plus', '@element-plus/icons-vue'],
         alias: {
             '@': fileURLToPath(new URL('./src', import.meta.url)),
             'assets': fileURLToPath(new URL('./src/assets', import.meta.url)),

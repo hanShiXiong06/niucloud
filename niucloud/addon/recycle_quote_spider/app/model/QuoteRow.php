@@ -1,0 +1,116 @@
+<?php
+declare(strict_types=1);
+
+namespace addon\recycle_quote_spider\app\model;
+
+use core\base\BaseModel;
+use addon\recycle_quote_spider\app\support\QuoteSearch;
+
+class QuoteRow extends BaseModel
+{
+    protected $pk = 'id';
+    protected $name = 'recycle_quote_spider_row';
+    protected $autoWriteTimestamp = true;
+    protected $createTime = 'create_at';
+    protected $updateTime = 'update_at';
+    protected $json = ['columns', 'source_prices', 'manual_prices', 'final_prices', 'raw_data'];
+    protected $jsonAssoc = true;
+
+    public function searchSiteIdAttr($query, $value, $data)
+    {
+        if ($value !== '' && $value !== null) {
+            $query->where('site_id', '=', $value);
+        }
+    }
+
+    public function searchSourceIdAttr($query, $value, $data)
+    {
+        if ($value !== '' && $value !== null) {
+            $query->where('source_id', '=', $value);
+        }
+    }
+
+    public function searchItemIdAttr($query, $value, $data)
+    {
+        if ($value !== '' && $value !== null) {
+            $query->where('item_id', '=', $value);
+        }
+    }
+
+    public function searchIsShowAttr($query, $value, $data)
+    {
+        if ($value !== '' && $value !== null) {
+            $query->where('is_show', '=', $value);
+        }
+    }
+
+    public function searchFollowSourceAttr($query, $value, $data)
+    {
+        if ($value !== '' && $value !== null) {
+            $query->where('follow_source', '=', $value);
+        }
+    }
+
+    public function searchHasUpdateAttr($query, $value, $data)
+    {
+        if ($value !== '' && $value !== null) {
+            $query->where('has_update', '=', $value);
+        }
+    }
+
+    public function searchBrandAttr($query, $value, $data)
+    {
+        if ($value !== '' && $value !== null) {
+            $query->where('brand', '=', $value);
+        }
+    }
+
+    public function searchTabAttr($query, $value, $data)
+    {
+        if ($value !== '' && $value !== null) {
+            $query->where('tab', '=', $value);
+        }
+    }
+
+    public function searchIsHotAttr($query, $value, $data)
+    {
+        if ($value !== '' && $value !== null) {
+            $query->where('is_hot', '=', $value);
+        }
+    }
+
+    public function searchKeywordAttr($query, $value, $data)
+    {
+        if ($value !== '' && $value !== null) {
+            $query->whereLike('model_name|brand|tab|keywords|remark', '%' . $value . '%');
+        }
+    }
+
+    public function searchModelKeywordAttr($query, $value, $data)
+    {
+        $term = QuoteSearch::modelTerm((string)$value);
+        if ($term === '') {
+            $query->whereRaw('1 = 0');
+            return;
+        }
+        $expression = "LOWER(REPLACE(REPLACE(REPLACE(REPLACE(CONCAT_WS('', brand, model_name, keywords), ' ', ''), '　', ''), CHAR(9), ''), CHAR(10), ''))";
+        if (preg_match('/\d/u', $term)) {
+            $expression = "REPLACE(REPLACE($expression, 'iphone', ''), '苹果', '')";
+        }
+        $query->whereRaw($expression . " LIKE ? ESCAPE '!'", [QuoteSearch::likePattern($term)]);
+    }
+
+    public function searchCreateAtStartAttr($query, $value, $data)
+    {
+        if ($value !== '' && $value !== null) {
+            $query->where('create_at', '>=', (int)$value);
+        }
+    }
+
+    public function searchCreateAtEndAttr($query, $value, $data)
+    {
+        if ($value !== '' && $value !== null) {
+            $query->where('create_at', '<=', (int)$value);
+        }
+    }
+}

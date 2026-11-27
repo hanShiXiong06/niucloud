@@ -1,0 +1,35 @@
+<?php
+// +----------------------------------------------------------------------
+// | Niucloud-admin 企业快速开发的saas管理平台
+// +----------------------------------------------------------------------
+// | 官方网址：https://www.niucloud.com
+// +----------------------------------------------------------------------
+// | niucloud团队 版权所有 开源版本可自由商用
+// +----------------------------------------------------------------------
+// | Author: Niucloud Team
+// +----------------------------------------------------------------------
+
+namespace addon\phone_shop\app\listener\third_addon;
+
+/**
+ * 对接秒杀查询
+ */
+class SupportAddonListener
+{
+
+    //已对接的营销活动在这里配置
+    public function handle($source)
+    {
+        $shop_arr = [
+            'key' => 'phone_shop',
+            'name' => '商城'
+        ];
+        $data = [
+            'friend_help' => $shop_arr,
+            'seckill' => $shop_arr,
+            'pintuan' => $shop_arr,
+            'relay' => $shop_arr
+        ];
+        return [$data[$source]] ?? [];
+    }
+}

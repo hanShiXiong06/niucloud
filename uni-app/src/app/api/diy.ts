@@ -27,3 +27,4 @@ export function getShareInfo(params: Record<string, any>) {
 export function getMemberFormRecord() {
     return request.get('diy/form/member_record')
 }
+

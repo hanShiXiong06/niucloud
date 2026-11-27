@@ -1,0 +1,1 @@
+-- Business/audit records are deliberately retained on uninstall. No DROP or DELETE.

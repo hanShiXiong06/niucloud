@@ -17,10 +17,10 @@ class StatFieldListener
     {
          return [
              'shopOrder' => [
-                 'name' => '二手商城订单',
+                 'name' => '商城订单',
              ],
              'shopRechargeOrder' => [
-                 'name' => '二手商城会员充值',
+                 'name' => '商城会员充值',
              ],
          ];
     }

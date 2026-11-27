@@ -86,5 +86,4 @@ class CoreOrderLogService extends BaseCoreService
         }, $data);
     }
 
-
 }

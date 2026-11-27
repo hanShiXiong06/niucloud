@@ -26,10 +26,10 @@ class EvaluateDict
     public static function getStatus($type = '')
     {
         $data = [
-            self::AUDIT_NO => get_lang('dict_shop_goods_evalute.audit_no'), // 无需审核
-            self::AUDIT => get_lang('dict_shop_goods_evalute.audit'), // 待审核
-            self::AUDIT_ADOPT => get_lang('dict_shop_goods_evalute.audit_adopt'), // 审核通过
-            self::AUDIT_REFUSE => get_lang('dict_shop_goods_evalute.audit_refuse'), // 审核拒绝
+            self::AUDIT_NO => get_lang('dict_shop_goods_evaluate.audit_no'), // 无需审核
+            self::AUDIT => get_lang('dict_shop_goods_evaluate.audit'), // 待审核
+            self::AUDIT_ADOPT => get_lang('dict_shop_goods_evaluate.audit_adopt'), // 审核通过
+            self::AUDIT_REFUSE => get_lang('dict_shop_goods_evaluate.audit_refuse'), // 审核拒绝
         ];
         if (!$type) {
             return $data;

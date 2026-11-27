@@ -48,7 +48,62 @@ class CoreConfigService extends BaseCoreService
                 'kd100_app_key' => '',
                 'kd100_customer' => 0
             ];
+        } else {
+            $info[ 'value' ][ 'interface_type' ] = intval($info[ 'value' ][ 'interface_type' ]);
         }
         return $info[ 'value' ];
+    }
+
+
+    /**
+     * 获取快递鸟、快递100电子面单配置
+     * @return array
+     */
+    public function getDeliveryElectronSheeticConfig(int $site_id)
+    {
+        $info = ( new ConfigService() )->getConfig($site_id, 'PHONE_SHOP_ELECTRONIC_SHEET_CONFIG');
+        if (empty($info)) $info = ( new ConfigService() )->getConfig($site_id, 'ELECTRONIC_SHEET_CONFIG');
+        if (empty($info)) {
+            $info = [];
+            $info[ 'value' ] = [
+                'interface_type' => 'kdbird', // 接口类型，kdbird：快递鸟，后期支持扩展
+                'kdniao_id' => '',
+                'kdniao_api_key' => '',
+                'server_port1' => '8000',
+                'server_port2' => '18000',
+                'https_port' => '8443'
+            ];
+        }
+        return $info[ 'value' ];
+    }
+
+    /**
+     * 设置同城配送配置
+     * @param int $site_id
+     * @param $data
+     * @return SysConfig|bool|Model
+     */
+    public function setLocalDeliveryConfig(int $site_id, $data)
+    {
+        return (new ConfigService())->setConfig($site_id,'LOCAL_DELIVERY_CONFIG', $data);
+    }
+
+    /**
+     * 获取同城配送配置
+     * @return array
+     */
+    public function getLocalDeliveryConfig(int $site_id)
+    {
+        $value = (new ConfigService())->getConfigValue($site_id, 'LOCAL_DELIVERY_CONFIG');
+        if (empty($value)) {
+            $value = [
+                'is_show_polyline' => 0,
+                'is_local_delivery_store_select' => 0
+            ];
+        } else {
+            $value[ 'is_show_polyline' ] = intval($value[ 'is_show_polyline' ] ?? 0);
+            $value[ 'is_local_delivery_store_select' ] = intval($value[ 'is_local_delivery_store_select' ] ?? 0);
+        }
+        return $value;
     }
 }

@@ -1,0 +1,899 @@
+<?php
+declare(strict_types=1);
+
+namespace addon\hsx_erp\app\support;
+
+use think\facade\Db;
+
+/**
+ * ERP 数据库结构迁移入口。
+ *
+ * 只允许由插件 install/upgrade 生命周期调用，业务请求不得执行 DDL。
+ */
+final class ErpSchema
+{
+    public static function migrate(): void
+    {
+        $prefix = (string)config('database.connections.mysql.prefix');
+
+        Db::execute("CREATE TABLE IF NOT EXISTS `{$prefix}erp_quantity_product` (
+            `id` int unsigned NOT NULL AUTO_INCREMENT, `site_id` int NOT NULL DEFAULT 0,
+            `product_code` varchar(60) NOT NULL DEFAULT '', `product_name` varchar(120) NOT NULL DEFAULT '',
+            `spec` varchar(120) NOT NULL DEFAULT '', `catalog_product_id` int NOT NULL DEFAULT 0,
+            `category_name` varchar(100) NOT NULL DEFAULT '', `category_path` varchar(255) NOT NULL DEFAULT '',
+            `unit` varchar(20) NOT NULL DEFAULT '件', `source_plugin` varchar(40) NOT NULL DEFAULT '',
+            `source_id` varchar(80) NOT NULL DEFAULT '', `status` tinyint(1) NOT NULL DEFAULT 1,
+            `remark` varchar(255) NOT NULL DEFAULT '', `create_at` int NOT NULL DEFAULT 0, `update_at` int NOT NULL DEFAULT 0,
+            PRIMARY KEY (`id`), UNIQUE KEY `uk_site_source` (`site_id`,`source_plugin`,`source_id`),
+            UNIQUE KEY `uk_site_code` (`site_id`,`product_code`), KEY `idx_site_name` (`site_id`,`product_name`,`status`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='ERP-数量商品档案'");
+
+        Db::execute("CREATE TABLE IF NOT EXISTS `{$prefix}erp_quantity_stock` (
+            `id` bigint unsigned NOT NULL AUTO_INCREMENT, `site_id` int NOT NULL DEFAULT 0,
+            `product_id` int NOT NULL DEFAULT 0, `warehouse_id` int NOT NULL DEFAULT 0, `location_id` int NOT NULL DEFAULT 0,
+            `quantity` decimal(14,3) NOT NULL DEFAULT 0.000, `inventory_amount` decimal(14,2) NOT NULL DEFAULT 0.00,
+            `update_at` int NOT NULL DEFAULT 0, `create_at` int NOT NULL DEFAULT 0,
+            PRIMARY KEY (`id`), UNIQUE KEY `uk_site_product_position` (`site_id`,`product_id`,`warehouse_id`,`location_id`),
+            KEY `idx_site_warehouse` (`site_id`,`warehouse_id`,`location_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='ERP-数量库存余额'");
+
+        Db::execute("CREATE TABLE IF NOT EXISTS `{$prefix}erp_quantity_stock_flow` (
+            `id` bigint unsigned NOT NULL AUTO_INCREMENT, `site_id` int NOT NULL DEFAULT 0,
+            `request_id` varchar(100) NOT NULL, `product_id` int NOT NULL DEFAULT 0, `product_name` varchar(120) NOT NULL DEFAULT '',
+            `warehouse_id` int NOT NULL DEFAULT 0, `warehouse_name` varchar(100) NOT NULL DEFAULT '',
+            `location_id` int NOT NULL DEFAULT 0, `location_name` varchar(100) NOT NULL DEFAULT '',
+            `direction` varchar(20) NOT NULL DEFAULT 'out', `quantity` decimal(14,3) NOT NULL DEFAULT 0.000,
+            `unit_cost` decimal(14,6) NOT NULL DEFAULT 0.000000, `amount` decimal(14,2) NOT NULL DEFAULT 0.00,
+            `before_quantity` decimal(14,3) NOT NULL DEFAULT 0.000, `after_quantity` decimal(14,3) NOT NULL DEFAULT 0.000,
+            `biz_type` varchar(60) NOT NULL DEFAULT '', `biz_id` int NOT NULL DEFAULT 0, `biz_no` varchar(80) NOT NULL DEFAULT '',
+            `source_plugin` varchar(40) NOT NULL DEFAULT '', `operator_uid` int NOT NULL DEFAULT 0,
+            `operator_name` varchar(60) NOT NULL DEFAULT '', `remark` varchar(255) NOT NULL DEFAULT '',
+            `occurred_at` int NOT NULL DEFAULT 0, `create_at` int NOT NULL DEFAULT 0,
+            PRIMARY KEY (`id`), UNIQUE KEY `uk_site_request` (`site_id`,`request_id`),
+            KEY `idx_site_product_time` (`site_id`,`product_id`,`occurred_at`), KEY `idx_site_biz` (`site_id`,`biz_type`,`biz_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='ERP-数量库存流水'");
+
+        Db::execute("CREATE TABLE IF NOT EXISTS `{$prefix}erp_kpi_rule` (
+            `id` int unsigned NOT NULL AUTO_INCREMENT, `site_id` int NOT NULL DEFAULT 0,
+            `metric_key` varchar(40) NOT NULL DEFAULT '', `metric_name` varchar(60) NOT NULL DEFAULT '',
+            `unit` varchar(20) NOT NULL DEFAULT '', `target_value` decimal(14,2) NOT NULL DEFAULT 0.00,
+            `weight` decimal(6,2) NOT NULL DEFAULT 0.00, `enabled` tinyint(1) NOT NULL DEFAULT 1,
+            `sort` int NOT NULL DEFAULT 0, `create_at` int NOT NULL DEFAULT 0, `update_at` int NOT NULL DEFAULT 0,
+            PRIMARY KEY (`id`), UNIQUE KEY `uk_site_metric` (`site_id`,`metric_key`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='ERP-员工KPI规则'");
+
+        Db::execute("CREATE TABLE IF NOT EXISTS `{$prefix}erp_catalog_product_master` (
+            `master_product_id` int unsigned NOT NULL AUTO_INCREMENT,
+            `created_site_id` int NOT NULL DEFAULT 0, `source_key` varchar(40) NOT NULL DEFAULT '', `source_product_id` varchar(80) NOT NULL DEFAULT '',
+            `category_source_id` varchar(80) NOT NULL DEFAULT '', `category_path` varchar(255) NOT NULL DEFAULT '',
+            `brand_source_id` varchar(80) NOT NULL DEFAULT '', `brand_name` varchar(100) NOT NULL DEFAULT '',
+            `series_name` varchar(100) NOT NULL DEFAULT '', `product_name` varchar(150) NOT NULL DEFAULT '',
+            `data_hash` char(64) NOT NULL DEFAULT '', `create_at` int NOT NULL DEFAULT 0, `update_at` int NOT NULL DEFAULT 0,
+            PRIMARY KEY (`master_product_id`), UNIQUE KEY `uk_source_product` (`source_key`,`source_product_id`),
+            KEY `idx_product_name` (`product_name`), KEY `idx_brand_series` (`brand_name`,`series_name`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='ERP-平台标准产品模板'");
+
+        Db::execute("CREATE TABLE IF NOT EXISTS `{$prefix}erp_site_catalog_product` (
+            `site_product_id` int unsigned NOT NULL AUTO_INCREMENT, `site_id` int NOT NULL DEFAULT 0,
+            `master_product_id` int NOT NULL DEFAULT 0,
+            `category_path` varchar(255) NOT NULL DEFAULT '', `product_name` varchar(150) NOT NULL DEFAULT '',
+            `brand_name` varchar(100) NOT NULL DEFAULT '', `series_name` varchar(100) NOT NULL DEFAULT '',
+            `is_enabled` tinyint(1) NOT NULL DEFAULT 1, `sort` int NOT NULL DEFAULT 0,
+            `create_at` int NOT NULL DEFAULT 0, `update_at` int NOT NULL DEFAULT 0,
+            PRIMARY KEY (`site_product_id`), UNIQUE KEY `uk_site_master` (`site_id`,`master_product_id`),
+            KEY `idx_site_category_path` (`site_id`,`category_path`(100),`is_enabled`),
+            KEY `idx_site_brand_series` (`site_id`,`brand_name`,`series_name`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='ERP-站点产品目录绑定'");
+
+        Db::execute("CREATE TABLE IF NOT EXISTS `{$prefix}erp_catalog_import_task` (
+            `id` int unsigned NOT NULL AUTO_INCREMENT, `site_id` int NOT NULL DEFAULT 0,
+            `operator_uid` int NOT NULL DEFAULT 0, `operator_name` varchar(60) NOT NULL DEFAULT '',
+            `source_key` varchar(40) NOT NULL DEFAULT 'excel_product_catalog',
+            `file_name` varchar(255) NOT NULL DEFAULT '', `file_path` varchar(500) NOT NULL DEFAULT '',
+            `sheet_name` varchar(120) NOT NULL DEFAULT '', `status` varchar(20) NOT NULL DEFAULT 'pending',
+            `queue_enabled` tinyint(1) NOT NULL DEFAULT 0, `total_rows` int NOT NULL DEFAULT 0,
+            `processed_rows` int NOT NULL DEFAULT 0, `created_count` int NOT NULL DEFAULT 0,
+            `updated_count` int NOT NULL DEFAULT 0, `skipped_count` int NOT NULL DEFAULT 0,
+            `error_count` int NOT NULL DEFAULT 0, `result_json` longtext NULL,
+            `message` varchar(500) NOT NULL DEFAULT '', `error_message` varchar(1000) NOT NULL DEFAULT '',
+            `start_at` int NOT NULL DEFAULT 0, `finish_at` int NOT NULL DEFAULT 0,
+            `create_at` int NOT NULL DEFAULT 0, `update_at` int NOT NULL DEFAULT 0,
+            PRIMARY KEY (`id`), KEY `idx_site_status` (`site_id`,`status`), KEY `idx_site_create` (`site_id`,`create_at`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='ERP-商品目录异步导入任务'");
+
+        Db::execute("CREATE TABLE IF NOT EXISTS `{$prefix}erp_opening_batch` (
+            `id` int unsigned NOT NULL AUTO_INCREMENT, `site_id` int NOT NULL DEFAULT 0,
+            `batch_no` varchar(40) NOT NULL DEFAULT '', `opening_date` int NOT NULL DEFAULT 0,
+            `file_name` varchar(255) NOT NULL DEFAULT '', `file_path` varchar(500) NOT NULL DEFAULT '',
+            `status` varchar(20) NOT NULL DEFAULT 'pending', `queue_enabled` tinyint(1) NOT NULL DEFAULT 0,
+            `total_rows` int NOT NULL DEFAULT 0, `valid_rows` int NOT NULL DEFAULT 0,
+            `error_rows` int NOT NULL DEFAULT 0, `posted_rows` int NOT NULL DEFAULT 0,
+            `member_reused_count` int NOT NULL DEFAULT 0, `member_created_count` int NOT NULL DEFAULT 0,
+            `party_reused_count` int NOT NULL DEFAULT 0, `party_created_count` int NOT NULL DEFAULT 0,
+            `conflict_count` int NOT NULL DEFAULT 0, `summary_json` longtext NULL, `result_json` longtext NULL,
+            `message` varchar(500) NOT NULL DEFAULT '', `error_message` varchar(1000) NOT NULL DEFAULT '',
+            `operator_uid` int NOT NULL DEFAULT 0, `operator_name` varchar(60) NOT NULL DEFAULT '',
+            `start_at` int NOT NULL DEFAULT 0, `finish_at` int NOT NULL DEFAULT 0,
+            `create_at` int NOT NULL DEFAULT 0, `update_at` int NOT NULL DEFAULT 0,
+            PRIMARY KEY (`id`), UNIQUE KEY `uk_site_batch_no` (`site_id`,`batch_no`),
+            KEY `idx_site_status` (`site_id`,`status`,`create_at`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='ERP-期初建账批次'");
+
+        Db::execute("CREATE TABLE IF NOT EXISTS `{$prefix}erp_opening_item` (
+            `id` bigint unsigned NOT NULL AUTO_INCREMENT, `site_id` int NOT NULL DEFAULT 0,
+            `batch_id` int NOT NULL DEFAULT 0, `item_type` varchar(20) NOT NULL DEFAULT '',
+            `sheet_name` varchar(60) NOT NULL DEFAULT '', `row_no` int NOT NULL DEFAULT 0,
+            `row_key` char(64) NOT NULL DEFAULT '', `mobile` varchar(30) NOT NULL DEFAULT '',
+            `display_name` varchar(100) NOT NULL DEFAULT '', `raw_json` longtext NULL,
+            `normalized_json` longtext NULL, `status` varchar(20) NOT NULL DEFAULT 'pending',
+            `error_code` varchar(60) NOT NULL DEFAULT '', `error_message` varchar(1000) NOT NULL DEFAULT '',
+            `member_action` varchar(20) NOT NULL DEFAULT '', `member_id` int NOT NULL DEFAULT 0,
+            `party_action` varchar(20) NOT NULL DEFAULT '', `party_id` int NOT NULL DEFAULT 0,
+            `target_type` varchar(40) NOT NULL DEFAULT '', `target_id` int NOT NULL DEFAULT 0,
+            `create_at` int NOT NULL DEFAULT 0, `update_at` int NOT NULL DEFAULT 0,
+            PRIMARY KEY (`id`), UNIQUE KEY `uk_batch_sheet_row` (`batch_id`,`sheet_name`,`row_no`),
+            KEY `idx_batch_status` (`site_id`,`batch_id`,`status`,`item_type`),
+            KEY `idx_batch_mobile` (`site_id`,`batch_id`,`mobile`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='ERP-期初建账校验及入账明细'");
+
+        Db::execute("CREATE TABLE IF NOT EXISTS `{$prefix}erp_channel_category_mapping` (
+            `id` bigint unsigned NOT NULL AUTO_INCREMENT, `site_id` int NOT NULL DEFAULT 0,
+            `channel_key` varchar(40) NOT NULL DEFAULT '', `erp_category_key` char(64) NOT NULL DEFAULT '',
+            `erp_category_path` varchar(255) NOT NULL DEFAULT '', `channel_category_id` varchar(80) NOT NULL DEFAULT '',
+            `channel_category_path` text, `channel_category_name` varchar(255) NOT NULL DEFAULT '',
+            `mapping_source` varchar(20) NOT NULL DEFAULT 'manual', `status` varchar(20) NOT NULL DEFAULT 'active',
+            `operator_uid` int NOT NULL DEFAULT 0, `operator_name` varchar(60) NOT NULL DEFAULT '',
+            `create_at` int NOT NULL DEFAULT 0, `update_at` int NOT NULL DEFAULT 0,
+            PRIMARY KEY (`id`), UNIQUE KEY `uk_site_channel_erp_category` (`site_id`,`channel_key`,`erp_category_key`),
+            KEY `idx_channel_category` (`site_id`,`channel_key`,`channel_category_id`,`status`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='ERP-渠道分类映射'");
+
+        Db::execute("CREATE TABLE IF NOT EXISTS `{$prefix}erp_channel_attribute_mapping` (
+            `id` bigint unsigned NOT NULL AUTO_INCREMENT, `site_id` int NOT NULL DEFAULT 0,
+            `channel_key` varchar(40) NOT NULL DEFAULT '', `erp_attribute_id` int NOT NULL DEFAULT 0,
+            `erp_attribute_key` varchar(100) NOT NULL DEFAULT '', `erp_attribute_name` varchar(100) NOT NULL DEFAULT '',
+            `channel_attribute_id` varchar(80) NOT NULL DEFAULT '', `channel_attribute_name` varchar(100) NOT NULL DEFAULT '',
+            `mapping_source` varchar(20) NOT NULL DEFAULT 'manual', `status` varchar(20) NOT NULL DEFAULT 'active',
+            `operator_uid` int NOT NULL DEFAULT 0, `operator_name` varchar(60) NOT NULL DEFAULT '',
+            `create_at` int NOT NULL DEFAULT 0, `update_at` int NOT NULL DEFAULT 0,
+            PRIMARY KEY (`id`), UNIQUE KEY `uk_site_channel_erp_attribute` (`site_id`,`channel_key`,`erp_attribute_key`),
+            KEY `idx_channel_attribute` (`site_id`,`channel_key`,`channel_attribute_id`,`status`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='ERP-渠道规格字段映射'");
+
+        Db::execute("CREATE TABLE IF NOT EXISTS `{$prefix}erp_channel_attribute_value_mapping` (
+            `id` bigint unsigned NOT NULL AUTO_INCREMENT, `site_id` int NOT NULL DEFAULT 0,
+            `channel_key` varchar(40) NOT NULL DEFAULT '', `erp_attribute_key` varchar(100) NOT NULL DEFAULT '',
+            `erp_value_key` varchar(100) NOT NULL DEFAULT '', `erp_value_name` varchar(150) NOT NULL DEFAULT '',
+            `channel_attribute_id` varchar(80) NOT NULL DEFAULT '', `channel_value_id` varchar(100) NOT NULL DEFAULT '',
+            `channel_value_name` varchar(150) NOT NULL DEFAULT '', `mapping_source` varchar(20) NOT NULL DEFAULT 'manual',
+            `status` varchar(20) NOT NULL DEFAULT 'active', `operator_uid` int NOT NULL DEFAULT 0,
+            `operator_name` varchar(60) NOT NULL DEFAULT '', `create_at` int NOT NULL DEFAULT 0, `update_at` int NOT NULL DEFAULT 0,
+            PRIMARY KEY (`id`), UNIQUE KEY `uk_site_channel_erp_value` (`site_id`,`channel_key`,`erp_attribute_key`,`erp_value_key`),
+            KEY `idx_channel_value` (`site_id`,`channel_key`,`channel_attribute_id`,`channel_value_id`,`status`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='ERP-渠道规格值映射'");
+
+        Db::execute("CREATE TABLE IF NOT EXISTS `{$prefix}erp_channel_listing` (
+            `id` bigint unsigned NOT NULL AUTO_INCREMENT, `site_id` int NOT NULL DEFAULT 0,
+            `channel_key` varchar(40) NOT NULL DEFAULT '', `erp_asset_id` int NOT NULL DEFAULT 0,
+            `channel_item_id` varchar(80) NOT NULL DEFAULT '', `channel_intake_id` varchar(80) NOT NULL DEFAULT '',
+            `status` varchar(20) NOT NULL DEFAULT 'pending', `publish_mode` varchar(20) NOT NULL DEFAULT 'direct',
+            `mapping_snapshot` longtext, `payload_hash` char(64) NOT NULL DEFAULT '', `last_error` varchar(1000) NOT NULL DEFAULT '',
+            `published_at` int NOT NULL DEFAULT 0, `create_at` int NOT NULL DEFAULT 0, `update_at` int NOT NULL DEFAULT 0,
+            PRIMARY KEY (`id`), UNIQUE KEY `uk_site_channel_asset` (`site_id`,`channel_key`,`erp_asset_id`),
+            KEY `idx_channel_item` (`site_id`,`channel_key`,`channel_item_id`), KEY `idx_site_status` (`site_id`,`channel_key`,`status`,`update_at`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='ERP-渠道商品关联'");
+
+        Db::execute("CREATE TABLE IF NOT EXISTS `{$prefix}erp_stocktake` (
+            `id` int unsigned NOT NULL AUTO_INCREMENT, `site_id` int NOT NULL DEFAULT 0,
+            `request_id` varchar(80) DEFAULT NULL, `stocktake_no` varchar(40) NOT NULL DEFAULT '',
+            `warehouse_id` int NOT NULL DEFAULT 0, `warehouse_name` varchar(100) NOT NULL DEFAULT '',
+            `location_id` int NOT NULL DEFAULT 0, `location_name` varchar(100) NOT NULL DEFAULT '',
+            `scope_type` varchar(20) NOT NULL DEFAULT 'all', `workflow_mode` varchar(20) NOT NULL DEFAULT 'simple',
+            `status` varchar(20) NOT NULL DEFAULT 'counting', `snapshot_at` int NOT NULL DEFAULT 0,
+            `expected_count` int NOT NULL DEFAULT 0, `scanned_count` int NOT NULL DEFAULT 0,
+            `normal_count` int NOT NULL DEFAULT 0, `missing_count` int NOT NULL DEFAULT 0,
+            `surplus_count` int NOT NULL DEFAULT 0, `location_mismatch_count` int NOT NULL DEFAULT 0,
+            `status_abnormal_count` int NOT NULL DEFAULT 0, `unresolved_count` int NOT NULL DEFAULT 0,
+            `counter_uid` int NOT NULL DEFAULT 0, `counter_name` varchar(60) NOT NULL DEFAULT '',
+            `reviewer_uid` int NOT NULL DEFAULT 0, `reviewer_name` varchar(60) NOT NULL DEFAULT '',
+            `creator_uid` int NOT NULL DEFAULT 0, `creator_name` varchar(60) NOT NULL DEFAULT '',
+            `started_at` int NOT NULL DEFAULT 0, `submitted_at` int NOT NULL DEFAULT 0,
+            `completed_at` int NOT NULL DEFAULT 0, `cancelled_at` int NOT NULL DEFAULT 0,
+            `remark` varchar(500) NOT NULL DEFAULT '', `completion_remark` varchar(500) NOT NULL DEFAULT '',
+            `create_at` int NOT NULL DEFAULT 0, `update_at` int NOT NULL DEFAULT 0,
+            PRIMARY KEY (`id`), UNIQUE KEY `uk_site_no` (`site_id`,`stocktake_no`),
+            UNIQUE KEY `uk_site_request` (`site_id`,`request_id`),
+            KEY `idx_site_status` (`site_id`,`status`,`create_at`), KEY `idx_scope` (`site_id`,`warehouse_id`,`location_id`,`status`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='ERP-库存盘点任务'");
+
+        Db::execute("CREATE TABLE IF NOT EXISTS `{$prefix}erp_stocktake_item` (
+            `id` bigint unsigned NOT NULL AUTO_INCREMENT, `site_id` int NOT NULL DEFAULT 0,
+            `stocktake_id` int NOT NULL DEFAULT 0, `identity_key` varchar(100) NOT NULL DEFAULT '',
+            `asset_id` int NOT NULL DEFAULT 0, `asset_no` varchar(40) NOT NULL DEFAULT '',
+            `imei` varchar(80) NOT NULL DEFAULT '', `sn` varchar(80) NOT NULL DEFAULT '',
+            `model` varchar(255) NOT NULL DEFAULT '', `spec` varchar(255) NOT NULL DEFAULT '',
+            `expected_status` varchar(20) NOT NULL DEFAULT '', `expected_warehouse_id` int NOT NULL DEFAULT 0,
+            `expected_warehouse_name` varchar(100) NOT NULL DEFAULT '', `expected_location_id` int NOT NULL DEFAULT 0,
+            `expected_location_name` varchar(100) NOT NULL DEFAULT '', `actual_warehouse_id` int NOT NULL DEFAULT 0,
+            `actual_warehouse_name` varchar(100) NOT NULL DEFAULT '', `actual_location_id` int NOT NULL DEFAULT 0,
+            `actual_location_name` varchar(100) NOT NULL DEFAULT '', `result` varchar(30) NOT NULL DEFAULT 'pending',
+            `resolution_status` varchar(20) NOT NULL DEFAULT 'pending', `resolution_action` varchar(40) NOT NULL DEFAULT '',
+            `resolution_remark` varchar(500) NOT NULL DEFAULT '', `scan_code` varchar(100) NOT NULL DEFAULT '',
+            `scan_count` int NOT NULL DEFAULT 0, `scanner_uid` int NOT NULL DEFAULT 0, `scanner_name` varchar(60) NOT NULL DEFAULT '',
+            `scanned_at` int NOT NULL DEFAULT 0, `resolver_uid` int NOT NULL DEFAULT 0, `resolver_name` varchar(60) NOT NULL DEFAULT '',
+            `resolved_at` int NOT NULL DEFAULT 0, `create_at` int NOT NULL DEFAULT 0, `update_at` int NOT NULL DEFAULT 0,
+            PRIMARY KEY (`id`), UNIQUE KEY `uk_task_identity` (`site_id`,`stocktake_id`,`identity_key`),
+            KEY `idx_task_result` (`site_id`,`stocktake_id`,`result`,`resolution_status`),
+            KEY `idx_asset` (`site_id`,`asset_id`), KEY `idx_scan_code` (`site_id`,`scan_code`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='ERP-库存盘点设备明细'");
+
+        Db::execute("CREATE TABLE IF NOT EXISTS `{$prefix}erp_printer` (
+            `id` int unsigned NOT NULL AUTO_INCREMENT, `site_id` int NOT NULL DEFAULT 0,
+            `printer_name` varchar(100) NOT NULL DEFAULT '', `driver` varchar(40) NOT NULL DEFAULT '',
+            `connection_mode` varchar(20) NOT NULL DEFAULT 'cloud', `print_type` varchar(20) NOT NULL DEFAULT 'receipt',
+            `paper_width` int NOT NULL DEFAULT 58, `config_json` longtext NULL, `capabilities_json` longtext NULL,
+            `copies` tinyint NOT NULL DEFAULT 1, `is_default` tinyint(1) NOT NULL DEFAULT 0, `status` tinyint(1) NOT NULL DEFAULT 1,
+            `sort` int NOT NULL DEFAULT 0, `remark` varchar(255) NOT NULL DEFAULT '', `create_at` int NOT NULL DEFAULT 0, `update_at` int NOT NULL DEFAULT 0,
+            PRIMARY KEY (`id`), KEY `idx_site_type` (`site_id`,`print_type`,`status`), KEY `idx_site_default` (`site_id`,`is_default`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='ERP-打印设备'");
+
+        Db::execute("CREATE TABLE IF NOT EXISTS `{$prefix}erp_print_template` (
+            `id` int unsigned NOT NULL AUTO_INCREMENT, `site_id` int NOT NULL DEFAULT 0,
+            `builtin_key` varchar(60) DEFAULT NULL, `template_name` varchar(100) NOT NULL DEFAULT '',
+            `print_type` varchar(20) NOT NULL DEFAULT 'receipt', `layout_mode` varchar(20) NOT NULL DEFAULT 'native',
+            `paper_width` int NOT NULL DEFAULT 58, `content` longtext NULL, `is_builtin` tinyint(1) NOT NULL DEFAULT 0,
+            `is_default` tinyint(1) NOT NULL DEFAULT 0, `status` tinyint(1) NOT NULL DEFAULT 1, `sort` int NOT NULL DEFAULT 0,
+            `create_at` int NOT NULL DEFAULT 0, `update_at` int NOT NULL DEFAULT 0,
+            PRIMARY KEY (`id`), UNIQUE KEY `uk_site_builtin` (`site_id`,`builtin_key`), KEY `idx_site_type` (`site_id`,`print_type`,`status`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='ERP-打印模板'");
+
+        // NULL 只用于普通自定义模板；内置模板仍通过 builtin_key 保证站点内唯一。
+        // 兼容已经执行过早期 0.0.1 建表脚本的开发库，避免第二个自定义模板命中空字符串唯一键。
+        Db::execute("ALTER TABLE `{$prefix}erp_print_template` MODIFY `builtin_key` varchar(60) DEFAULT NULL");
+
+        Db::execute("CREATE TABLE IF NOT EXISTS `{$prefix}erp_print_scene` (
+            `id` int unsigned NOT NULL AUTO_INCREMENT, `site_id` int NOT NULL DEFAULT 0,
+            `scene_key` varchar(60) NOT NULL DEFAULT '', `scene_name` varchar(100) NOT NULL DEFAULT '', `trigger_key` varchar(80) NOT NULL DEFAULT '',
+            `biz_type` varchar(40) NOT NULL DEFAULT '', `template_type` varchar(20) NOT NULL DEFAULT 'receipt', `description` varchar(500) NOT NULL DEFAULT '',
+            `printer_id` int NOT NULL DEFAULT 0, `template_id` int NOT NULL DEFAULT 0, `auto_print` tinyint(1) NOT NULL DEFAULT 0,
+            `enabled` tinyint(1) NOT NULL DEFAULT 0, `copies` tinyint NOT NULL DEFAULT 1, `granularity` varchar(20) NOT NULL DEFAULT 'order',
+            `condition_json` longtext NULL, `sort` int NOT NULL DEFAULT 0, `create_at` int NOT NULL DEFAULT 0, `update_at` int NOT NULL DEFAULT 0,
+            PRIMARY KEY (`id`), UNIQUE KEY `uk_site_scene` (`site_id`,`scene_key`), KEY `idx_site_trigger` (`site_id`,`trigger_key`,`enabled`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='ERP-打印场景'");
+
+        Db::execute("CREATE TABLE IF NOT EXISTS `{$prefix}erp_print_job` (
+            `id` bigint unsigned NOT NULL AUTO_INCREMENT, `site_id` int NOT NULL DEFAULT 0,
+            `job_no` varchar(40) NOT NULL DEFAULT '', `request_id` varchar(80) DEFAULT NULL,
+            `scene_key` varchar(60) NOT NULL DEFAULT '', `scene_name` varchar(100) NOT NULL DEFAULT '',
+            `biz_type` varchar(40) NOT NULL DEFAULT '', `biz_id` int NOT NULL DEFAULT 0, `biz_no` varchar(80) NOT NULL DEFAULT '',
+            `printer_id` int NOT NULL DEFAULT 0, `printer_name` varchar(100) NOT NULL DEFAULT '', `driver` varchar(40) NOT NULL DEFAULT '',
+            `template_id` int NOT NULL DEFAULT 0, `template_name` varchar(100) NOT NULL DEFAULT '', `print_type` varchar(20) NOT NULL DEFAULT 'receipt',
+            `copies` tinyint NOT NULL DEFAULT 1, `rendered_content` longtext NULL, `client_payload` longtext NULL,
+            `status` varchar(20) NOT NULL DEFAULT 'queued', `attempts` int NOT NULL DEFAULT 0, `provider_job_no` varchar(100) NOT NULL DEFAULT '',
+            `error_message` varchar(1000) NOT NULL DEFAULT '', `operator_uid` int NOT NULL DEFAULT 0, `operator_name` varchar(60) NOT NULL DEFAULT '',
+            `start_at` int NOT NULL DEFAULT 0, `finish_at` int NOT NULL DEFAULT 0, `create_at` int NOT NULL DEFAULT 0, `update_at` int NOT NULL DEFAULT 0,
+            PRIMARY KEY (`id`), UNIQUE KEY `uk_site_job` (`site_id`,`job_no`), UNIQUE KEY `uk_site_request` (`site_id`,`request_id`),
+            KEY `idx_site_status` (`site_id`,`status`,`create_at`), KEY `idx_site_biz` (`site_id`,`biz_type`,`biz_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='ERP-打印任务与日志'");
+
+        $columns = [
+            'erp_quantity_product' => [
+                'spec' => "`spec` varchar(120) NOT NULL DEFAULT '' COMMENT 'SKU规格' AFTER `product_name`",
+                'catalog_product_id' => "`catalog_product_id` int NOT NULL DEFAULT 0 COMMENT 'ERP商品目录型号ID，0为自建标品' AFTER `spec`",
+                'category_name' => "`category_name` varchar(100) NOT NULL DEFAULT '' COMMENT 'ERP末级分类名称快照' AFTER `catalog_product_id`",
+                'category_path' => "`category_path` varchar(255) NOT NULL DEFAULT '' COMMENT 'ERP分类路径快照' AFTER `category_name`",
+            ],
+            'erp_quantity_stock' => [
+                'inventory_amount' => "`inventory_amount` decimal(14,2) NOT NULL DEFAULT 0.00 COMMENT '当前库存成本金额' AFTER `quantity`",
+            ],
+            'erp_quantity_stock_flow' => [
+                'unit_cost' => "`unit_cost` decimal(14,6) NOT NULL DEFAULT 0.000000 COMMENT '本次移动成本单价' AFTER `quantity`",
+                'amount' => "`amount` decimal(14,2) NOT NULL DEFAULT 0.00 COMMENT '本次移动成本金额' AFTER `unit_cost`",
+            ],
+            'erp_catalog_product_master' => [
+                'created_site_id' => "`created_site_id` int NOT NULL DEFAULT 0 COMMENT '首次写入站点，仅用于审计' AFTER `master_product_id`",
+            ],
+            'erp_party' => [
+                'role_flags' => "`role_flags` varchar(255) NOT NULL DEFAULT '' COMMENT '多身份：purchase_supplier,sale_customer,recycle_customer,refurbish_provider' AFTER `party_type`",
+                'group_keys' => "`group_keys` varchar(255) NOT NULL DEFAULT '' COMMENT '业务分组，逗号分隔' AFTER `role_flags`",
+                'credit_policy' => "`credit_policy` varchar(20) NOT NULL DEFAULT 'inherit' COMMENT 'inherit跟随规则/normal正常/remind提醒/cash_only仅现结/blocked暂停交易' AFTER `group_keys`",
+                'credit_limit' => "`credit_limit` decimal(14,2) NOT NULL DEFAULT 0.00 COMMENT '允许挂账的信用额度，0表示不限额' AFTER `credit_policy`",
+                'credit_remark' => "`credit_remark` varchar(255) NOT NULL DEFAULT '' COMMENT '信用限制原因或备注' AFTER `credit_limit`",
+                'credit_update_uid' => "`credit_update_uid` int NOT NULL DEFAULT 0 COMMENT '信用策略最后调整人UID' AFTER `credit_remark`",
+                'credit_update_name' => "`credit_update_name` varchar(60) NOT NULL DEFAULT '' COMMENT '信用策略最后调整人名称' AFTER `credit_update_uid`",
+                'credit_update_at' => "`credit_update_at` int NOT NULL DEFAULT 0 COMMENT '信用策略最后调整时间' AFTER `credit_update_name`",
+            ],
+            'erp_warehouse' => [
+                'manager_uid' => "`manager_uid` int NOT NULL DEFAULT 0 COMMENT '仓库负责人UID' AFTER `warehouse_code`",
+                'manager_name' => "`manager_name` varchar(60) NOT NULL DEFAULT '' COMMENT '仓库负责人名称快照' AFTER `manager_uid`",
+                'warehouse_type' => "`warehouse_type` varchar(20) NOT NULL DEFAULT 'owned' COMMENT 'owned二手机/new_device新机/accessory配件/peer同行/consignment代卖/exception异常' AFTER `warehouse_code`",
+                'ownership_type' => "`ownership_type` varchar(20) NOT NULL DEFAULT 'owned' COMMENT 'owned自有/consigned代卖/pending待定' AFTER `warehouse_type`",
+                'need_photo' => "`need_photo` tinyint(1) NOT NULL DEFAULT 0 COMMENT '是否需要拍照' AFTER `ownership_type`",
+                'need_pricing' => "`need_pricing` tinyint(1) NOT NULL DEFAULT 0 COMMENT '是否需要定价' AFTER `need_photo`",
+                'allow_direct_sale' => "`allow_direct_sale` tinyint(1) NOT NULL DEFAULT 1 COMMENT '是否允许直接销售' AFTER `need_pricing`",
+                'allow_transfer' => "`allow_transfer` tinyint(1) NOT NULL DEFAULT 1 COMMENT '是否允许调拨' AFTER `allow_direct_sale`",
+                'default_sale_target' => "`default_sale_target` varchar(20) NOT NULL DEFAULT 'unset' COMMENT 'unset未定/peer同行/mall商城' AFTER `allow_transfer`",
+            ],
+            'erp_warehouse_location' => [
+                'manager_uid' => "`manager_uid` int NOT NULL DEFAULT 0 COMMENT '库位负责人UID，0表示继承仓库负责人' AFTER `location_code`",
+                'manager_name' => "`manager_name` varchar(60) NOT NULL DEFAULT '' COMMENT '库位负责人名称快照' AFTER `manager_uid`",
+                'is_default' => "`is_default` tinyint(1) NOT NULL DEFAULT 0 COMMENT '所属仓库默认入库库位' AFTER `status`",
+            ],
+            'erp_purchase_order' => [
+                'request_id' => "`request_id` varchar(80) DEFAULT NULL COMMENT '客户端幂等请求ID' AFTER `site_id`",
+                'capital_account_id' => "`capital_account_id` int NOT NULL DEFAULT 0 COMMENT '本次付款账户' AFTER `settle_method`",
+                'capital_account_name' => "`capital_account_name` varchar(100) NOT NULL DEFAULT '' COMMENT '本次付款账户名称' AFTER `capital_account_id`",
+                'location_id' => "`location_id` int NOT NULL DEFAULT 0 AFTER `warehouse_name`",
+                'location_name' => "`location_name` varchar(100) NOT NULL DEFAULT '' AFTER `location_id`",
+                'origin_plugin' => "`origin_plugin` varchar(40) NOT NULL DEFAULT 'hsx_erp' COMMENT '真实业务来源插件' AFTER `source_id`",
+                'origin_plugin_name' => "`origin_plugin_name` varchar(60) NOT NULL DEFAULT '二手机ERP' COMMENT '来源插件名称快照' AFTER `origin_plugin`",
+                'origin_type' => "`origin_type` varchar(80) NOT NULL DEFAULT 'hsx_erp.manual_purchase' COMMENT '业务来源稳定编码' AFTER `origin_plugin_name`",
+                'origin_name' => "`origin_name` varchar(80) NOT NULL DEFAULT 'ERP采购' COMMENT '业务来源名称快照' AFTER `origin_type`",
+                'origin_id' => "`origin_id` varchar(80) NOT NULL DEFAULT '' COMMENT '原系统业务ID' AFTER `origin_name`",
+                'origin_no' => "`origin_no` varchar(80) NOT NULL DEFAULT '' COMMENT '原系统业务单号' AFTER `origin_id`",
+                'origin_event_id' => "`origin_event_id` varchar(80) NOT NULL DEFAULT '' COMMENT '外部事件幂等键' AFTER `origin_no`",
+            ],
+            'erp_purchase_item' => [
+                'item_type' => "`item_type` varchar(20) NOT NULL DEFAULT 'device' COMMENT 'device一机一码/standard数量标品' AFTER `purchase_order_id`",
+                'quantity_product_id' => "`quantity_product_id` int NOT NULL DEFAULT 0 COMMENT '数量商品档案ID' AFTER `asset_id`",
+                'product_code' => "`product_code` varchar(60) NOT NULL DEFAULT '' COMMENT '标品编码快照' AFTER `quantity_product_id`",
+                'unit' => "`unit` varchar(20) NOT NULL DEFAULT '台' COMMENT '计量单位' AFTER `product_code`",
+                'quantity' => "`quantity` decimal(14,3) NOT NULL DEFAULT 1.000 COMMENT '采购数量' AFTER `unit`",
+                'unit_cost' => "`unit_cost` decimal(14,6) NOT NULL DEFAULT 0.000000 COMMENT '折算采购单价' AFTER `quantity`",
+                'warehouse_id' => "`warehouse_id` int NOT NULL DEFAULT 0 COMMENT '明细入库仓库ID' AFTER `asset_id`",
+                'warehouse_name' => "`warehouse_name` varchar(100) NOT NULL DEFAULT '' COMMENT '明细入库仓库名称快照' AFTER `warehouse_id`",
+                'location_id' => "`location_id` int NOT NULL DEFAULT 0 COMMENT '明细入库库位ID' AFTER `warehouse_name`",
+                'location_name' => "`location_name` varchar(100) NOT NULL DEFAULT '' COMMENT '明细入库库位名称快照' AFTER `location_id`",
+                'spec_json' => "`spec_json` longtext COMMENT '结构化规格JSON' AFTER `spec`",
+                'color' => "`color` varchar(50) NOT NULL DEFAULT '' COMMENT '颜色' AFTER `spec_json`",
+                'battery' => "`battery` tinyint NOT NULL DEFAULT 0 COMMENT '电池效率百分比' AFTER `color`",
+                'warranty' => "`warranty` int NOT NULL DEFAULT 0 COMMENT '保修截止时间' AFTER `battery`",
+                'catalog_product_id' => "`catalog_product_id` int NOT NULL DEFAULT 0 COMMENT '本站ERP目录产品ID' AFTER `spec`",
+                'category_name' => "`category_name` varchar(100) NOT NULL DEFAULT '' COMMENT '末级品类名称快照' AFTER `catalog_product_id`",
+                'category_path' => "`category_path` varchar(255) NOT NULL DEFAULT '' COMMENT '商品分类路径' AFTER `category_name`",
+                'inspector_uid' => "`inspector_uid` int NOT NULL DEFAULT 0 COMMENT '质检员UID' AFTER `spec`",
+                'inspector_name' => "`inspector_name` varchar(60) NOT NULL DEFAULT '' COMMENT '质检员名称快照' AFTER `inspector_uid`",
+                'estimate_sale_price' => "`estimate_sale_price` decimal(12,2) NOT NULL DEFAULT 0.00 COMMENT '入库预估售价' AFTER `inspector_name`",
+                'retail_price' => "`retail_price` decimal(12,2) NOT NULL DEFAULT 0.00 COMMENT '零售价' AFTER `estimate_sale_price`",
+                'image_urls' => "`image_urls` text COMMENT '入库图片JSON/逗号分隔' AFTER `retail_price`",
+                'video_url' => "`video_url` varchar(555) NOT NULL DEFAULT '' COMMENT '商品展示视频' AFTER `image_urls`",
+                'quality_remark' => "`quality_remark` varchar(500) NOT NULL DEFAULT '' COMMENT '质检/外观备注' AFTER `video_url`",
+                'qc_template_id' => "`qc_template_id` int NOT NULL DEFAULT 0 COMMENT '来源质检模板ID快照' AFTER `quality_remark`",
+                'qc_report' => "`qc_report` longtext COMMENT '标准化质检报告JSON快照' AFTER `qc_template_id`",
+            ],
+            'erp_asset' => [
+                'ownership_type' => "`ownership_type` varchar(20) NOT NULL DEFAULT 'owned' COMMENT 'owned自有/consigned代卖/pending待确认' AFTER `party_name`",
+                'owner_party_id' => "`owner_party_id` int NOT NULL DEFAULT 0 COMMENT '当前物权主体，0表示本公司' AFTER `ownership_type`",
+                'owner_party_name' => "`owner_party_name` varchar(100) NOT NULL DEFAULT '' COMMENT '当前物权主体名称快照' AFTER `owner_party_id`",
+                'ownership_source_type' => "`ownership_source_type` varchar(40) NOT NULL DEFAULT '' COMMENT '最近一次物权取得业务类型' AFTER `owner_party_name`",
+                'ownership_source_id' => "`ownership_source_id` int NOT NULL DEFAULT 0 COMMENT '最近一次物权取得业务ID' AFTER `ownership_source_type`",
+                'ownership_source_no' => "`ownership_source_no` varchar(40) NOT NULL DEFAULT '' COMMENT '最近一次物权取得业务单号' AFTER `ownership_source_id`",
+                'ownership_changed_at' => "`ownership_changed_at` int NOT NULL DEFAULT 0 COMMENT '最近一次物权变更时间' AFTER `ownership_source_no`",
+                'location_id' => "`location_id` int NOT NULL DEFAULT 0 COMMENT '库位ID' AFTER `warehouse_name`",
+                'location_name' => "`location_name` varchar(100) NOT NULL DEFAULT '' COMMENT '库位名称快照' AFTER `location_id`",
+                'spec_json' => "`spec_json` longtext COMMENT '结构化规格JSON' AFTER `spec`",
+                'color' => "`color` varchar(50) NOT NULL DEFAULT '' COMMENT '颜色' AFTER `spec_json`",
+                'battery' => "`battery` tinyint NOT NULL DEFAULT 0 COMMENT '电池效率百分比' AFTER `color`",
+                'warranty' => "`warranty` int NOT NULL DEFAULT 0 COMMENT '保修截止时间' AFTER `battery`",
+                'catalog_product_id' => "`catalog_product_id` int NOT NULL DEFAULT 0 COMMENT '本站ERP目录产品ID' AFTER `spec`",
+                'category_name' => "`category_name` varchar(100) NOT NULL DEFAULT '' COMMENT '末级品类名称快照' AFTER `catalog_product_id`",
+                'category_path' => "`category_path` varchar(255) NOT NULL DEFAULT '' COMMENT '商品分类路径' AFTER `category_name`",
+                'inspector_uid' => "`inspector_uid` int NOT NULL DEFAULT 0 COMMENT '质检员UID' AFTER `spec`",
+                'inspector_name' => "`inspector_name` varchar(60) NOT NULL DEFAULT '' COMMENT '质检员名称快照' AFTER `inspector_uid`",
+                'estimate_sale_price' => "`estimate_sale_price` decimal(12,2) NOT NULL DEFAULT 0.00 COMMENT '入库预估售价' AFTER `inspector_name`",
+                'retail_price' => "`retail_price` decimal(12,2) NOT NULL DEFAULT 0.00 COMMENT '零售价（上架商城定价，由库管设置）' AFTER `estimate_sale_price`",
+                'image_urls' => "`image_urls` text COMMENT '入库图片JSON/逗号分隔' AFTER `retail_price`",
+                'video_url' => "`video_url` varchar(555) NOT NULL DEFAULT '' COMMENT '商品展示视频' AFTER `image_urls`",
+                'quality_remark' => "`quality_remark` varchar(500) NOT NULL DEFAULT '' COMMENT '质检/外观备注' AFTER `video_url`",
+                'qc_template_id' => "`qc_template_id` int NOT NULL DEFAULT 0 COMMENT '来源质检模板ID快照' AFTER `quality_remark`",
+                'qc_report' => "`qc_report` longtext COMMENT '标准化质检报告JSON快照' AFTER `qc_template_id`",
+                'refurbish_status' => "`refurbish_status` varchar(20) NOT NULL DEFAULT 'none' COMMENT 'none无需/pending待整备/processing整备中/done已完成/failed整备异常' AFTER `total_cost`",
+                'refurbish_pending_at' => "`refurbish_pending_at` int NOT NULL DEFAULT 0 COMMENT '进入待整备时间' AFTER `refurbish_status`",
+                'refurbish_batch_no' => "`refurbish_batch_no` varchar(40) NOT NULL DEFAULT '' COMMENT '整备交接批次号' AFTER `refurbish_pending_at`",
+                'refurbish_provider_id' => "`refurbish_provider_id` int NOT NULL DEFAULT 0 COMMENT '当前外送整备商主体ID' AFTER `refurbish_batch_no`",
+                'refurbish_provider_name' => "`refurbish_provider_name` varchar(100) NOT NULL DEFAULT '' COMMENT '当前外送整备商名称快照' AFTER `refurbish_provider_id`",
+                'refurbish_sent_at' => "`refurbish_sent_at` int NOT NULL DEFAULT 0 COMMENT '送修/开始整备时间' AFTER `refurbish_provider_name`",
+                'refurbish_sent_uid' => "`refurbish_sent_uid` int NOT NULL DEFAULT 0 COMMENT '送修经手人UID' AFTER `refurbish_sent_at`",
+                'refurbish_sent_name' => "`refurbish_sent_name` varchar(60) NOT NULL DEFAULT '' COMMENT '送修经手人名称' AFTER `refurbish_sent_uid`",
+                'refurbish_result' => "`refurbish_result` varchar(20) NOT NULL DEFAULT '' COMMENT 'success修复成功/partial部分修复/failed修复失败' AFTER `refurbish_sent_name`",
+                'refurbish_completed_at' => "`refurbish_completed_at` int NOT NULL DEFAULT 0 COMMENT '整备完成时间' AFTER `refurbish_result`",
+                'refurbish_completed_uid' => "`refurbish_completed_uid` int NOT NULL DEFAULT 0 COMMENT '整备完工登记人UID' AFTER `refurbish_completed_at`",
+                'refurbish_completed_name' => "`refurbish_completed_name` varchar(60) NOT NULL DEFAULT '' COMMENT '整备完工登记人名称' AFTER `refurbish_completed_uid`",
+                'refurbish_voucher_urls' => "`refurbish_voucher_urls` text COMMENT '整备结果/费用凭证图片' AFTER `refurbish_completed_name`",
+                'refurbish_remark' => "`refurbish_remark` varchar(500) NOT NULL DEFAULT '' COMMENT '整备交接及结果说明' AFTER `refurbish_voucher_urls`",
+                'sale_target' => "`sale_target` varchar(20) NOT NULL DEFAULT 'unset' COMMENT 'unset未定/peer卖同行/mall上商城' AFTER `refurbish_status`",
+                'listing_status' => "`listing_status` varchar(20) NOT NULL DEFAULT 'none' COMMENT 'none无需/need_photo待拍照/need_price待商城定价/need_material待完善资料/ready待上架/pending_shop待商城完善/listed已上架' AFTER `sale_target`",
+                'task_stage_key' => "`task_stage_key` varchar(40) NOT NULL DEFAULT '' COMMENT '当前ERP待办环节' AFTER `listing_status`",
+                'task_assignee_uid' => "`task_assignee_uid` int NOT NULL DEFAULT 0 COMMENT '当前待办责任人UID' AFTER `task_stage_key`",
+                'task_assignee_name' => "`task_assignee_name` varchar(60) NOT NULL DEFAULT '' COMMENT '当前待办责任人名称快照' AFTER `task_assignee_uid`",
+                'task_assigner_uid' => "`task_assigner_uid` int NOT NULL DEFAULT 0 COMMENT '最近分配人UID' AFTER `task_assignee_name`",
+                'task_assigner_name' => "`task_assigner_name` varchar(60) NOT NULL DEFAULT '' COMMENT '最近分配人名称快照' AFTER `task_assigner_uid`",
+                'task_assigned_at' => "`task_assigned_at` int NOT NULL DEFAULT 0 COMMENT '最近分配时间' AFTER `task_assigner_name`",
+                'remark_public' => "`remark_public` varchar(500) NOT NULL DEFAULT '' COMMENT '对外说明' AFTER `remark`",
+                'remark_internal' => "`remark_internal` varchar(500) NOT NULL DEFAULT '' COMMENT '对内备注' AFTER `remark_public`",
+                'stock_in_at' => "`stock_in_at` int NOT NULL DEFAULT 0 COMMENT '实际入库时间戳（计算库龄）' AFTER `remark_internal`",
+            ],
+            'erp_sale_order' => [
+                'request_id' => "`request_id` varchar(80) DEFAULT NULL COMMENT '客户端/外部事件幂等请求ID' AFTER `site_id`",
+                'sale_channel_key' => "`sale_channel_key` varchar(80) NOT NULL DEFAULT '' COMMENT '销售渠道稳定编码' AFTER `sale_channel`",
+                'channel_source_plugin' => "`channel_source_plugin` varchar(40) NOT NULL DEFAULT '' COMMENT '渠道来源插件' AFTER `sale_channel_key`",
+                'channel_source_key' => "`channel_source_key` varchar(80) NOT NULL DEFAULT '' COMMENT '插件内渠道编码' AFTER `channel_source_plugin`",
+                'origin_plugin' => "`origin_plugin` varchar(40) NOT NULL DEFAULT 'hsx_erp' COMMENT '真实业务来源插件' AFTER `channel_source_key`",
+                'origin_plugin_name' => "`origin_plugin_name` varchar(60) NOT NULL DEFAULT '二手机ERP' COMMENT '来源插件名称快照' AFTER `origin_plugin`",
+                'origin_type' => "`origin_type` varchar(80) NOT NULL DEFAULT 'hsx_erp.manual_sale' COMMENT '业务来源稳定编码' AFTER `origin_plugin_name`",
+                'origin_name' => "`origin_name` varchar(80) NOT NULL DEFAULT 'ERP销售' COMMENT '业务来源名称快照' AFTER `origin_type`",
+                'origin_id' => "`origin_id` varchar(80) NOT NULL DEFAULT '' COMMENT '原系统业务ID' AFTER `origin_name`",
+                'origin_no' => "`origin_no` varchar(80) NOT NULL DEFAULT '' COMMENT '原系统业务单号' AFTER `origin_id`",
+                'origin_event_id' => "`origin_event_id` varchar(80) NOT NULL DEFAULT '' COMMENT '外部事件幂等键' AFTER `origin_no`",
+                'payment_mode' => "`payment_mode` varchar(40) NOT NULL DEFAULT '' COMMENT '支付方式快照' AFTER `origin_event_id`",
+                'payment_trade_no' => "`payment_trade_no` varchar(100) NOT NULL DEFAULT '' COMMENT '第三方支付单号' AFTER `payment_mode`",
+                'payment_gross_amount' => "`payment_gross_amount` decimal(12,2) NOT NULL DEFAULT 0.00 COMMENT '客户实际支付金额' AFTER `payment_trade_no`",
+                'payment_fee_amount' => "`payment_fee_amount` decimal(12,2) NOT NULL DEFAULT 0.00 COMMENT '渠道手续费' AFTER `payment_gross_amount`",
+                'payment_fee_bearer' => "`payment_fee_bearer` varchar(20) NOT NULL DEFAULT '' COMMENT 'merchant/customer' AFTER `payment_fee_amount`",
+                'merchant_net_amount' => "`merchant_net_amount` decimal(12,2) NOT NULL DEFAULT 0.00 COMMENT '商户预计净入账' AFTER `payment_fee_bearer`",
+                'refunded_amount' => "`refunded_amount` decimal(12,2) NOT NULL DEFAULT 0.00 COMMENT '累计退款收入冲销' AFTER `merchant_net_amount`",
+                'refunded_cost' => "`refunded_cost` decimal(12,2) NOT NULL DEFAULT 0.00 COMMENT '累计退款成本转回' AFTER `refunded_amount`",
+            ],
+            'erp_sale_item' => [
+                'item_type' => "`item_type` varchar(20) NOT NULL DEFAULT 'device' COMMENT 'device一机一码/standard数量标品' AFTER `sale_order_id`",
+                'quantity_product_id' => "`quantity_product_id` int NOT NULL DEFAULT 0 COMMENT '数量商品档案ID' AFTER `asset_id`",
+                'product_code' => "`product_code` varchar(60) NOT NULL DEFAULT '' COMMENT '标品编码快照' AFTER `quantity_product_id`",
+                'unit' => "`unit` varchar(20) NOT NULL DEFAULT '台' COMMENT '计量单位' AFTER `product_code`",
+                'warehouse_id' => "`warehouse_id` int NOT NULL DEFAULT 0 COMMENT '出库仓库ID快照' AFTER `unit`",
+                'warehouse_name' => "`warehouse_name` varchar(100) NOT NULL DEFAULT '' COMMENT '出库仓库名称快照' AFTER `warehouse_id`",
+                'location_id' => "`location_id` int NOT NULL DEFAULT 0 COMMENT '出库库位ID快照' AFTER `warehouse_name`",
+                'location_name' => "`location_name` varchar(100) NOT NULL DEFAULT '' COMMENT '出库库位名称快照' AFTER `location_id`",
+                'external_goods_id' => "`external_goods_id` int NOT NULL DEFAULT 0 COMMENT '外部商城商品ID' AFTER `model`",
+                'external_sku_id' => "`external_sku_id` int NOT NULL DEFAULT 0 COMMENT '外部商城SKU ID' AFTER `external_goods_id`",
+                'external_line_id' => "`external_line_id` varchar(80) NOT NULL DEFAULT '' COMMENT '外部订单明细ID' AFTER `external_sku_id`",
+                'supplier_id' => "`supplier_id` int NOT NULL DEFAULT 0 COMMENT '来源商品供应商ID快照，0为自有/期初' AFTER `external_line_id`",
+                'inventory_source' => "`inventory_source` varchar(30) NOT NULL DEFAULT 'erp_asset' COMMENT 'erp_asset/supplier/self_owned/opening' AFTER `supplier_id`",
+                'quantity' => "`quantity` decimal(14,3) NOT NULL DEFAULT 1.000 COMMENT '销售数量' AFTER `inventory_source`",
+                'ownership_type' => "`ownership_type` varchar(20) NOT NULL DEFAULT 'owned' COMMENT 'owned自有/consigned代卖' AFTER `model`",
+                'owner_party_id' => "`owner_party_id` int NOT NULL DEFAULT 0 COMMENT '代卖货主主体ID' AFTER `ownership_type`",
+                'owner_party_name' => "`owner_party_name` varchar(100) NOT NULL DEFAULT '' COMMENT '代卖货主名称快照' AFTER `owner_party_id`",
+                'consignment_settlement_amount' => "`consignment_settlement_amount` decimal(12,2) NOT NULL DEFAULT 0.00 COMMENT '本台应付货主金额' AFTER `profit`",
+                'consignment_service_fee' => "`consignment_service_fee` decimal(12,2) NOT NULL DEFAULT 0.00 COMMENT '本台代卖服务收益' AFTER `consignment_settlement_amount`",
+                'consignment_payable_id' => "`consignment_payable_id` int NOT NULL DEFAULT 0 COMMENT '设备级代卖结算应付ID' AFTER `consignment_service_fee`",
+                'refunded_amount' => "`refunded_amount` decimal(12,2) NOT NULL DEFAULT 0.00 COMMENT '累计退款收入冲销' AFTER `profit`",
+                'refunded_cost' => "`refunded_cost` decimal(12,2) NOT NULL DEFAULT 0.00 COMMENT '累计退款成本转回' AFTER `refunded_amount`",
+            ],
+            'erp_account_ledger' => [
+                'balance_after' => "`balance_after` decimal(14,2) NOT NULL DEFAULT 0.00 COMMENT '记账后余额' AFTER `amount`",
+                'sale_item_id' => "`sale_item_id` int NOT NULL DEFAULT 0 COMMENT '销售明细ID，商城缺失ERP资产时用于分台核销' AFTER `asset_id`",
+            ],
+            'erp_asset_ledger' => [
+                'request_id' => "`request_id` varchar(80) DEFAULT NULL COMMENT '客户端幂等请求ID' AFTER `site_id`",
+                'ledger_no' => "`ledger_no` varchar(40) NOT NULL DEFAULT '' COMMENT '流水号' AFTER `site_id`",
+                'asset_no' => "`asset_no` varchar(40) NOT NULL DEFAULT '' COMMENT '设备资产号快照' AFTER `asset_id`",
+                'imei' => "`imei` varchar(80) NOT NULL DEFAULT '' COMMENT 'IMEI快照' AFTER `asset_no`",
+                'model' => "`model` varchar(120) NOT NULL DEFAULT '' COMMENT '型号快照' AFTER `imei`",
+                'before_warehouse_id' => "`before_warehouse_id` int NOT NULL DEFAULT 0 AFTER `after_status`",
+                'before_warehouse_name' => "`before_warehouse_name` varchar(100) NOT NULL DEFAULT '' AFTER `before_warehouse_id`",
+                'before_location_id' => "`before_location_id` int NOT NULL DEFAULT 0 AFTER `before_warehouse_name`",
+                'before_location_name' => "`before_location_name` varchar(100) NOT NULL DEFAULT '' AFTER `before_location_id`",
+                'after_warehouse_id' => "`after_warehouse_id` int NOT NULL DEFAULT 0 AFTER `before_location_name`",
+                'after_warehouse_name' => "`after_warehouse_name` varchar(100) NOT NULL DEFAULT '' AFTER `after_warehouse_id`",
+                'after_location_id' => "`after_location_id` int NOT NULL DEFAULT 0 AFTER `after_warehouse_name`",
+                'after_location_name' => "`after_location_name` varchar(100) NOT NULL DEFAULT '' AFTER `after_location_id`",
+                'before_total_cost' => "`before_total_cost` decimal(12,2) NOT NULL DEFAULT 0.00 COMMENT '变化前成本' AFTER `after_location_name`",
+                'after_total_cost' => "`after_total_cost` decimal(12,2) NOT NULL DEFAULT 0.00 COMMENT '变化后成本' AFTER `before_total_cost`",
+                'cost_delta' => "`cost_delta` decimal(12,2) NOT NULL DEFAULT 0.00 COMMENT '成本变化' AFTER `after_total_cost`",
+                'party_id' => "`party_id` int NOT NULL DEFAULT 0 AFTER `cost_delta`",
+                'party_name' => "`party_name` varchar(100) NOT NULL DEFAULT '' AFTER `party_id`",
+                'source_no' => "`source_no` varchar(40) NOT NULL DEFAULT '' AFTER `source_id`",
+                'extra_json' => "`extra_json` longtext COMMENT '扩展快照' AFTER `remark`",
+                'occurred_at' => "`occurred_at` int NOT NULL DEFAULT 0 AFTER `extra_json`",
+            ],
+            'erp_settlement' => [
+                'request_id' => "`request_id` varchar(80) DEFAULT NULL COMMENT '客户端幂等请求ID' AFTER `site_id`",
+                'voucher_urls' => "`voucher_urls` text COMMENT '收付款凭证图片JSON/逗号分隔' AFTER `confirmed_at`",
+            ],
+            'erp_money_ledger' => [
+                'category_key' => "`category_key` varchar(80) NOT NULL DEFAULT '' COMMENT '收支分类稳定编码' AFTER `direction`",
+                'category_name' => "`category_name` varchar(60) NOT NULL DEFAULT '' COMMENT '收支分类名称快照' AFTER `category_key`",
+                'category_statement_group' => "`category_statement_group` varchar(40) NOT NULL DEFAULT '' COMMENT '经营报表分组' AFTER `category_name`",
+                'category_source_plugin' => "`category_source_plugin` varchar(40) NOT NULL DEFAULT '' COMMENT '分类来源插件' AFTER `category_statement_group`",
+                'category_source_key' => "`category_source_key` varchar(80) NOT NULL DEFAULT '' COMMENT '插件内分类编码' AFTER `category_source_plugin`",
+                'balance_after' => "`balance_after` decimal(14,2) NOT NULL DEFAULT 0.00 COMMENT '记账后余额' AFTER `amount`",
+                'voucher_urls' => "`voucher_urls` text COMMENT '资金凭证图片JSON/逗号分隔' AFTER `occurred_at`",
+            ],
+            'erp_payable' => [
+                'origin_plugin' => "`origin_plugin` varchar(40) NOT NULL DEFAULT 'hsx_erp' COMMENT '真实业务来源插件' AFTER `source_no`",
+                'origin_plugin_name' => "`origin_plugin_name` varchar(60) NOT NULL DEFAULT '二手机ERP' COMMENT '来源插件名称快照' AFTER `origin_plugin`",
+                'origin_type' => "`origin_type` varchar(80) NOT NULL DEFAULT '' COMMENT '业务来源稳定编码' AFTER `origin_plugin_name`",
+                'origin_name' => "`origin_name` varchar(80) NOT NULL DEFAULT '' COMMENT '业务来源名称快照' AFTER `origin_type`",
+                'origin_id' => "`origin_id` varchar(80) NOT NULL DEFAULT '' COMMENT '原系统业务ID' AFTER `origin_name`",
+                'origin_no' => "`origin_no` varchar(80) NOT NULL DEFAULT '' COMMENT '原系统业务单号' AFTER `origin_id`",
+                'biz_scene' => "`biz_scene` varchar(40) NOT NULL DEFAULT '' COMMENT '业务场景' AFTER `origin_no`",
+                'category_key' => "`category_key` varchar(80) NOT NULL DEFAULT '' COMMENT '财务分类稳定编码' AFTER `biz_scene`",
+                'category_name' => "`category_name` varchar(60) NOT NULL DEFAULT '' COMMENT '财务分类名称快照' AFTER `category_key`",
+                'category_statement_group' => "`category_statement_group` varchar(40) NOT NULL DEFAULT '' COMMENT '经营报表分组' AFTER `category_name`",
+                'category_source_plugin' => "`category_source_plugin` varchar(40) NOT NULL DEFAULT '' COMMENT '分类提供插件' AFTER `category_statement_group`",
+                'category_source_key' => "`category_source_key` varchar(80) NOT NULL DEFAULT '' COMMENT '插件内分类编码' AFTER `category_source_plugin`",
+                'channel_code' => "`channel_code` varchar(80) NOT NULL DEFAULT '' COMMENT '业务渠道稳定编码' AFTER `category_source_key`",
+                'channel_name' => "`channel_name` varchar(60) NOT NULL DEFAULT '' COMMENT '业务渠道名称快照' AFTER `channel_code`",
+                'business_reason' => "`business_reason` varchar(255) NOT NULL DEFAULT '' COMMENT '形成应付的业务原因' AFTER `channel_name`",
+                'settlement_mode' => "`settlement_mode` varchar(20) NOT NULL DEFAULT '' COMMENT '开单时结算约定稳定编码' AFTER `business_reason`",
+                'settlement_mode_name' => "`settlement_mode_name` varchar(60) NOT NULL DEFAULT '' COMMENT '开单时结算约定名称快照' AFTER `settlement_mode`",
+                'business_operator_uid' => "`business_operator_uid` int NOT NULL DEFAULT 0 COMMENT '业务开单/经办人UID' AFTER `settlement_mode_name`",
+                'business_operator_name' => "`business_operator_name` varchar(60) NOT NULL DEFAULT '' COMMENT '业务开单/经办人名称快照' AFTER `business_operator_uid`",
+                'asset_id' => "`asset_id` int NOT NULL DEFAULT 0 COMMENT '设备级应付关联资产ID' AFTER `business_operator_name`",
+                'task_stage_key' => "`task_stage_key` varchar(40) NOT NULL DEFAULT '' COMMENT '当前财务待办环节' AFTER `asset_id`",
+                'task_assignee_uid' => "`task_assignee_uid` int NOT NULL DEFAULT 0 COMMENT '当前待办责任人UID' AFTER `task_stage_key`",
+                'task_assignee_name' => "`task_assignee_name` varchar(60) NOT NULL DEFAULT '' COMMENT '当前待办责任人' AFTER `task_assignee_uid`",
+                'task_assigner_uid' => "`task_assigner_uid` int NOT NULL DEFAULT 0 COMMENT '分配人UID' AFTER `task_assignee_name`",
+                'task_assigner_name' => "`task_assigner_name` varchar(60) NOT NULL DEFAULT '' COMMENT '分配人' AFTER `task_assigner_uid`",
+                'task_assigned_at' => "`task_assigned_at` int NOT NULL DEFAULT 0 COMMENT '最近分配时间' AFTER `task_assigner_name`",
+            ],
+            'erp_receivable' => [
+                'origin_plugin' => "`origin_plugin` varchar(40) NOT NULL DEFAULT 'hsx_erp' COMMENT '真实业务来源插件' AFTER `source_no`",
+                'origin_plugin_name' => "`origin_plugin_name` varchar(60) NOT NULL DEFAULT '二手机ERP' COMMENT '来源插件名称快照' AFTER `origin_plugin`",
+                'origin_type' => "`origin_type` varchar(80) NOT NULL DEFAULT '' COMMENT '业务来源稳定编码' AFTER `origin_plugin_name`",
+                'origin_name' => "`origin_name` varchar(80) NOT NULL DEFAULT '' COMMENT '业务来源名称快照' AFTER `origin_type`",
+                'origin_id' => "`origin_id` varchar(80) NOT NULL DEFAULT '' COMMENT '原系统业务ID' AFTER `origin_name`",
+                'origin_no' => "`origin_no` varchar(80) NOT NULL DEFAULT '' COMMENT '原系统业务单号' AFTER `origin_id`",
+                'biz_scene' => "`biz_scene` varchar(40) NOT NULL DEFAULT '' COMMENT '业务场景' AFTER `origin_no`",
+                'category_key' => "`category_key` varchar(80) NOT NULL DEFAULT '' COMMENT '财务分类稳定编码' AFTER `biz_scene`",
+                'category_name' => "`category_name` varchar(60) NOT NULL DEFAULT '' COMMENT '财务分类名称快照' AFTER `category_key`",
+                'category_statement_group' => "`category_statement_group` varchar(40) NOT NULL DEFAULT '' COMMENT '经营报表分组' AFTER `category_name`",
+                'category_source_plugin' => "`category_source_plugin` varchar(40) NOT NULL DEFAULT '' COMMENT '分类提供插件' AFTER `category_statement_group`",
+                'category_source_key' => "`category_source_key` varchar(80) NOT NULL DEFAULT '' COMMENT '插件内分类编码' AFTER `category_source_plugin`",
+                'channel_code' => "`channel_code` varchar(80) NOT NULL DEFAULT '' COMMENT '业务渠道稳定编码' AFTER `category_source_key`",
+                'channel_name' => "`channel_name` varchar(60) NOT NULL DEFAULT '' COMMENT '业务渠道名称快照' AFTER `channel_code`",
+                'business_reason' => "`business_reason` varchar(255) NOT NULL DEFAULT '' COMMENT '形成应收的业务原因' AFTER `channel_name`",
+                'settlement_mode' => "`settlement_mode` varchar(20) NOT NULL DEFAULT '' COMMENT '开单时结算约定稳定编码' AFTER `business_reason`",
+                'settlement_mode_name' => "`settlement_mode_name` varchar(60) NOT NULL DEFAULT '' COMMENT '开单时结算约定名称快照' AFTER `settlement_mode`",
+                'business_operator_uid' => "`business_operator_uid` int NOT NULL DEFAULT 0 COMMENT '业务开单/经办人UID' AFTER `settlement_mode_name`",
+                'business_operator_name' => "`business_operator_name` varchar(60) NOT NULL DEFAULT '' COMMENT '业务开单/经办人名称快照' AFTER `business_operator_uid`",
+                'asset_id' => "`asset_id` int NOT NULL DEFAULT 0 COMMENT '设备级应收关联资产ID' AFTER `business_operator_name`",
+                'task_stage_key' => "`task_stage_key` varchar(40) NOT NULL DEFAULT '' COMMENT '当前财务待办环节' AFTER `asset_id`",
+                'task_assignee_uid' => "`task_assignee_uid` int NOT NULL DEFAULT 0 COMMENT '当前待办责任人UID' AFTER `task_stage_key`",
+                'task_assignee_name' => "`task_assignee_name` varchar(60) NOT NULL DEFAULT '' COMMENT '当前待办责任人' AFTER `task_assignee_uid`",
+                'task_assigner_uid' => "`task_assigner_uid` int NOT NULL DEFAULT 0 COMMENT '分配人UID' AFTER `task_assignee_name`",
+                'task_assigner_name' => "`task_assigner_name` varchar(60) NOT NULL DEFAULT '' COMMENT '分配人' AFTER `task_assigner_uid`",
+                'task_assigned_at' => "`task_assigned_at` int NOT NULL DEFAULT 0 COMMENT '最近分配时间' AFTER `task_assigner_name`",
+            ],
+            'erp_settlement_link' => [
+                'asset_id' => "`asset_id` int NOT NULL DEFAULT 0 COMMENT '关联设备' AFTER `target_id`",
+                'biz_scene' => "`biz_scene` varchar(40) NOT NULL DEFAULT '' COMMENT '业务场景快照' AFTER `asset_id`",
+                'category_key' => "`category_key` varchar(80) NOT NULL DEFAULT '' COMMENT '财务分类编码快照' AFTER `biz_scene`",
+                'category_name' => "`category_name` varchar(60) NOT NULL DEFAULT '' COMMENT '财务分类名称快照' AFTER `category_key`",
+                'category_statement_group' => "`category_statement_group` varchar(40) NOT NULL DEFAULT '' COMMENT '经营报表分组' AFTER `category_name`",
+                'category_source_plugin' => "`category_source_plugin` varchar(40) NOT NULL DEFAULT '' COMMENT '分类提供插件' AFTER `category_statement_group`",
+                'category_source_key' => "`category_source_key` varchar(80) NOT NULL DEFAULT '' COMMENT '插件内分类编码' AFTER `category_source_plugin`",
+                'origin_plugin' => "`origin_plugin` varchar(40) NOT NULL DEFAULT '' COMMENT '真实业务来源插件' AFTER `category_source_key`",
+                'origin_type' => "`origin_type` varchar(80) NOT NULL DEFAULT '' COMMENT '业务来源稳定编码' AFTER `origin_plugin`",
+                'origin_id' => "`origin_id` varchar(80) NOT NULL DEFAULT '' COMMENT '原系统业务ID' AFTER `origin_type`",
+            ],
+            'erp_purchase_return' => [
+                'request_id' => "`request_id` varchar(80) DEFAULT NULL COMMENT '客户端幂等请求ID' AFTER `site_id`",
+            ],
+            'erp_purchase_return_item' => [
+                'supplier_amount' => "`supplier_amount` decimal(12,2) NOT NULL DEFAULT 0.00 COMMENT '供应商结算成本快照' AFTER `paid_amount`",
+                'unpaid_offset_amount' => "`unpaid_offset_amount` decimal(12,2) NOT NULL DEFAULT 0.00 COMMENT '冲销未付款金额' AFTER `supplier_amount`",
+                'refund_receivable_amount' => "`refund_receivable_amount` decimal(12,2) NOT NULL DEFAULT 0.00 COMMENT '生成退款应收金额' AFTER `unpaid_offset_amount`",
+                'retained_payable_amount' => "`retained_payable_amount` decimal(12,2) NOT NULL DEFAULT 0.00 COMMENT '退货后仍保留应付金额' AFTER `refund_receivable_amount`",
+                'internal_cost' => "`internal_cost` decimal(12,2) NOT NULL DEFAULT 0.00 COMMENT '整备及内部成本快照' AFTER `retained_payable_amount`",
+                'policy_json' => "`policy_json` longtext COMMENT '退货决策快照' AFTER `internal_cost`",
+            ],
+            'erp_sale_return' => [
+                'request_id' => "`request_id` varchar(80) DEFAULT NULL COMMENT '客户端幂等请求ID' AFTER `site_id`",
+                'business_type' => "`business_type` varchar(30) NOT NULL DEFAULT 'return_refund' COMMENT 'return_refund退货退款/after_sale_compensation售后补差' AFTER `request_id`",
+            ],
+        ];
+
+        foreach ($columns as $table => $definitions) {
+            foreach ($definitions as $column => $definition) {
+                self::ensureColumn($prefix . $table, $column, $definition);
+            }
+        }
+        // 总价折算会产生循环小数；历史库的两位单价列会造成库存成本累计误差。
+        // 这里只在插件安装/升级生命周期执行，不进入普通业务请求。
+        self::ensureColumnType(
+            $prefix . 'erp_purchase_item',
+            'unit_cost',
+            'decimal(14,6)',
+            "`unit_cost` decimal(14,6) NOT NULL DEFAULT 0.000000 COMMENT '折算采购单价'"
+        );
+        self::ensureColumnType(
+            $prefix . 'erp_sale_item',
+            'quantity',
+            'decimal(14,3)',
+            "`quantity` decimal(14,3) NOT NULL DEFAULT 1.000 COMMENT '销售数量'"
+        );
+        // 商城交接会记录诸如 in_stock/pending_shop 的库存/渠道组合状态。
+        // 旧版 varchar(20) 无法容纳完整值，会在交接或完成上架时分别触发
+        // after_status / before_status 数据过长，必须保留完整审计状态而非截断。
+        self::ensureColumnType(
+            $prefix . 'erp_asset_ledger',
+            'before_status',
+            'varchar(64)',
+            "`before_status` varchar(64) NOT NULL DEFAULT '' COMMENT '变更前完整业务状态，允许库存/渠道组合状态'"
+        );
+        self::ensureColumnType(
+            $prefix . 'erp_asset_ledger',
+            'after_status',
+            'varchar(64)',
+            "`after_status` varchar(64) NOT NULL DEFAULT '' COMMENT '变更后完整业务状态，允许库存/渠道组合状态'"
+        );
+
+        // 早期业务入口曾把缺省幂等键保存成空字符串，导致同站点第二次结算撞唯一索引。
+        // 空请求号不代表同一个请求，统一迁移成 NULL 后仍由真实 request_id 保证幂等。
+        Db::execute("UPDATE `{$prefix}erp_settlement` SET `request_id` = NULL WHERE `request_id` = ''");
+
+        self::ensureIndex($prefix . 'erp_asset', 'idx_site_sn', 'KEY `idx_site_sn` (`site_id`,`sn`)');
+        self::ensureIndex($prefix . 'erp_party', 'idx_site_credit', 'KEY `idx_site_credit` (`site_id`,`credit_policy`,`status`)');
+        self::ensureIndex($prefix . 'erp_asset', 'idx_site_ownership', 'KEY `idx_site_ownership` (`site_id`,`ownership_type`,`owner_party_id`,`status`)');
+        self::ensureIndex($prefix . 'erp_asset', 'idx_site_catalog_product', 'KEY `idx_site_catalog_product` (`site_id`,`catalog_product_id`,`status`)');
+        self::ensureIndex($prefix . 'erp_purchase_item', 'idx_site_catalog_product', 'KEY `idx_site_catalog_product` (`site_id`,`catalog_product_id`)');
+        self::ensureIndex($prefix . 'erp_purchase_item', 'idx_quantity_product', 'KEY `idx_quantity_product` (`site_id`,`quantity_product_id`)');
+        self::ensureIndex($prefix . 'erp_quantity_product', 'idx_site_category', 'KEY `idx_site_category` (`site_id`,`category_path`(100),`status`)');
+        self::ensureIndex($prefix . 'erp_sale_item', 'idx_owner', 'KEY `idx_owner` (`site_id`,`owner_party_id`,`status`)');
+        self::ensureIndex($prefix . 'erp_sale_item', 'idx_consignment_payable', 'KEY `idx_consignment_payable` (`site_id`,`consignment_payable_id`)');
+        self::ensureIndex($prefix . 'erp_warehouse', 'idx_site_manager', 'KEY `idx_site_manager` (`site_id`,`manager_uid`,`status`)');
+        self::ensureIndex($prefix . 'erp_warehouse_location', 'idx_site_manager', 'KEY `idx_site_manager` (`site_id`,`manager_uid`,`status`)');
+        self::ensureIndex($prefix . 'erp_asset', 'idx_site_refurbish', 'KEY `idx_site_refurbish` (`site_id`,`refurbish_status`,`refurbish_pending_at`)');
+        self::ensureIndex($prefix . 'erp_asset', 'idx_site_refurbish_provider', 'KEY `idx_site_refurbish_provider` (`site_id`,`refurbish_provider_id`,`refurbish_status`)');
+        self::ensureIndex($prefix . 'erp_asset', 'idx_site_task_assignee', 'KEY `idx_site_task_assignee` (`site_id`,`task_stage_key`,`task_assignee_uid`,`task_assigned_at`)');
+        self::ensureIndex($prefix . 'erp_payable', 'idx_task_assignee', 'KEY `idx_task_assignee` (`site_id`,`task_stage_key`,`task_assignee_uid`,`status`)');
+        self::ensureIndex($prefix . 'erp_receivable', 'idx_task_assignee', 'KEY `idx_task_assignee` (`site_id`,`task_stage_key`,`task_assignee_uid`,`status`)');
+        self::ensureIndex($prefix . 'erp_asset_ledger', 'idx_action_source_no', 'KEY `idx_action_source_no` (`site_id`,`action`,`source_no`)');
+        self::ensureIndex($prefix . 'erp_purchase_order', 'uk_site_request', 'UNIQUE KEY `uk_site_request` (`site_id`,`request_id`)');
+        self::ensureIndex($prefix . 'erp_sale_order', 'uk_site_request', 'UNIQUE KEY `uk_site_request` (`site_id`,`request_id`)');
+        self::ensureIndex($prefix . 'erp_asset_ledger', 'uk_site_request', 'UNIQUE KEY `uk_site_request` (`site_id`,`request_id`)');
+        self::ensureIndex($prefix . 'erp_settlement', 'uk_site_request', 'UNIQUE KEY `uk_site_request` (`site_id`,`request_id`)');
+        self::ensureIndex($prefix . 'erp_payable', 'idx_asset', 'KEY `idx_asset` (`site_id`,`asset_id`)');
+        self::ensureIndex($prefix . 'erp_receivable', 'idx_asset', 'KEY `idx_asset` (`site_id`,`asset_id`)');
+        self::ensureIndex($prefix . 'erp_account_ledger', 'idx_sale_item', 'KEY `idx_sale_item` (`site_id`,`sale_item_id`)');
+        self::ensureIndex($prefix . 'erp_purchase_return', 'uk_site_request', 'UNIQUE KEY `uk_site_request` (`site_id`,`request_id`)');
+        self::ensureIndex($prefix . 'erp_sale_return', 'uk_site_request', 'UNIQUE KEY `uk_site_request` (`site_id`,`request_id`)');
+        Db::execute("UPDATE `{$prefix}erp_party` SET role_flags = CASE party_type WHEN 'supplier' THEN 'purchase_supplier' WHEN 'customer' THEN 'sale_customer' WHEN 'channel' THEN 'sale_customer' ELSE 'other' END WHERE role_flags = ''");
+        Db::execute("UPDATE `{$prefix}erp_asset` a LEFT JOIN `{$prefix}erp_warehouse` w ON w.site_id = a.site_id AND w.id = a.warehouse_id SET a.ownership_type = 'consigned', a.owner_party_id = a.party_id, a.owner_party_name = a.party_name WHERE w.ownership_type = 'consigned' AND a.ownership_type = 'owned'");
+        self::backfillHistoricalFinanceState($prefix);
+        self::backfillFinanceSourceSnapshots($prefix);
+    }
+
+    /**
+     * 修复旧版本账目结构，但只在证据唯一时建立设备关系。
+     *
+     * 历史整备应付曾经没有 asset_id，不过通常仍保留 RF 来源号、资产号或
+     * refurbish 资产流水。下面分三步从强到弱匹配；任何来源号对应多台设备时
+     * 都不会更新，留给人工核对，避免把财务事实猜到错误设备上。
+     */
+    private static function backfillHistoricalFinanceState(string $prefix): void
+    {
+        // 1. RF/历史来源号在整备资产流水中唯一对应一台有效资产。
+        Db::execute("UPDATE `{$prefix}erp_payable` p
+            INNER JOIN (
+                SELECT l.site_id, l.source_no, MIN(l.asset_id) AS asset_id
+                FROM `{$prefix}erp_asset_ledger` l
+                INNER JOIN `{$prefix}erp_asset` a ON a.site_id = l.site_id AND a.id = l.asset_id
+                WHERE l.action = 'refurbish' AND l.asset_id > 0 AND l.source_no <> ''
+                GROUP BY l.site_id, l.source_no
+                HAVING COUNT(DISTINCT l.asset_id) = 1
+            ) resolved ON resolved.site_id = p.site_id AND resolved.source_no = p.source_no
+            SET p.asset_id = resolved.asset_id
+            WHERE p.source_type = 'refurbish' AND p.asset_id = 0 AND p.source_no <> ''");
+
+        // 2. 来源 ID 指向整备资产流水时，仍要求来源号与流水号或资产号吻合。
+        Db::execute("UPDATE `{$prefix}erp_payable` p
+            INNER JOIN `{$prefix}erp_asset_ledger` l
+                ON l.site_id = p.site_id AND l.id = p.source_id AND l.action = 'refurbish' AND l.asset_id > 0
+            INNER JOIN `{$prefix}erp_asset` a ON a.site_id = l.site_id AND a.id = l.asset_id
+            SET p.asset_id = l.asset_id
+            WHERE p.source_type = 'refurbish' AND p.asset_id = 0 AND p.source_no <> ''
+              AND (p.source_no = l.source_no OR p.source_no = a.asset_no)
+              AND (p.party_id = 0 OR l.party_id = 0 OR p.party_id = l.party_id)
+              AND (l.cost_delta = 0 OR ABS(p.amount - ABS(l.cost_delta)) < 0.01)");
+
+        // 3. 部分早期数据直接把设备资产号保存为来源号；资产号有站点唯一约束。
+        Db::execute("UPDATE `{$prefix}erp_payable` p
+            INNER JOIN `{$prefix}erp_asset` a ON a.site_id = p.site_id AND a.asset_no = p.source_no
+            SET p.asset_id = a.id
+            WHERE p.source_type = 'refurbish' AND p.asset_id = 0 AND p.source_no <> ''");
+
+        // 已作废是独立审计状态，不能因为金额为零被改写；其余零余额事实统一结清。
+        Db::execute("UPDATE `{$prefix}erp_payable`
+            SET status = 'settled'
+            WHERE status NOT IN ('settled', 'void') AND amount <= settled_amount");
+        Db::execute("UPDATE `{$prefix}erp_receivable`
+            SET status = 'settled'
+            WHERE status NOT IN ('settled', 'void') AND amount <= settled_amount");
+    }
+
+    /** 为升级前历史账目补齐不可变来源与财务分类快照。 */
+    private static function backfillFinanceSourceSnapshots(string $prefix): void
+    {
+        Db::execute("UPDATE `{$prefix}erp_purchase_order` SET
+            origin_plugin = IF(source_plugin IN ('', 'erp'), 'hsx_erp', source_plugin),
+            origin_plugin_name = CASE WHEN source_plugin = 'hsx_recycle' THEN '手机回收' ELSE '二手机ERP' END,
+            origin_type = CASE WHEN source_plugin = 'hsx_recycle' THEN 'hsx_recycle.recycle_purchase' ELSE 'hsx_erp.manual_purchase' END,
+            origin_name = CASE WHEN source_plugin = 'hsx_recycle' THEN '回收插件采购' ELSE 'ERP采购' END,
+            origin_id = IF(origin_id = '', source_id, origin_id),
+            origin_no = IF(origin_no = '', purchase_no, origin_no)
+            WHERE origin_no = '' OR origin_type IN ('', 'erp_purchase', 'hsx_recycle_purchase')");
+
+        Db::execute("UPDATE `{$prefix}erp_sale_order` SET
+            origin_plugin = IF(origin_plugin = '', 'hsx_erp', origin_plugin),
+            origin_plugin_name = IF(origin_plugin_name = '', '二手机ERP', origin_plugin_name),
+            origin_type = IF(origin_type IN ('', 'erp_sale', 'phone_shop_sale'), IF(origin_plugin = 'phone_shop', 'phone_shop.mini_program_sale', 'hsx_erp.manual_sale'), origin_type),
+            origin_name = IF(origin_name = '', 'ERP销售', origin_name),
+            origin_no = IF(origin_no = '', sale_no, origin_no)
+            WHERE origin_no = '' OR origin_type IN ('', 'erp_sale', 'phone_shop_sale')");
+
+        Db::execute("UPDATE `{$prefix}erp_payable` p
+            LEFT JOIN `{$prefix}erp_asset` a ON a.site_id = p.site_id AND a.id = IF(p.asset_id > 0, p.asset_id, IF(p.source_type = 'purchase_asset', p.source_id, 0))
+            LEFT JOIN `{$prefix}erp_purchase_order` o ON o.site_id = p.site_id AND o.id = IF(p.source_type = 'purchase_asset', a.purchase_order_id, p.source_id)
+            SET p.origin_plugin = COALESCE(NULLIF(o.origin_plugin, ''), 'hsx_erp'),
+                p.origin_plugin_name = COALESCE(NULLIF(o.origin_plugin_name, ''), '二手机ERP'),
+                p.origin_type = COALESCE(NULLIF(o.origin_type, ''), 'hsx_erp.manual_purchase'),
+                p.origin_name = COALESCE(NULLIF(o.origin_name, ''), 'ERP采购'),
+                p.origin_id = COALESCE(NULLIF(o.origin_id, ''), CAST(o.id AS CHAR), ''),
+                p.origin_no = COALESCE(NULLIF(o.origin_no, ''), o.purchase_no, ''),
+                p.biz_scene = 'purchase',
+                p.category_key = 'inventory_purchase',
+                p.category_name = '设备采购支出',
+                p.category_statement_group = 'purchase',
+                p.category_source_plugin = 'hsx_erp',
+                p.category_source_key = 'inventory_purchase',
+                p.channel_code = IF(p.channel_code = '', o.purchase_channel, p.channel_code),
+                p.channel_name = IF(p.channel_name = '', o.purchase_channel, p.channel_name),
+                p.business_reason = IF(p.business_reason = '', '采购入库形成设备采购应付，财务按设备核对并付款。', p.business_reason)
+            WHERE p.source_type IN ('purchase', 'purchase_asset') AND p.category_key = ''");
+
+        Db::execute("UPDATE `{$prefix}erp_payable` p SET
+            p.origin_plugin = IF(p.origin_plugin = '', 'hsx_erp', p.origin_plugin),
+            p.origin_plugin_name = IF(p.origin_plugin_name = '', '二手机ERP', p.origin_plugin_name),
+            p.origin_type = IF(p.origin_type IN ('', 'erp_refurbish'), 'hsx_erp.manual_refurbish', p.origin_type),
+            p.origin_name = IF(p.origin_name = '', 'ERP整备', p.origin_name),
+            p.origin_no = IF(p.origin_no = '', p.source_no, p.origin_no),
+            p.biz_scene = 'refurbish',
+            p.category_key = 'refurbish_labor',
+            p.category_name = '整备费用',
+            p.category_statement_group = 'operating_expense',
+            p.category_source_plugin = 'hsx_erp',
+            p.category_source_key = 'refurbish_labor',
+            p.channel_code = IF(p.channel_code = '', 'refurbish_service', p.channel_code),
+            p.channel_name = IF(p.channel_name = '', '整备服务', p.channel_name),
+            p.business_reason = IF(p.business_reason = '', '设备整备或维修产生支出并计入设备成本，财务向服务商付款。', p.business_reason)
+            WHERE p.source_type = 'refurbish' AND p.category_key = ''");
+
+        Db::execute("UPDATE `{$prefix}erp_payable` p
+            LEFT JOIN `{$prefix}erp_sale_return` sr ON sr.site_id = p.site_id AND sr.id = p.source_id
+            LEFT JOIN `{$prefix}erp_sale_order` so ON so.site_id = p.site_id AND so.id = sr.sale_order_id
+            SET p.origin_plugin = 'hsx_erp', p.origin_plugin_name = '二手机ERP',
+                p.origin_type = 'hsx_erp.manual_sale_return',
+                p.origin_name = IF(sr.business_type = 'after_sale_compensation', 'ERP售后补差', 'ERP销售退货'),
+                p.origin_id = CAST(sr.id AS CHAR), p.origin_no = sr.return_no,
+                p.biz_scene = IF(sr.business_type = 'after_sale_compensation', 'after_sale_compensation', 'sale_return'),
+                p.category_key = IF(sr.business_type = 'after_sale_compensation', 'after_sale_compensation', 'sale_refund'),
+                p.category_name = IF(sr.business_type = 'after_sale_compensation', '售后补差', '销售退货退款'),
+                p.category_statement_group = 'revenue_reversal',
+                p.category_source_plugin = 'hsx_erp',
+                p.category_source_key = IF(sr.business_type = 'after_sale_compensation', 'after_sale_compensation', 'sale_refund'),
+                p.channel_code = IF(p.channel_code = '', so.sale_channel_key, p.channel_code),
+                p.channel_name = IF(p.channel_name = '', so.sale_channel, p.channel_name),
+                p.business_reason = IF(p.business_reason = '', IF(sr.business_type = 'after_sale_compensation', '售后协商补差形成公司应付。', '客户退回已售设备，已收款部分形成销售退款应付。'), p.business_reason)
+            WHERE p.source_type = 'sale_return' AND p.category_key = ''");
+
+        Db::execute("UPDATE `{$prefix}erp_receivable` r
+            LEFT JOIN `{$prefix}erp_sale_order` so ON so.site_id = r.site_id AND so.id = r.source_id
+            SET r.origin_plugin = COALESCE(NULLIF(so.origin_plugin, ''), 'hsx_erp'),
+                r.origin_plugin_name = COALESCE(NULLIF(so.origin_plugin_name, ''), '二手机ERP'),
+                r.origin_type = COALESCE(NULLIF(so.origin_type, ''), 'hsx_erp.manual_sale'),
+                r.origin_name = COALESCE(NULLIF(so.origin_name, ''), 'ERP销售'),
+                r.origin_id = COALESCE(NULLIF(so.origin_id, ''), CAST(so.id AS CHAR), ''),
+                r.origin_no = COALESCE(NULLIF(so.origin_no, ''), so.sale_no, ''),
+                r.biz_scene = 'sale', r.category_key = 'sale_revenue', r.category_name = '销售收入',
+                r.category_statement_group = 'revenue', r.category_source_plugin = 'hsx_erp', r.category_source_key = 'sale_revenue',
+                r.channel_code = IF(r.channel_code = '', so.sale_channel_key, r.channel_code),
+                r.channel_name = IF(r.channel_name = '', so.sale_channel, r.channel_name),
+                r.business_reason = IF(r.business_reason = '', '设备销售出库形成销售应收，财务按实际到账确认收款。', r.business_reason)
+            WHERE r.source_type = 'sale' AND r.category_key = ''");
+
+        Db::execute("UPDATE `{$prefix}erp_receivable` r
+            LEFT JOIN `{$prefix}erp_purchase_return` pr ON pr.site_id = r.site_id AND pr.id = r.source_id
+            LEFT JOIN `{$prefix}erp_purchase_order` po ON po.site_id = r.site_id AND po.id = pr.purchase_order_id
+            SET r.origin_plugin = 'hsx_erp', r.origin_plugin_name = '二手机ERP',
+                r.origin_type = 'hsx_erp.manual_purchase_return', r.origin_name = 'ERP采购退货',
+                r.origin_id = CAST(pr.id AS CHAR), r.origin_no = pr.return_no,
+                r.biz_scene = 'purchase_return', r.category_key = 'purchase_refund', r.category_name = '采购退货款收回',
+                r.category_statement_group = 'purchase_reversal', r.category_source_plugin = 'hsx_erp', r.category_source_key = 'purchase_refund',
+                r.channel_code = IF(r.channel_code = '', po.purchase_channel, r.channel_code),
+                r.channel_name = IF(r.channel_name = '', po.purchase_channel, r.channel_name),
+                r.business_reason = IF(r.business_reason = '', '采购退货中已付款部分形成退款应收，财务需确认供货商实际退款到账。', r.business_reason)
+            WHERE r.source_type = 'purchase_return' AND r.category_key = ''");
+
+        // 将已执行过早期迁移的非命名空间编码统一到 Hook 注册键，确保前端来源筛选可直接命中历史数据。
+        Db::execute("UPDATE `{$prefix}erp_payable` SET origin_type = CASE
+                WHEN origin_type = 'erp_purchase' THEN 'hsx_erp.manual_purchase'
+                WHEN origin_type = 'hsx_recycle_purchase' THEN 'hsx_recycle.recycle_purchase'
+                WHEN origin_type = 'erp_refurbish' THEN 'hsx_erp.manual_refurbish'
+                WHEN origin_type = 'erp_sale_return' THEN 'hsx_erp.manual_sale_return'
+                ELSE origin_type END
+            WHERE origin_type IN ('erp_purchase','hsx_recycle_purchase','erp_refurbish','erp_sale_return')");
+        Db::execute("UPDATE `{$prefix}erp_receivable` SET origin_type = CASE
+                WHEN origin_type = 'erp_sale' THEN 'hsx_erp.manual_sale'
+                WHEN origin_type = 'phone_shop_sale' THEN 'phone_shop.mini_program_sale'
+                WHEN origin_type = 'erp_purchase_return' THEN 'hsx_erp.manual_purchase_return'
+                ELSE origin_type END
+            WHERE origin_type IN ('erp_sale','phone_shop_sale','erp_purchase_return')");
+
+        // 历史核销明细也要保留设备、场景、收支分类和来源快照。否则新单可追溯，旧单仍只有“付款/收款”。
+        Db::execute("UPDATE `{$prefix}erp_settlement_link` l
+            LEFT JOIN `{$prefix}erp_payable` p ON l.target_type = 'payable' AND p.site_id = l.site_id AND p.id = l.target_id
+            LEFT JOIN `{$prefix}erp_receivable` r ON l.target_type = 'receivable' AND r.site_id = l.site_id AND r.id = l.target_id
+            SET l.asset_id = IF(l.asset_id = 0, COALESCE(p.asset_id, 0), l.asset_id),
+                l.biz_scene = COALESCE(NULLIF(l.biz_scene, ''), NULLIF(p.biz_scene, ''), NULLIF(r.biz_scene, ''), ''),
+                l.category_key = COALESCE(NULLIF(l.category_key, ''), NULLIF(p.category_key, ''), NULLIF(r.category_key, ''), ''),
+                l.category_name = COALESCE(NULLIF(l.category_name, ''), NULLIF(p.category_name, ''), NULLIF(r.category_name, ''), ''),
+                l.category_statement_group = COALESCE(NULLIF(l.category_statement_group, ''), NULLIF(p.category_statement_group, ''), NULLIF(r.category_statement_group, ''), ''),
+                l.category_source_plugin = COALESCE(NULLIF(l.category_source_plugin, ''), NULLIF(p.category_source_plugin, ''), NULLIF(r.category_source_plugin, ''), ''),
+                l.category_source_key = COALESCE(NULLIF(l.category_source_key, ''), NULLIF(p.category_source_key, ''), NULLIF(r.category_source_key, ''), ''),
+                l.origin_plugin = COALESCE(NULLIF(l.origin_plugin, ''), NULLIF(p.origin_plugin, ''), NULLIF(r.origin_plugin, ''), ''),
+                l.origin_type = COALESCE(NULLIF(l.origin_type, ''), NULLIF(p.origin_type, ''), NULLIF(r.origin_type, ''), ''),
+                l.origin_id = COALESCE(NULLIF(l.origin_id, ''), NULLIF(p.origin_id, ''), NULLIF(r.origin_id, ''), '')
+            WHERE l.category_key = '' OR l.origin_plugin = '' OR l.biz_scene = ''");
+        Db::execute("UPDATE `{$prefix}erp_settlement_link` SET origin_type = CASE
+                WHEN origin_type = 'erp_purchase' THEN 'hsx_erp.manual_purchase'
+                WHEN origin_type = 'hsx_recycle_purchase' THEN 'hsx_recycle.recycle_purchase'
+                WHEN origin_type = 'erp_refurbish' THEN 'hsx_erp.manual_refurbish'
+                WHEN origin_type = 'erp_sale_return' THEN 'hsx_erp.manual_sale_return'
+                WHEN origin_type = 'erp_sale' THEN 'hsx_erp.manual_sale'
+                WHEN origin_type = 'phone_shop_sale' THEN 'phone_shop.mini_program_sale'
+                WHEN origin_type = 'erp_purchase_return' THEN 'hsx_erp.manual_purchase_return'
+                ELSE origin_type END
+            WHERE origin_type IN ('erp_purchase','hsx_recycle_purchase','erp_refurbish','erp_sale_return','erp_sale','phone_shop_sale','erp_purchase_return')");
+
+        // 真实资金流水头保留汇总分类：单一类型直接快照，跨类型批量结算标记 mixed，明细口径以 settlement_link 为准。
+        Db::execute("UPDATE `{$prefix}erp_money_ledger` m
+            INNER JOIN (
+                SELECT site_id, settlement_id,
+                    COUNT(DISTINCT category_key) AS category_count,
+                    MAX(category_key) AS category_key,
+                    MAX(category_name) AS category_name,
+                    MAX(category_statement_group) AS category_statement_group,
+                    MAX(category_source_plugin) AS category_source_plugin,
+                    MAX(category_source_key) AS category_source_key
+                FROM `{$prefix}erp_settlement_link`
+                WHERE category_key <> ''
+                GROUP BY site_id, settlement_id
+            ) f ON f.site_id = m.site_id AND f.settlement_id = m.settlement_id
+            SET m.category_key = IF(f.category_count = 1, f.category_key, 'mixed'),
+                m.category_name = IF(f.category_count = 1, f.category_name, IF(m.direction = 'in', '混合收入', '混合支出')),
+                m.category_statement_group = IF(f.category_count = 1, f.category_statement_group, 'mixed'),
+                m.category_source_plugin = IF(f.category_count = 1, f.category_source_plugin, 'hsx_erp'),
+                m.category_source_key = IF(f.category_count = 1, f.category_source_key, 'mixed')
+            WHERE m.category_key = ''");
+    }
+
+    private static function ensureColumn(string $table, string $column, string $definition): void
+    {
+        if (!empty(Db::query("SHOW COLUMNS FROM `{$table}` LIKE '{$column}'"))) {
+            return;
+        }
+        Db::execute("ALTER TABLE `{$table}` ADD COLUMN {$definition}");
+    }
+
+    private static function ensureColumnType(
+        string $table,
+        string $column,
+        string $expectedType,
+        string $definition
+    ): void {
+        $rows = Db::query("SHOW COLUMNS FROM `{$table}` LIKE '{$column}'");
+        if ($rows === []) return;
+        $actual = strtolower((string)($rows[0]['Type'] ?? $rows[0]['type'] ?? ''));
+        if ($actual === strtolower($expectedType)) return;
+        Db::execute("ALTER TABLE `{$table}` MODIFY COLUMN {$definition}");
+    }
+
+    private static function ensureIndex(string $table, string $index, string $definition): void
+    {
+        if (!empty(Db::query("SHOW INDEX FROM `{$table}` WHERE `Key_name` = '{$index}'"))) {
+            return;
+        }
+        Db::execute("ALTER TABLE `{$table}` ADD {$definition}");
+    }
+}

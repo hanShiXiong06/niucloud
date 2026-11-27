@@ -9,11 +9,11 @@ use addon\phone_shop\app\dict\order\OrderRefundLogDict;
 use addon\phone_shop\app\model\order\Order;
 use addon\phone_shop\app\service\core\CoreStatService;
 use addon\phone_shop\app\service\core\goods\CoreGoodsStatService;
-// use addon\phone_shop\app\service\core\marketing\CoreManjianService;
+use addon\phone_shop\app\service\core\marketing\CoreManjianService;
 use addon\phone_shop\app\service\core\order\CoreOrderCloseService;
 use addon\phone_shop\app\service\core\order\CoreOrderDeliveryService;
 use addon\phone_shop\app\service\core\refund\CoreRefundLogService;
-use think\facade\Log;
+use addon\phone_shop\app\service\core\third_addon\order\CoreOrderNoticeService;
 
 /**
  * 退款完成后操作
@@ -23,19 +23,15 @@ class AfterShopOrderRefundFinish
 
     public function handle($data)
     {
-        Log::write('订单AfterShopOrderRefundFinish $data---' . $$data);
-        
-        
+
         $refund_data = $data[ 'refund_data' ];
 
         $order = ( new Order() )->where([ [ 'order_id', '=', $refund_data[ 'order_id' ] ] ])->findOrEmpty();
 
         //满减送订单退款完成后退还赠品
-        // ( new CoreManjianService() )->refundGift($refund_data);
+        ( new CoreManjianService() )->refundGift($refund_data);
 
         if (!$order->isEmpty()) {
-            
-             Log::write('订单AfterShopOrderRefundFinish $order[ status ]---' . $order[ 'status' ]. 'OrderDict::WAIT_DELIVERY' .OrderDict::WAIT_DELIVERY);
             if ($order[ 'status' ] == OrderDict::WAIT_DELIVERY) {
                 //校验一下订单项是否全部发货
                 ( new CoreOrderDeliveryService() )->checkFinish(
@@ -62,8 +58,14 @@ class AfterShopOrderRefundFinish
             'main_type' => $main_type,
             'main_id' => $main_id,
             'type' => OrderRefundDict::FINISH_ACTION,
-            'content' => ''
+            'content' => '',
+            'create_time'=>time()+1
         ]);
         //消息发送
+
+        //通知三方应用更新订单状态
+        if(!empty($order['relate_source'])){
+            (new CoreOrderNoticeService())->sendRefundFinishNotice($refund_data,$order['relate_source'],$order['relate_order_id']);
+        }
     }
 }

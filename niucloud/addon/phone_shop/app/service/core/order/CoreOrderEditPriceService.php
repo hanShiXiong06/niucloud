@@ -45,38 +45,7 @@ class CoreOrderEditPriceService extends BaseCoreService
      */
     public function finish(array $data)
     {
-        $order_id = $data[ 'order_id' ];
-        $site_id = $data[ 'site_id' ];
-
-        //查询订单
-        $where = array (
-            [ 'order_id', '=', $order_id ],
-            [ 'site_id', '=', $site_id ]
-        );
-        $order = $this->model->where($where)->findOrEmpty()->toArray();
-        if (empty($order)) throw new CommonException('SHOP_ORDER_NOT_FOUND');//订单不存在
-//        if ($order[ 'status' ] != OrderDict::WAIT_TAKE) throw new CommonException('SHOP_ONLY_WAIT_TAKE_CAN_BE_TAKE');//只有待收货的订单才可以收货
-
-        //存在退款中的订单项,订单就不可以收货
-        $refunding_order_goods_count = ( new OrderGoods() )->where([
-            [ 'order_id', '=', $order_id ],
-            [ 'status', '=', OrderGoodsDict::REFUNDING ]
-        ])->count();
-        if ($refunding_order_goods_count > 0) throw new CommonException('SHOP_ORDER_HAS_REFUNDING_NOT_ALLOW_FINISH');//是否存在退款中的订单项
-        $update_data = array (
-            'status' => OrderDict::FINISH,
-            'finish_time' => time(),
-            'timeout' => 0
-        );
-        $this->model->where($where)->update($update_data);
-        //订单项收货
-        $this->orderGoodsTake($data);
-        $data[ 'order_data' ] = array_merge($order, $update_data);
-        //订单完成操作
-        CoreOrderEventService::orderFinish($data);
-        //订单完成后操作
-        CoreOrderEventService::orderFinishAfter($data);
-        return true;
+        return (new CoreOrderFinishService())->finish($data);
     }
 
     /**
@@ -143,7 +112,7 @@ class CoreOrderEditPriceService extends BaseCoreService
             }
 
             // 设置消息跳转路径设置接口
-            $result_jump_path = $weapp_delivery_service->setMsgJumpPath($site_id);
+            $result_jump_path = $weapp_delivery_service->setMsgJumpPath($site_id, 'phone_shop_order');
             if ($result_jump_path[ 'errcode' ] != 0) {
                 return '设置消息跳转路径设置接口，报错：' . $result_jump_path[ "errmsg" ];
             }

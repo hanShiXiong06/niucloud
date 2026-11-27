@@ -2,43 +2,56 @@
     <el-form ref="formRef" :model="formData" :rules="formRules">
         <el-form-item label="" class="!mb-0">
             <div class="flex items-center">
-                <el-checkbox v-model="formData.is_use" label="" :true-label="1" :false-label="0" size="large"
-                    class="!mr-0" />
+                <el-checkbox v-model="formData.is_use" label="" :true-label="1" :false-label="0" size="large" class="!mr-0"/>
                 <span class="ml-[10px] el-form-item__label">送优惠券</span>
             </div>
         </el-form-item>
         <el-form-item label="" prop="coupon_id" v-show="formData.is_use">
-            <div>
+            <div class="flex-1 max-w-[1000px]">
                 <div>
                     <coupon-select-popup v-model="formData.coupon_id" ref="selectCouponRef">
                         <el-button type="primary" link>选择优惠券</el-button>
                     </coupon-select-popup>
                 </div>
-                <div v-if="couponList.length" class="mt-[10px]">
+                <div v-if="couponList.length" class="mt-[10px] w-[100%]">
                     <el-table :data="couponList" size="default" ref="couponListTableRef" max-height="400">
                         <el-table-column prop="title" label="名称" min-width="130" />
                         <el-table-column prop="type_name" label="类型" min-width="130" />
-                        <el-table-column prop="price" label="面值" min-width="130">
+                        <el-table-column prop="price" label="面值" min-width="130" >
                             <template #default="{ row }">
-                                <span>¥{{ row.price }}</span>
+                                <span >¥{{row.price}}</span>
                             </template>
                         </el-table-column>
-                        <el-table-column label="使用门槛" min-width="130">
+                        <el-table-column label="使用门槛" min-width="130" >
                             <template #default="{ row }">
                                 <span v-if="row.min_condition_money == '0.00'">无门槛</span>
-                                <span v-else>满{{ row.min_condition_money }}元可用</span>
+                                <span v-else >满{{ row.min_condition_money }}元可用</span>
                             </template>
                         </el-table-column>
                         <el-table-column label="有效期" min-width="210">
                             <template #default="{ row }">
-                                <span v-if="row.valid_type == 1"> 领取之日起{{ row.length || '' }} 天内有效</span>
-                                <span v-else> 使用截止时间至{{ row.valid_end_time || '' }} </span>
+                                <span v-if="row.valid_type == 1">  领取之日起{{ row.length || '' }} 天内有效</span>
+                                <span v-else> 使用截止时间至{{ row.valid_end_time || ''}} </span>
                             </template>
                         </el-table-column>
                         <el-table-column label="赠券数" min-width="130">
                             <template #default="{ row }">
-                                <el-input-number v-model="formData.coupon_list['id_' + row.id]" :min="1"
-                                    controls-position="right" class="!w-[100px]" />
+                                <el-input-number v-if="row.limit_count"
+                                    v-model="formData.coupon_list['id_' + row.id]"
+                                    :min="1"
+                                    :precision="0"
+                                    :max="row.limit_count"
+                                    controls-position="right"
+                                    class="!w-[100px]"
+                                />
+                                <el-input-number v-else
+                                    v-model="formData.coupon_list['id_' + row.id]"
+                                    :min="1"
+                                    :max="999999"
+                                    :precision="0"
+                                    controls-position="right"
+                                    class="!w-[100px]"
+                                />
                             </template>
                         </el-table-column>
                         <el-table-column :label="t('operation')" align="right" fixed="right">
@@ -83,7 +96,7 @@ const formRules = reactive<FormRules>({
             validator: (rule: any, value: any, callback: any) => {
                 if (formData.value.is_use) {
                     if (!formData.value.coupon_id.length) {
-                        callback('请输入选择优惠券')
+                        callback('请选择优惠券')
                     }
                     formData.value.coupon_id.forEach(id => {
                         if (!formData.value.coupon_list['id_' + id]) {
@@ -99,10 +112,10 @@ const formRules = reactive<FormRules>({
     ]
 })
 const value = computed({
-    get() {
+    get () {
         return props.modelValue
     },
-    set(value) {
+    set (value) {
         emits('update:modelValue', value)
     }
 })
@@ -151,4 +164,5 @@ defineExpose({
 })
 </script>
 
-<style lang="scss" scoped></style>
+<style lang="scss" scoped>
+</style>

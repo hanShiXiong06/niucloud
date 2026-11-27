@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hsx-device-bridge"
+dynamic = ["version"]
+description = "Local USB metadata reader for hsx_recycle"
+requires-python = ">=3.9"
+dependencies = [
+    "pymobiledevice3==9.5.1",
+    "pywin32>=306; sys_platform == 'win32'",
+]
+
+[project.scripts]
+hsx-device-bridge = "hsx_device_bridge.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.dynamic]
+version = {attr = "hsx_device_bridge.__version__"}

@@ -1,0 +1,15 @@
+DROP TABLE IF EXISTS `{{prefix}}member_card_external_binding`;
+DROP TABLE IF EXISTS `{{prefix}}member_card_migration_item`;
+DROP TABLE IF EXISTS `{{prefix}}member_card_migration_task`;
+DROP TABLE IF EXISTS `{{prefix}}member_card_outbox_event`;
+DROP TABLE IF EXISTS `{{prefix}}member_card_inbox_event`;
+DROP TABLE IF EXISTS `{{prefix}}member_card_operation_log`;
+DROP TABLE IF EXISTS `{{prefix}}member_card_staff_fact`;
+DROP TABLE IF EXISTS `{{prefix}}member_card_finance_link`;
+DROP TABLE IF EXISTS `{{prefix}}member_card_refund`;
+DROP TABLE IF EXISTS `{{prefix}}member_card_redemption`;
+DROP TABLE IF EXISTS `{{prefix}}member_card_card_item`;
+DROP TABLE IF EXISTS `{{prefix}}member_card_card`;
+DROP TABLE IF EXISTS `{{prefix}}member_card_order`;
+DROP TABLE IF EXISTS `{{prefix}}member_card_product_item`;
+DROP TABLE IF EXISTS `{{prefix}}member_card_product`;

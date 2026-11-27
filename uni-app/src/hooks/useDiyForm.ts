@@ -10,7 +10,9 @@ export function useDiyForm(params: any = {}) {
     const loading = ref(true);
     const diyStore = useDiyStore();
 
-    const form_id = ref(params.form_id || 0)
+    const option = (key: string) => typeof params[key] === 'function' ? params[key]() : params[key]
+    const form_id = ref(option('form_id') || 0)
+    let requestGeneration = 0
     const name = ref(params.name || '')
     const template = ref('')
     const currRoute = ref('') //当前路由
@@ -98,6 +100,12 @@ export function useDiyForm(params: any = {}) {
     }
 
     const getData = (callback: any = null) => {
+        const generation = ++requestGeneration
+        const requestedId = typeof params.form_id === 'function' ? option('form_id') : form_id.value
+        const requestedScope = option('cache_scope') || ''
+        const canCache = option('cache_enabled') !== false
+        const storageKey = 'diyFormStorage_' + requestedId + (requestedScope ? ':' + encodeURIComponent(String(requestedScope)) : '')
+        loading.value = true
         /******** 解决跳转自定义页面空白问题-第二步-start **********/
         let curPage: any = getCurrentPages();
         currRoute.value = curPage[curPage.length - 1] ? curPage[curPage.length - 1].route : ''; //获取当前页面的路由
@@ -117,7 +125,7 @@ export function useDiyForm(params: any = {}) {
             diyStore.init();
         } else {
 
-            if (!form_id.value) return; // 空值情况下不调用接口
+            if (!requestedId) { loading.value = false; return; } // 空值情况下不调用接口
 
             //  填写万能表单需要检测登录
             // if (needLogin.value && !getToken()) {
@@ -130,11 +138,12 @@ export function useDiyForm(params: any = {}) {
             //     return;
             // }
 
-            getDiyFormInfo({
-                form_id: form_id.value,
+            return getDiyFormInfo({
+                form_id: requestedId,
                 // name: name.value, todo 暂时没用
                 // template: template.value // todo 暂时没用
             }).then((res: any) => {
+                if (option('isActive') === false || generation !== requestGeneration || String(typeof params.form_id === 'function' ? option('form_id') : form_id.value) !== String(requestedId) || String(option('cache_scope') || '') !== String(requestedScope)) return
                 Object.assign(requestData, res.data);
                 diyData.status = res.data.status;
                 if (requestData.value) {
@@ -145,7 +154,7 @@ export function useDiyForm(params: any = {}) {
                     diyStore.id = requestData.form_id;
                     let sources = requestData.value;
                     // 匹配缓存，赋值
-                    let diyFormStorage = uni.getStorageSync('diyFormStorage_' + diyStore.id)
+                    let diyFormStorage = canCache ? uni.getStorageSync(storageKey) : null
                     if (diyFormStorage) {
                         const date = new Date();
                         let currentTime: any = parseInt(date.getTime() / 1000); // 存储信息 5分钟内有效，过期后将重新获取定位信息
@@ -170,7 +179,7 @@ export function useDiyForm(params: any = {}) {
                                 })
                             }
                         } else {
-                            uni.removeStorageSync('diyFormStorage_' + diyStore.id) // 清除过期的表单缓存数据
+                            uni.removeStorageSync(storageKey) // 清除过期的表单缓存数据
                         }
                     }
                     diyStore.value = sources.value; // 用于 万能表单 收集数据，组件之间的数据通讯
@@ -207,7 +216,7 @@ export function useDiyForm(params: any = {}) {
                         return item && item.position && item.position == 'top_fixed'
                     });
 
-                    uni.setNavigationBarTitle({
+                    if (option('embedded') !== true) uni.setNavigationBarTitle({
                         title: diyData.title
                     });
 
@@ -217,6 +226,13 @@ export function useDiyForm(params: any = {}) {
 
                 if (callback) callback(requestData)
 
+            }).catch((error: any) => {
+                if (option('isActive') === false || generation !== requestGeneration || String(typeof params.form_id === 'function' ? option('form_id') : form_id.value) !== String(requestedId) || String(option('cache_scope') || '') !== String(requestedScope)) return
+                loading.value = false
+                requestData.status = 0
+                requestData.error = [{ title: '表单加载失败', type: '服务状态', desc: '请重新读取后再填写，已有输入不会自动提交' }]
+                if (typeof params.onError === 'function') params.onError(error)
+                return requestData
             });
         }
     }
@@ -254,6 +270,7 @@ export function useDiyForm(params: any = {}) {
     // 监听页面卸载
     const onUnloadLifeCycle = () => {
         onUnload(() => {
+            requestGeneration++
         })
     }
 

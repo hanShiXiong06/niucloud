@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.hsx.device-bridge</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Library/Application Support/hsx_device_bridge/hsx_device_bridge/hsx_device_bridge</string>
+        <string>serve</string>
+        <string>--port</string>
+        <string>17890</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>ProcessType</key>
+    <string>Background</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>HSX_DEVICE_BRIDGE_ORIGINS</key>
+        <string>http://localhost,http://127.0.0.1</string>
+    </dict>
+    <key>StandardOutPath</key>
+    <string>/tmp/hsx_device_bridge.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/hsx_device_bridge.error.log</string>
+</dict>
+</plist>

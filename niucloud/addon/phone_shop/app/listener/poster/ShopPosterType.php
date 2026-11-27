@@ -18,19 +18,19 @@ class ShopPosterType
     {
         return [
             [
-                'type' => 'shop_goods',
+                'type' => 'phone_shop_goods',
                 'addon' => 'phone_shop',
                 'name' => '商品海报',
-                'decs' => '推广商品，分享后进入商品详情页',
+                'desc' => '推广商品，分享后进入商品详情页',
                 'icon' => 'addon/phone_shop/poster/type_shop_goods.png'
             ],
             [
                 'type' => 'shop_point_goods',
                 'addon' => 'phone_shop',
                 'name' => '积分商品海报',
-                'decs' => '推广积分商品，分享后进入积分商品详情页',
+                'desc' => '推广积分商品，分享后进入积分商品详情页',
                 'icon' => 'addon/phone_shop/poster/type_shop_goods.png'
-            ]
+            ],
         ];
 
     }

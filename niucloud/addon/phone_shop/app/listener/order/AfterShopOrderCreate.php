@@ -3,20 +3,19 @@ declare ( strict_types = 1 );
 
 namespace addon\phone_shop\app\listener\order;
 
+use addon\phone_shop\app\dict\active\ActiveDict;
 use addon\phone_shop\app\dict\order\InvoiceDict;
 use addon\phone_shop\app\dict\order\OrderDict;
 use addon\phone_shop\app\dict\order\OrderLogDict;
-use addon\phone_shop\app\job\order\OrderClose;
 use addon\phone_shop\app\job\order\OrderPayRemind;
 use addon\phone_shop\app\model\order\Order;
 use addon\phone_shop\app\service\core\cart\CoreCartService;
 use addon\phone_shop\app\service\core\CoreStatService;
 use addon\phone_shop\app\service\core\goods\CoreGoodsSaleNumService;
+use addon\phone_shop\app\service\core\goods\CoreGoodsStatService;
 use addon\phone_shop\app\service\core\goods\CoreGoodsStockService;
 use addon\phone_shop\app\service\core\order\CoreInvoiceService;
-use addon\phone_shop\app\service\core\order\CoreOrderConfigService;
 use addon\phone_shop\app\service\core\order\CoreOrderLogService;
-use core\exception\CommonException;
 use think\facade\Db;
 use think\facade\Log;
 
@@ -37,13 +36,19 @@ class AfterShopOrderCreate
             //循环商品项扣除库存
 
             $core_goods_stock_service = new CoreGoodsStockService();
+            $dec_data = [];
             foreach ($order_goods_data as $v) {
-                $core_goods_stock_service->dec([
-                    'num' => $v[ 'num' ],
+                if (\addon\phone_shop\app\service\core\order\CoreOrderInventoryService::isManaged($v)) continue;
+                $dec_data['goods'][] =[
+                    'stock' => Db::raw('stock-' . $v[ 'num' ]),
                     'goods_id' => $v[ 'goods_id' ],
-                    'sku_id' => $v[ 'sku_id' ]
-                ]);
+                ];
+                $dec_data['sku'][] =[
+                    'stock' => Db::raw('stock-' . $v[ 'num' ]),
+                    'sku_id' => $v[ 'sku_id' ],
+                ];
             }
+            $core_goods_stock_service->batchUpdateStock($dec_data);
 //            Db::commit();
 //        } catch (\Exception $e) {
 //            Db::rollback();
@@ -58,17 +63,24 @@ class AfterShopOrderCreate
 
             //累增销量
             $core_goods_sale_num_service = new CoreGoodsSaleNumService();
+            $inc_data = [];
             foreach ($order_goods_data as $v) {
                 //商品累计销量
-                $core_goods_sale_num_service->inc([
-                    'num' => $v[ 'num' ],
+                $inc_data['goods'][] =[
+                    'sale_num' => Db::raw('sale_num+' . $v[ 'num' ]),
                     'goods_id' => $v[ 'goods_id' ],
-                    'sku_id' => $v[ 'sku_id' ]
-                ]);
+                ];
+                $inc_data['sku'][] =[
+                    'sale_num' => Db::raw('sale_num+' . $v[ 'num' ]),
+                    'sku_id' => $v[ 'sku_id' ],
+                ];
+                // todo 可以优化 逻辑较多 后置
+                // 商品销量统计 - 下单数
+                CoreGoodsStatService::addStat([ 'site_id' => $v[ 'site_id' ], 'goods_id' => $v[ 'goods_id' ], 'sale_num' => $v[ 'num' ] ]);
             }
-
+            $core_goods_sale_num_service->batchUpdateSaleNum($inc_data);
             //写入发票
-            $invoice = $basic[ 'invoice' ];
+            $invoice = $basic[ 'invoice' ] ?? [];
             if (!empty($invoice)) {
                 $invoice_id = ( new CoreInvoiceService() )->add([
                     'site_id' => $site_id,
@@ -109,23 +121,40 @@ class AfterShopOrderCreate
 
             //消息发送
 
-            //创建定时关闭任务
-            $core_order_config_service = new CoreOrderConfigService();
-            $order_config = $core_order_config_service->orderClose($site_id);
-            if ($order_config[ 'is_close' ] == 1) {
-                if ($order_config[ 'close_length' ] > 0) {
-                    ( new Order() )->where([ [ 'order_id', '=', $order_data[ 'order_id' ] ] ])->update([
-                        'timeout' => $data[ 'time' ] + $order_config[ 'close_length' ] * 60
-                    ]);
-//                OrderClose::dispatch(['order_id' => $order_data['order_id'] ], secs: $order_config['close_length'] * 60);
-                }
-            }
+            // 自动关闭时间已在同步创建事务中保存。
+            // 此处不能重写：后置队列可能晚于付款、联系客户暂停锁单或管理员延时。
             //增加统计数据
             CoreStatService::addStat([ 'site_id' => $site_id, 'order_num' => 1 ]);
+
+            //新人专享活动扣除参与资格
+            $goods_ids = [];//参与商品id集合
+            $sku_ids = [];//参与商品规格id集合
+            foreach ($order_goods_data as $v) {
+                //判断商品是否享受新人专享活动
+                if (isset($v[ 'extend' ]) && !empty($v[ 'extend' ]) && isset($v[ 'extend' ][ 'is_newcomer' ]) && $v[ 'extend' ][ 'is_newcomer' ]) {
+                    $goods_ids[] = $v[ 'goods_id' ];
+                    $sku_ids[] = $v[ 'sku_id' ];
+                }
+            }
+            if ($order_data[ 'activity_type' ] == ActiveDict::NEWCOMER_DISCOUNT) {
+                event("NewcomerActiveJoin", [ 'site_id' => $order_data[ 'site_id' ], 'member_id' => $order_data[ 'member_id' ], 'is_join' => 1, 'order_id' => $order_data[ 'order_id' ], 'goods_ids' => $goods_ids, 'sku_ids' => $sku_ids ]);
+            }
         } catch (\Exception $e) {
             Log::write('订单AfterShopOrderCreate失败' . $e->getMessage() . $e->getFile() . $e->getLine());
         }
-        // 订单催付通知
-        OrderPayRemind::dispatch([ 'site_id' => $site_id, 'order_id' => $order_data[ 'order_id' ] ], secs: 1800);
+        if ((string)($order_data['payment_mode'] ?? 'online') === 'offline_pending') {
+            // 由 ERP/商城管理端监听并分配业务员；监听失败不影响客户下单和库存锁定。
+            event('PhoneShopOfflineOrderSubmitted', [
+                'site_id' => (int)$site_id,
+                'order_id' => (int)$order_data['order_id'],
+                'order_no' => (string)($order_data['order_no'] ?? ''),
+                'member_id' => (int)($order_data['member_id'] ?? 0),
+                'order_money' => (float)($order_data['order_money'] ?? 0),
+                'time' => time(),
+            ]);
+        } else {
+            // 在线支付订单催付通知。
+            OrderPayRemind::dispatch([ 'site_id' => $site_id, 'order_id' => $order_data[ 'order_id' ] ], secs: 1800);
+        }
     }
 }

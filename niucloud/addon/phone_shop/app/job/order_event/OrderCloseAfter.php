@@ -21,7 +21,7 @@ class OrderCloseAfter extends BaseJob
     public function doJob($data)
     {
         try {
-            event('AfterShopOrderClose', $data);
+            event('AfterPhoneShopOrderClose', $data);
             return true;
         } catch (\Exception $e) {
             return false;

@@ -1,0 +1,93 @@
+<template>
+    <view class="entity-page" :style="themeColor()">
+        <CoopTaskSheet page :show="true" :title="joining ? '加入门店' : '门店与成员'" :busy="locked" full @close="backCooperationTask">
+            <CoopState v-if="state.loading.value && !state.ready.value" loading />
+            <view v-else-if="state.error.value" class="entity-content"><CoopState :error="state.error.value" @retry="refresh" /><u-button v-if="!loggedIn" type="primary" :custom-style="cooperationButtonStyle" text="登录后继续" @click="login" /></view>
+            <view v-else-if="state.ready.value" class="entity-content">
+                <template v-if="joining || !team.merchant_id">
+                    <view v-if="team.pending_entity?.status === 'pending'" class="entity-section entity-pending"><u-icon name="clock" size="30" color="#6f8ab0" /><view class="entity-title">等待负责人确认</view><view>{{ team.pending_entity.name }}</view><view class="entity-muted">确认通过后，账号会共享门店的会员权益。</view><u-button type="primary" plain :custom-style="cooperationButtonStyle" :disabled="locked" text="刷新申请状态" @click="refresh" /><button class="entity-exit-button" :disabled="locked" @tap="leave">撤销加入申请</button></view>
+                    <view v-else class="entity-section">
+                        <view class="entity-form-heading"><text class="entity-title">输入门店主体码</text><button class="entity-help" aria-label="在哪里找到主体码" @tap="showHelp = !showHelp"><u-icon name="question-circle" size="21" color="#6a83a1" /></button></view>
+                        <view v-if="showHelp" class="entity-help-body">请门店负责人打开「我的 → 门店与成员」，复制主体码发给你。主体码不是营业执照号码，也不是 ERP 编号。</view>
+                        <u-input v-model="code" :custom-style="cooperationInputStyle" maxlength="32" placeholder="粘贴负责人分享的主体码" :disabled="state.busy.value" @change="clearLookup" @confirm="lookup" />
+                        <view v-if="lookupError" class="entity-error" role="alert">{{ lookupError }}</view>
+                        <view v-if="found.merchant_id" class="entity-found"><u-icon name="home" size="24" color="#5275a3" /><view><text class="entity-name">{{ found.name }}</text><text class="entity-muted">请核对门店名称，再申请加入</text></view></view>
+                        <u-button v-if="!found.merchant_id" type="primary" shape="circle" :custom-style="cooperationButtonStyle" :loading="looking" :disabled="looking || state.busy.value || !code.trim()" text="查找门店" @click="lookup" />
+                        <u-button v-else type="primary" shape="circle" :custom-style="cooperationButtonStyle" :loading="state.busy.value" :disabled="state.busy.value || found.can_join===false" :text="found.can_join===false ? '请联系负责人开通店员名额' : '申请加入这家门店'" @click="join" />
+                    </view>
+                </template>
+                <template v-else>
+                    <view class="entity-section entity-overview"><view class="entity-overview__top"><view><text class="entity-title">{{ team.name }}</text><text class="entity-muted">{{ team.is_owner ? '负责人' : '门店成员' }}</text></view><CoopLevelBadge :level="membershipBadgeRank(membership)" :label="membership.level_name" :appearance="membership.level_visual" :state="membershipState(membership)" variant="inline" /></view><view class="entity-capacity"><view><text class="entity-capacity__number">{{ membership.used_accounts ?? '—' }}</text><text class="entity-muted">已用账号</text></view><view><text class="entity-capacity__number">{{ entityAccounts(membership) }}</text><text class="entity-muted">总名额 · 含负责人</text></view><text class="entity-link" @tap="openMembership">查看权益 ›</text></view></view>
+                    <view v-if="team.is_owner && team.subject_code" class="entity-section">
+                        <view class="entity-form-heading"><text class="entity-title">邀请店员加入</text><button class="entity-help" aria-label="店员邀请说明" @tap="showHelp = !showHelp"><u-icon name="question-circle" size="21" color="#6a83a1" /></button></view>
+                        <view v-if="hasCapacity" class="entity-code-row"><text class="entity-code" selectable>{{ team.subject_code }}</text><button class="entity-copy" @tap="copyCode">复制</button></view>
+                        <view v-else class="entity-capacity-warning"><text>当前会员没有可用的店员名额</text><text class="entity-muted">升级门店会员后，可邀请店员共同处理本店业务。</text><button class="entity-copy" @tap="openMembership">升级门店会员</button></view>
+                        <view v-if="showHelp" class="entity-help-body">店员使用本店的会员权益，无需重复购买。负责人确认后加入，占用一个账号名额；本店内部交付不收协作费。邀请店员不会产生推广奖励。</view>
+                        <!-- #ifdef MP-WEIXIN -->
+                        <button v-if="hasCapacity" class="entity-share" open-type="share"><u-icon name="share" size="18" color="#5275a3" /><text>邀请店员加入</text></button>
+                        <!-- #endif -->
+                        <button v-if="hasCapacity" class="entity-share entity-share--poster" @tap="posterOpen = true"><u-icon name="photo" size="18" color="#5275a3" /><text>生成店员邀请海报</text></button>
+                    </view>
+                    <view v-if="pending.length && team.is_owner" class="entity-section"><view class="entity-section-heading"><text class="entity-title">加入申请</text><text class="entity-count">{{ pending.length }}</text></view><view v-if="!hasCapacity" class="entity-capacity-warning" role="alert"><text>账号名额已满，升级会员或移除成员后可继续加入</text><text class="entity-capacity-warning__link" role="button" @tap="openMembership">查看会员 ›</text></view><view v-for="member in pending" :key="member.member_id" class="entity-member"><view class="entity-member__info"><view class="entity-name">{{ member.nickname || '申请人' }}</view><text class="entity-muted">{{ member.mobile || '手机号未提供' }}</text></view><view class="entity-member__actions"><button class="entity-text-action" :disabled="locked" @tap="review(member, false)">拒绝</button><button class="entity-approve" :disabled="locked || !hasCapacity" @tap="review(member, true)">同意加入</button></view></view></view>
+                    <view class="entity-section"><view class="entity-section-heading"><text class="entity-title">门店成员</text><text class="entity-muted">{{ members.length }} 人</text></view><view v-for="member in members" :key="member.member_id" class="entity-member"><view class="entity-member__avatar">{{ String(member.nickname || '同事').slice(0, 1) }}</view><view class="entity-member__info"><view class="entity-name">{{ member.nickname || '门店成员' }}<text v-if="member.role === 'owner'" class="entity-owner">负责人</text></view><text class="entity-muted">{{ member.mobile || memberStatus(member.status) }}</text></view><button v-if="team.is_owner && member.role !== 'owner'" class="entity-text-action" :disabled="state.busy.value" @tap="remove(member)">移除</button></view><view v-if="!members.length" class="entity-muted">成员资料暂未返回，请刷新核对。</view></view>
+                    <view v-if="!team.is_owner" class="entity-exit"><button class="entity-exit-button" :disabled="state.busy.value" @tap="leave">退出这家门店</button></view>
+                </template>
+                <view v-if="state.writeError.value" class="entity-error" role="alert">{{ state.writeError.value }}</view>
+            </view>
+        </CoopTaskSheet>
+        <CoopInvitePoster :show="posterOpen" scene="entity" :allowed="pageVisible && team.is_owner === true && hasCapacity && !!team.subject_code" @close="posterOpen = false" />
+    </view>
+</template>
+<script setup lang="ts">
+import { computed, ref } from 'vue'
+import { onHide, onLoad, onShow, onShareAppMessage } from '@dcloudio/uni-app'
+import { getToken } from '@/utils/common'
+import { useLogin } from '@/hooks/useLogin'
+import CoopTaskSheet from '../../components/cooperation/CoopTaskSheet.vue'
+import CoopState from '../../components/cooperation/CoopState.vue'
+import CoopLevelBadge from '../../components/cooperation/CoopLevelBadge.vue'
+import CoopInvitePoster from '../../components/cooperation/CoopInvitePoster.vue'
+import { entityJoin, entityLeave, entityLookup, entityRemove, entityReview, entityTeam } from '../../api/entity'
+import { coopError, type CoopRow } from '../../api/cooperation'
+import { useEntityPage } from '../../composables/useEntityPage'
+import { entityAccounts, entityPageLink, entityPageUrl, membershipPageUrl, membershipState, membershipBadgeRank, memberStatus } from '../../utils/entity-membership'
+import { backCooperationTask } from '../../utils/cooperation-navigation'
+import { cooperationButtonStyle, cooperationInputStyle } from '../../utils/mobile-ui'
+import { cooperationInviteParams } from '../../utils/cooperation-invite'
+const state = useEntityPage(entityTeam), team = state.data, joining = ref(false), code = ref(''), showHelp = ref(false), found = ref<CoopRow>({}), lookupError = ref(''), looking = ref(false), confirming = ref(false)
+const locked = computed(() => state.busy.value || confirming.value)
+const posterOpen = ref(false), pageVisible = ref(true)
+const loggedIn = computed(() => !!getToken()), membership = computed(() => team.value.membership || {}), members = computed(() => (team.value.members || []).filter((member: CoopRow) => ['active', 'suspended'].includes(member.status))), pending = computed(() => (team.value.members || []).filter((member: CoopRow) => member.status === 'pending'))
+const hasCapacity = computed(() => membership.value.unlimited === true || (Number.isSafeInteger(Number(membership.value.account_limit)) && Number(membership.value.account_limit) > 0 && Number.isSafeInteger(Number(membership.value.used_accounts)) && Number(membership.value.used_accounts) >= 0 && Number(membership.value.used_accounts) < Number(membership.value.account_limit)))
+let lookupEpoch = 0, pageActive = true
+onLoad(raw => { const options = cooperationInviteParams(raw); joining.value = options?.mode === 'join' || !!options?.subject_code; code.value = String(options?.subject_code || '').trim().toUpperCase().slice(0, 32) })
+onShow(() => { pageActive = true; pageVisible.value = true; void refresh() })
+onHide(() => { pageActive = false; pageVisible.value = false; posterOpen.value = false; lookupEpoch++; looking.value = false; state.pause() })
+onShareAppMessage(() => team.value.is_owner && hasCapacity.value ? ({ title: `邀请你加入${team.value.name || '我的门店'}`, path: entityPageLink(String(team.value.subject_code || '')) }) : ({ title: '门店协作', path: '/addon/hsx_lead/pages/profile/index' }))
+function login() { useLogin().setLoginBack({ url: entityPageUrl, param: { ...(joining.value ? { mode: 'join' } : {}), ...(code.value ? { subject_code: code.value } : {}) }, mode: 'redirectTo' }) }
+async function refresh() { const ok = await state.refresh(); if (ok && team.value.merchant_id) joining.value = false; return ok }
+function clearLookup() { lookupEpoch++; found.value = {}; lookupError.value = ''; looking.value = false }
+async function lookup() {
+    if (looking.value || state.busy.value) return
+    const value = code.value.trim().toUpperCase(), turn = ++lookupEpoch, who = state.identity()
+    found.value = {}; lookupError.value = ''; looking.value = true
+    try { const response: any = await entityLookup(value); if (!pageActive || turn !== lookupEpoch || !state.current(who)) return; if (!Number(response?.data?.merchant_id) || !response?.data?.name) throw new Error('没有找到这家门店，请核对主体码'); found.value = { ...response.data, subject_code: value } }
+    catch (cause) { if (pageActive && turn === lookupEpoch && state.current(who)) lookupError.value = coopError(cause, '门店未查到，请核对主体码后重试') }
+    finally { if (turn === lookupEpoch) looking.value = false }
+}
+async function join() { if (!found.value.merchant_id || state.busy.value || found.value.can_join===false) return; const result = await state.write(() => entityJoin(found.value.subject_code)); if (result) { found.value = {}; await refresh() } }
+async function confirmed(title: string, content: string) { if (confirming.value || state.busy.value) return false; confirming.value = true; try { return await new Promise<boolean>(resolve => uni.showModal({ title, content, confirmText: '确认', success: result => resolve(!!result.confirm), fail: () => resolve(false) })) } finally { confirming.value = false } }
+async function review(member: CoopRow, approve: boolean) { if (locked.value || !team.value.is_owner) return; if (approve && !hasCapacity.value) { state.writeError.value = '账号名额已满，升级会员或移除成员后可继续加入'; return }; if (!await confirmed(approve ? '同意加入门店？' : '拒绝加入申请？', approve ? `${member.nickname || '该同事'}加入后共享门店权益，占用1个账号名额。` : '拒绝后对方不能查看本店业务。')) return; if (await state.write(() => entityReview(Number(member.member_id), approve))) await refresh() }
+async function remove(member: CoopRow) { if (state.busy.value || !team.value.is_owner || member.role === 'owner' || !await confirmed('移除这位成员？', `${member.nickname || '该成员'}将不能继续访问门店业务，历史操作记录保留。`)) return; if (await state.write(() => entityRemove(Number(member.member_id)))) await refresh() }
+async function leave() { const pending = team.value.pending_entity?.status === 'pending'; if (state.busy.value || !await confirmed(pending ? '撤销加入申请？' : '退出当前门店？', pending ? '撤销后，负责人不能再批准这次申请。' : '退出后将不能继续使用这家门店的权益和业务资料，历史操作记录保留。')) return; if (await state.write(entityLeave)) { joining.value = true; await refresh() } }
+function copyCode() { if (team.value.is_owner && team.value.subject_code) uni.setClipboardData({ data: String(team.value.subject_code), fail: () => uni.showToast({ title: '复制未完成，可长按主体码复制', icon: 'none' }) }) }
+function openMembership() { uni.navigateTo({ url: membershipPageUrl }) }
+</script>
+<style scoped lang="scss">
+.entity-page { height:calc(100vh - var(--window-top,0px) - var(--window-bottom,0px));min-height:0;display:flex;flex-direction:column;overflow:hidden;box-sizing:border-box;background:#f4f7fb; }.entity-content { padding:16px 12px 24px; }.entity-section { margin-bottom:12px;padding:20px 16px;background:#fff;border-radius:12px; }.entity-title { display:block;font-size:17px;line-height:25px;font-weight:650;color:#263b56; }.entity-muted { display:block;color:#7c8ba0;font-size:12px;line-height:20px; }.entity-name { color:#293d55;font-size:15px;line-height:23px;font-weight:600;overflow-wrap:anywhere; }.entity-overview__top,.entity-form-heading,.entity-section-heading { display:flex;align-items:center;justify-content:space-between;gap:12px; }.entity-overview__top>view { flex:1;min-width:0; }.entity-overview__top .entity-muted { margin-top:5px; }.entity-capacity { display:flex;align-items:center;gap:24px;margin-top:22px;padding-top:18px;border-top:1px solid #edf0f5; }.entity-capacity__number { display:block;font-size:21px;line-height:29px;font-weight:650;color:#293f5e; }.entity-link { margin-left:auto;flex:none;font-size:12px;color:var(--primary-color,#397ad2); }.entity-help { padding:0;margin:0;width:44px;height:44px;display:flex;align-items:center;justify-content:center;background:none;border:0;flex:none; }.entity-help::after,.entity-copy::after,.entity-share::after,.entity-text-action::after,.entity-approve::after,.entity-exit-button::after { border:0; }.entity-help-body { background:#f2f6fc;color:#647b98;font-size:12px;line-height:21px;padding:12px;border-radius:8px;margin:8px 0 16px; }.entity-code-row { display:flex;align-items:center;gap:12px;background:#f3f7fc;padding:14px;border-radius:8px;margin-top:10px; }.entity-code { flex:1;min-width:0;overflow-wrap:anywhere;font-size:22px;line-height:30px;font-weight:700;letter-spacing:1px;color:#304d76; }.entity-copy { flex:none;background:#fff;color:#3878c8;font-size:13px;line-height:36px;padding:0 14px;margin:0;border-radius:6px; }.entity-share { display:flex;align-items:center;justify-content:center;gap:8px;margin:14px 0 0;padding:0;height:44px;background:#eef5ff;color:#5275a3;font-size:14px; }.entity-found { display:flex;align-items:center;gap:12px;margin:18px 0;padding:15px;background:#f3f7fc;border-radius:8px; }.entity-found>view { min-width:0;flex:1; }.entity-error { margin:12px 0;padding:12px;background:#fff1ed;color:#b45f4a;font-size:13px;line-height:21px;border-radius:8px;overflow-wrap:anywhere; }.entity-section>.u-button { margin-top:20px; }.entity-count { background:#eaf3ff;color:#3977c8;min-width:24px;text-align:center;border-radius:12px;padding:2px 6px;font-size:12px; }.entity-member { display:flex;align-items:center;gap:10px;min-height:74px;padding:12px 0;border-bottom:1px solid #edf0f5;box-sizing:border-box; }.entity-member:last-child { border-bottom:0; }.entity-member__info { min-width:0;flex:1; }.entity-member__avatar { width:38px;height:38px;display:flex;align-items:center;justify-content:center;flex:none;background:#eff4fa;color:#687e99;border-radius:10px;font-weight:600; }.entity-member__actions { display:flex;align-items:center;gap:8px;flex:none; }.entity-text-action,.entity-approve { font-size:12px;line-height:38px;min-height:38px;padding:0 8px;margin:0;background:transparent;color:#8592a4; }.entity-approve { color:#3779ca;background:#edf5ff;border-radius:6px;padding:0 10px; }.entity-owner { display:inline-block;vertical-align:middle;margin-left:6px;font-size:10px;line-height:17px;padding:0 5px;background:#f0f5fc;color:#7088a6;border-radius:3px;white-space:nowrap; }.entity-pending { text-align:center;padding:30px 20px; }.entity-pending .entity-title { margin:16px 0 10px; }.entity-pending .entity-muted { margin-top:8px; }.entity-exit-button { background:transparent;color:#9a7a70;font-size:13px;line-height:44px; }.entity-exit { margin-top:24px;text-align:center; }
+.entity-capacity-warning { display:flex;flex-direction:column;align-items:flex-start;gap:4px;margin-top:14px;padding:12px;background:#fff6e9;color:#a77e48;border-radius:7px;font-size:12px;line-height:20px; }.entity-capacity-warning__link { display:flex;align-items:center;min-height:32px;color:#627fa5; }.entity-approve[disabled] { background:#f1f3f6;color:#a0a9b6; }
+.entity-share--poster { background:#f6f8fb;color:#6f85a0; }
+/* #ifdef H5 */
+@supports(height:100dvh){.entity-page{height:calc(100dvh - var(--window-top,0px) - var(--window-bottom,0px));}}
+/* #endif */
+</style>

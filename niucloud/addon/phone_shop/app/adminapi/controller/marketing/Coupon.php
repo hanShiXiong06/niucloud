@@ -11,6 +11,7 @@
 
 namespace addon\phone_shop\app\adminapi\controller\marketing;
 
+use addon\phone_shop\app\dict\coupon\CouponDict;
 use addon\phone_shop\app\service\admin\marketing\CouponService;
 use core\base\BaseAdminController;
 
@@ -22,7 +23,10 @@ use core\base\BaseAdminController;
  */
 class Coupon extends BaseAdminController
 {
-
+    /**
+     * @description 获取初始化信息
+     * @return \think\Response
+     */
     public function init()
     {
         $data = $this->request->params([]);
@@ -31,19 +35,21 @@ class Coupon extends BaseAdminController
 
     /**
      * 获取商品优惠券列表
+     * @description 查看优惠券列表-分页
      * @return \think\Response
      */
     public function lists()
     {
         $data = $this->request->params([
             [ "title", "" ],
-            [ "status", "" ],
+            [ "status", "" ]
         ]);
         return success(( new CouponService() )->getPage($data));
     }
 
     /**
      * 商品优惠券详情
+     * @description 查看优惠券详情
      * @param int $id
      * @return \think\Response
      */
@@ -54,6 +60,7 @@ class Coupon extends BaseAdminController
 
     /**
      * 添加商品优惠券
+     * @description 添加商品优惠券
      * @return \think\Response
      */
     public function add()
@@ -74,7 +81,8 @@ class Coupon extends BaseAdminController
             [ "goods_ids", [] ],
             [ "goods_category_ids", "" ],
             [ 'receive_type_time', '' ],
-            [ 'threshold', '' ]
+            [ 'threshold', '' ],
+            [ 'is_non_vip_only', 1 ]
         ]);
         $id = ( new CouponService() )->add($data);
         return success('ADD_SUCCESS', [ 'id' => $id ]);
@@ -82,6 +90,7 @@ class Coupon extends BaseAdminController
 
     /**
      * 商品优惠券编辑
+     * @description 编辑商品优惠券
      * @param $id  商品优惠券id
      * @return \think\Response
      */
@@ -103,7 +112,8 @@ class Coupon extends BaseAdminController
             [ "goods_ids", [] ],
             [ "goods_category_ids", "" ],
             [ 'receive_type_time', '' ],
-            [ 'threshold', '' ]
+            [ 'threshold', '' ],
+            [ 'is_non_vip_only', 1 ]
         ]);
         ( new CouponService() )->edit($id, $data);
         return success('EDIT_SUCCESS');
@@ -111,17 +121,22 @@ class Coupon extends BaseAdminController
 
     /**
      * 商品优惠券删除
+     * @description 删除商品优惠券
      * @param $id  商品优惠券id
      * @return \think\Response
      */
-    public function del(int $id)
+    public function del()
     {
-        ( new CouponService() )->del($id);
+        $data = $this->request->params([
+            [ 'ids', [] ],
+        ]);
+        ( new CouponService() )->del($data['ids']);
         return success('DELETE_SUCCESS');
     }
 
     /**
      * 会员领取详情
+     * @description 查看会员领取优惠券详情
      */
     public function getMemberCoupon()
     {
@@ -134,6 +149,7 @@ class Coupon extends BaseAdminController
 
     /**
      * 领取状态编辑
+     * @description 修改优惠券状态
      */
     public function setCouponStatus($status)
     {
@@ -144,6 +160,25 @@ class Coupon extends BaseAdminController
         return success('EDIT_SUCCESS');
     }
 
+    /**
+     * 优惠券选择分页列表
+     * @description 获取优惠券列表-1全部
+     * @return \think\Response
+     */
+    public function select()
+    {
+        $data = $this->request->params([
+            [ "title", "" ],
+            [ "verify_coupon_ids", "" ]
+        ]);
+        return success(( new CouponService() )->getSelectPage($data));
+    }
+
+    /**
+     * 查询选中的优惠券
+     * @description 查询选中的优惠券
+     * @return \think\Response
+     */
     public function getSelectedLists()
     {
         $data = $this->request->params([
@@ -154,11 +189,68 @@ class Coupon extends BaseAdminController
 
     /**
      * 优惠券关闭
+     * @description 批量关闭优惠券
      */
-    public function couponInvalid($id)
+    public function couponInvalid()
     {
-        ( new CouponService() )->couponInvalid($id);
+        $data = $this->request->params([
+            [ "ids", [] ],
+        ]);
+        ( new CouponService() )->couponInvalid($data['ids']);
         return success('SUCCESS');
+    }
+
+    /**
+     * 获取优惠券状态
+     * @description 获取优惠券状态字典
+     */
+    public function getCouponStatus()
+    {
+        return success(data:CouponDict::getStatus());
+    }
+
+    /**
+     * 获取发送优惠券范围初始化数据
+     * @description 获取发送优惠券范围初始化数据
+     * @return \think\Response
+     */
+    public function getSendRangeInit()
+    {
+        return success([
+            'range_type_list'=>CouponDict::getSendCouponRangeType(),
+        ]);
+    }
+
+    /**
+     * 获取发送记录分页列表
+     * @description 查看发送记录列表-分页
+     * @return \think\Response
+     */
+
+    public function getSendPages($coupon_id)
+    {
+        $data = $this->request->params([
+            [ "range_type", '' ],
+            ['create_time', []],
+        ]);
+        return success(( new CouponService() )->getSendReordsPageList($coupon_id,$data));
+    }
+
+    /**
+     * 发放优惠券
+     * @description 发放优惠券
+     * @param $coupon_id
+     * @return \think\Response
+     */
+    public function sendCoupon($coupon_id)
+    {
+        $data = $this->request->params([
+            [ "range_type", '' ],
+            [ "range_param", '' ],
+            [ "send_num", '' ],
+        ]);
+        ( new CouponService() )->sendCoupon($coupon_id,$data);
+        return success("SUCCESS");
     }
 
 }

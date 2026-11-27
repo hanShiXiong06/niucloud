@@ -1,0 +1,338 @@
+<?php
+declare(strict_types=1);
+
+namespace addon\hsx_erp\app\adminapi\controller;
+
+use addon\hsx_erp\app\service\admin\ErpStockService;
+use addon\hsx_erp\app\service\admin\ErpListingTaskService;
+use addon\hsx_erp\app\service\admin\ErpQuantityInventoryService;
+use core\base\BaseAdminController;
+use think\App;
+
+class ErpStock extends BaseAdminController
+{
+    protected ErpStockService $service;
+
+    public function __construct(App $app)
+    {
+        parent::__construct($app);
+        $this->service = new ErpStockService();
+    }
+
+    public function lists()
+    {
+        $params = $this->request->params([
+            ['keyword', ''],
+            ['status', ''],
+            ['refurbish_status', ''],
+            ['sale_target', ''],
+            ['listing_status', ''],
+            ['task_stage_key', ''],
+            ['my_task', 0],
+            ['warehouse_id', 0],
+            ['warehouse_name', ''],
+            ['location_id', 0],
+            ['location_name', ''],
+            ['catalog_product_id', 0],
+            ['category_name', ''],
+            ['asset_no', ''],
+            ['imei', ''],
+            ['sn', ''],
+            ['model', ''],
+            ['spec', ''],
+            ['party_id', 0],
+            ['party_name', ''],
+            ['party_scope', 'supplier'],
+            ['origin_plugin', ''],
+            ['sale_channel_key', ''],
+            ['min_cost', ''],
+            ['max_cost', ''],
+            ['min_price', ''],
+            ['max_price', ''],
+            ['stock_age_min', ''],
+            ['stock_age_max', ''],
+            ['turnover_level', ''],
+            ['start_at', 0],
+            ['end_at', 0],
+            ['page', 1],
+            ['limit', 15],
+        ]);
+        return success($this->service->getPage($params));
+    }
+
+    public function turnoverSummary()
+    {
+        return success($this->service->turnoverSummary());
+    }
+
+    /** 补货、盘点及耗材绑定共用的标品 SKU 档案。 */
+    public function quantityProducts()
+    {
+        $params = $this->request->params([
+            ['keyword', ''], ['category_path', ''], ['status', 1], ['page', 1], ['limit', 20],
+        ]);
+        return success((new ErpQuantityInventoryService())->productPage($params));
+    }
+
+    public function createQuantityProduct()
+    {
+        $params = $this->request->params([
+            ['product_name', ''], ['spec', ''], ['product_code', ''], ['unit', '件'],
+            ['catalog_product_id', 0], ['category_name', ''], ['category_path', ''], ['remark', ''],
+        ]);
+        return success((new ErpQuantityInventoryService())->createProduct($params));
+    }
+
+    /** 给历史标品补齐或修正 ERP 分类。 */
+    public function updateQuantityProductCategory(int $id)
+    {
+        $params = $this->request->params([
+            ['category_name', ''], ['category_path', ''],
+        ]);
+        return success((new ErpQuantityInventoryService())->updateProductCategory($id, $params));
+    }
+
+    /** 今日商品上架协作工作量，供库存中心 PC / 移动端统一展示。 */
+    public function listingWorkload()
+    {
+        return success($this->service->listingWorkloadSummary());
+    }
+
+    public function listingCatalog()
+    {
+        $params = $this->request->params([
+            ['category_id', 0], ['asset_id', 0], ['model', ''], ['memory', ''], ['color', ''],
+        ]);
+        return success($this->service->listingCatalog((int)$params['asset_id'], (int)$params['category_id'],
+            ['model' => $params['model'], 'memory' => $params['memory'], 'color' => $params['color']]
+        ));
+    }
+
+    public function adjustRetailPrice(int $id)
+    {
+        $params = $this->request->params([
+            ['retail_price', 0], ['reason', ''], ['request_id', ''],
+        ]);
+        $result = $this->service->adjustRetailPrice(
+            $id,
+            (float)$params['retail_price'],
+            (string)$params['reason'],
+            (string)$params['request_id']
+        );
+        $publish = $this->service->autoPublishListingIfReady($id);
+        $taskAssigned = (new ErpListingTaskService())->sync($id);
+        $result['_workflow'] = [
+            'task_assigned' => $taskAssigned ? 1 : 0,
+            'publish' => $publish,
+        ];
+        return success($result);
+    }
+
+    public function transfer()
+    {
+        $params = $this->request->params([
+            ['asset_ids', []], ['warehouse_id', 0], ['location_id', 0], ['reason', ''], ['request_id', ''],
+        ]);
+        $result = $this->service->transfer(
+            (array)$params['asset_ids'],
+            (int)$params['warehouse_id'],
+            (int)$params['location_id'],
+            (string)$params['reason'],
+            (string)$params['request_id']
+        );
+        $taskService = new ErpListingTaskService();
+        foreach ((array)$params['asset_ids'] as $assetId) $taskService->sync((int)$assetId);
+        return success($result);
+    }
+
+    public function transferPreview()
+    {
+        $params = $this->request->params([
+            ['asset_ids', []], ['warehouse_id', 0], ['location_id', 0],
+        ]);
+        return success($this->service->transferPreview(
+            (array)$params['asset_ids'],
+            (int)$params['warehouse_id'],
+            (int)$params['location_id']
+        ));
+    }
+
+    public function buyoutConsignment()
+    {
+        $params = $this->request->params([
+            ['asset_id', 0], ['warehouse_id', 0], ['location_id', 0],
+            ['buyout_amount', 0], ['reason', ''], ['request_id', ''],
+        ]);
+        $result = $this->service->buyoutConsignment(
+            (int)$params['asset_id'],
+            (int)$params['warehouse_id'],
+            (int)$params['location_id'],
+            (float)$params['buyout_amount'],
+            (string)$params['reason'],
+            (string)$params['request_id']
+        );
+        (new ErpListingTaskService())->sync((int)$params['asset_id']);
+        return success($result);
+    }
+
+    public function serialTrace()
+    {
+        $params = $this->request->params([
+            ['keyword', ''], ['status', ''], ['start_at', 0], ['end_at', 0], ['page', 1], ['limit', 15],
+        ]);
+        return success($this->service->serialTracePage($params));
+    }
+
+    public function serialTraceDetail(int $id)
+    {
+        return success($this->service->serialTraceDetail($id));
+    }
+
+    public function ledger()
+    {
+        $params = $this->request->params([
+            ['keyword', ''],
+            ['asset_id', 0],
+            ['action', ''],
+            ['source_type', ''],
+            ['start_time', 0],
+            ['end_time', 0],
+            ['page', 1],
+            ['limit', 15],
+        ]);
+        return success($this->service->ledgerPage($params));
+    }
+
+    public function info(int $id)
+    {
+        return success($this->service->info($id));
+    }
+
+    public function adjustCost(int $id)
+    {
+        $params = $this->request->params([
+            ['cost', 0],
+            ['reason', ''],
+            ['sync_payable', 1],
+            ['cost_type', 'internal_adjust'],
+            ['expense_type_key', ''],
+            ['party_id', 0],
+            ['party_name', ''],
+            ['refurbish_items', []],
+            ['request_id', ''],
+        ]);
+        return success($this->service->adjustCost(
+            $id,
+            (float)$params['cost'],
+            (string)$params['reason'],
+            (bool)$params['sync_payable'],
+            (string)$params['request_id'],
+            (string)$params['cost_type'],
+            ['expense_type_key' => (string)$params['expense_type_key'], 'party_id' => (int)$params['party_id'], 'party_name' => (string)$params['party_name'], 'refurbish_items' => (array)$params['refurbish_items']]
+        ));
+    }
+
+    public function sendRefurbish()
+    {
+        $params = $this->request->params([
+            ['asset_ids', []], ['provider_party_id', 0], ['remark', ''], ['tracking_mode', ''], ['request_id', ''],
+        ]);
+        return success($this->service->sendRefurbish(
+            (array)$params['asset_ids'], (int)$params['provider_party_id'], (string)$params['remark'], (string)$params['tracking_mode'], (string)$params['request_id']
+        ));
+    }
+
+    public function completeRefurbish(int $id)
+    {
+        $params = $this->request->params([
+            ['result', ''], ['refurbish_items', []], ['expense_type_key', 'refurbish_mixed'],
+            ['warehouse_id', 0], ['location_id', 0], ['voucher_urls', []], ['remark', ''], ['request_id', ''],
+        ]);
+        $result = $this->service->completeRefurbish($id, $params);
+        $publish = $this->service->autoPublishListingIfReady($id);
+        $taskAssigned = (new ErpListingTaskService())->sync($id);
+        $result['_workflow'] = [
+            'task_assigned' => $taskAssigned ? 1 : 0,
+            'publish' => $publish,
+        ];
+        return success($result);
+    }
+
+    public function flow(int $id)
+    {
+        $params = $this->request->params([
+            ['refurbish_status', ''],
+            ['sale_target', ''],
+            ['listing_status', ''],
+            ['estimate_sale_price', null],
+            ['retail_price', null],
+            ['image_urls', null],
+            ['video_url', null],
+            ['catalog_product_id', null],
+            ['category_name', null],
+            ['category_path', null],
+            ['spec', null],
+            ['quality_remark', null],
+            ['remark_public', null],
+            ['remark_internal', null],
+            ['remark', ''],
+            ['next_assignee_uid', 0],
+            ['workflow_action', ''],
+            ['mall_category_id', null],
+            ['mall_memory', null],
+            ['mall_color', null],
+            ['mall_grade_id', null],
+            ['mall_battery_health', null],
+            ['mall_warranty_date', null],
+            ['mall_label_ids', null],
+            ['mall_brand_id', null],
+            ['mall_image_mode', null],
+            ['mall_standard_register', null],
+            ['publish_basic', 0],
+            ['defer_publish', 0],
+        ]);
+        $this->service->updateFlow($id, $params);
+        if ((int)$params['publish_basic'] === 1) {
+            // 先可靠保存。发布失败也不能把已保存的价格和照片误报为保存失败。
+            try {
+                $publish = ['triggered' => true, 'result' => $this->service->syncListing($id, false, true)];
+            } catch (\Throwable $e) {
+                $publish = ['triggered' => true, 'failed' => true, 'message' => $e->getMessage()];
+            }
+        } else {
+            $publish = (int)$params['defer_publish'] === 1
+                ? ['triggered' => false, 'reason' => 'manual_confirmation']
+                : $this->service->autoPublishListingIfReady($id);
+        }
+        $taskAssigned = (new ErpListingTaskService())->sync($id, (int)$params['next_assignee_uid']);
+        return success([
+            'saved' => 1,
+            'task_assigned' => $taskAssigned ? 1 : 0,
+            'publish' => $publish,
+            'asset' => $this->service->info($id),
+        ]);
+    }
+
+    public function syncListing(int $id)
+    {
+        $result = $this->service->syncListing($id);
+        (new ErpListingTaskService())->sync($id);
+        return success($result);
+    }
+
+    /**
+     * 只交接商城资料运营，不受站点“直接发布”设置影响。
+     * 图片与销售价格由当前岗位完成，分类、规格、颜色、保修等由商城岗位接手。
+     */
+    public function handoffListing(int $id)
+    {
+        $result = $this->service->syncListing($id, true);
+        (new ErpListingTaskService())->sync($id);
+        return success($result);
+    }
+
+    public function prepareListingMedia(int $id)
+    {
+        return success($this->service->prepareListingMedia($id));
+    }
+}

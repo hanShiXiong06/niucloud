@@ -1,0 +1,210 @@
+// 移动端 ERP 共享样式 — 对齐 phone_shop UI 规范
+
+// ── 页面容器 ──────────────────────────────────────────────────────────────────
+.erp-page {
+    min-height: 100vh;
+    background: var(--page-bg-color, #f3f4f6);
+}
+
+// ── 卡片（对齐 phone_shop .card）────────────────────────────────────────────
+.erp-card {
+    background: #fff;
+    border-radius: 28rpx;
+    padding: 24rpx 28rpx;
+    margin: 0 24rpx 20rpx;
+    box-shadow: 0 2rpx 12rpx rgba(0,0,0,0.04);
+
+    &__head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 14rpx;
+    }
+
+    &__foot {
+        display: flex;
+        justify-content: space-around;
+        align-items: center;
+        gap: 24rpx;
+        margin-top: 16rpx;
+        padding-top: 16rpx;
+        border-top: 2rpx solid #f3f4f6;
+    }
+}
+
+// ── 字段行（对齐 phone_shop .field）────────────────────────────────────────
+.field {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    min-height: 92rpx;
+    border-bottom: 2rpx solid #f3f4f6;
+
+    &:last-child, &--last { border-bottom: none; }
+
+    .label {
+        width: 170rpx;
+        flex-shrink: 0;
+        font-size: 28rpx;
+        color: #333;
+        .req { color: #f56c6c; margin-right: 4rpx; }
+    }
+
+    .value {
+        flex: 1;
+        text-align: right;
+        font-size: 28rpx;
+        color: #0f172a;
+        &.placeholder { color: #c0c4cc; }
+    }
+
+    .arrow { font-size: 32rpx; color: #c0c4cc; margin-left: 8rpx; }
+}
+
+// ── 表单卡片 Section ───────────────────────────────────────────────────────
+.form-card {
+    background: #fff;
+    border-radius: 28rpx;
+    padding: 0 28rpx;
+    margin: 0 24rpx 20rpx;
+    overflow: hidden;
+}
+
+.form-card-title {
+    font-size: 30rpx;
+    font-weight: 600;
+    color: #0f172a;
+    padding: 20rpx 0 0;
+    margin-bottom: 8rpx;
+}
+
+// ── 卡片标题 ──────────────────────────────────────────────────────────────────
+.card-title {
+    font-size: 30rpx;
+    font-weight: 600;
+    color: #0f172a;
+}
+
+.card-meta {
+    font-size: 24rpx;
+    color: #64748b;
+    margin-top: 6rpx;
+    line-height: 1.5;
+    display: block;
+}
+
+.card-time {
+    font-size: 22rpx;
+    color: #94a3b8;
+    margin-top: 6rpx;
+    line-height: 1.45;
+    display: block;
+}
+
+// ── 金额展示块 ────────────────────────────────────────────────────────────────
+.amount-box {
+    display: flex;
+    flex-direction: column;
+    gap: 4rpx;
+}
+.amt-label { font-size: 22rpx; color: #94a3b8; }
+.amt-value {
+    font-size: 28rpx;
+    font-weight: 600;
+    color: #0f172a;
+    &.green  { color: #16a34a; }
+    &.orange { color: #ea580c; }
+    &.red    { color: #dc2626; }
+    &.blue   { color: #2563eb; }
+}
+
+// ── 状态标签行 ────────────────────────────────────────────────────────────────
+.status-row {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 10rpx;
+    // flex-wrap: wrap;
+    margin-top: 10rpx;
+}
+
+// ── FAB 按钮（对齐 phone_shop）───────────────────────────────────────────────
+.fab {
+    position: fixed;
+    right: 36rpx;
+    bottom: calc(60rpx + env(safe-area-inset-bottom));
+    width: 96rpx;
+    height: 96rpx;
+    border-radius: 50%;
+    background: var(--primary-color, #3b6ef5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.18);
+    z-index: 20;
+}
+
+.fab--label {
+    width: auto;
+    min-width: 168rpx;
+    padding: 0 28rpx;
+    gap: 10rpx;
+    border-radius: 999rpx;
+}
+
+.fab__text {
+    color: #fff;
+    font-size: 25rpx;
+    font-weight: 650;
+    line-height: 1;
+    white-space: nowrap;
+}
+
+// ── 底部浮条（表单提交）──────────────────────────────────────────────────────
+.float-bar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: #fff;
+    box-shadow: 0 -4rpx 20rpx rgba(0, 0, 0, 0.06);
+    padding: 16rpx 32rpx;
+    padding-bottom: calc(16rpx + env(safe-area-inset-bottom));
+    display: flex;
+    gap: 16rpx;
+    z-index: 50;
+}
+
+// ── 列表包裹（z-paging 内容区）───────────────────────────────────────────────
+.list-wrap {
+    padding: 16rpx 0 120rpx;
+}
+
+// ── 搜索区 ─────────────────────────────────────────────────────────────────
+.page-search {
+    background: #fff;
+    padding: 0 24rpx 16rpx;
+    box-shadow: 0 2rpx 8rpx rgba(0,0,0,0.04);
+}
+
+// ── 详情页包裹 ────────────────────────────────────────────────────────────────
+.detail-wrap {
+    padding: 16rpx 0 120rpx;
+}
+
+// ── Section 标题 ──────────────────────────────────────────────────────────────
+.section-title {
+    font-size: 26rpx;
+    color: #94a3b8;
+    padding: 16rpx 28rpx 8rpx;
+    letter-spacing: 1rpx;
+}
+
+// ── 操作区底部 action-bar（弹窗内）────────────────────────────────────────────
+.action-bar {
+    display: flex;
+    gap: 16rpx;
+    padding: 16rpx 32rpx;
+    padding-bottom: calc(16rpx + env(safe-area-inset-bottom));
+    border-top: 1rpx solid #f3f4f6;
+}

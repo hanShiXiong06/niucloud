@@ -1,0 +1,11 @@
+Android MTP support uses dynamically linked libmtp and libusb.
+Their license texts are included in licenses/libmtp/COPYING and licenses/libusb/COPYING.
+
+libmtp 1.1.23 (unmodified): https://github.com/libmtp/libmtp/tree/v1.1.23
+Source: https://github.com/libmtp/libmtp/archive/refs/tags/v1.1.23.tar.gz
+libusb 1.0.30 (unmodified): https://github.com/libusb/libusb/tree/v1.0.30
+Source: https://github.com/libusb/libusb/archive/refs/tags/v1.0.30.tar.gz
+
+Native libraries are installed in _internal/native and may be replaced with
+compatible versions. The bridge's macOS ad-hoc signature is not library validation.
+Distributor: hsx_device_bridge. Native library authors retain their copyright.

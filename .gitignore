@@ -3,6 +3,7 @@ bin-debug/
 bin-release/
 [Oo]bj/
 [Bb]in/
+tests/
 
 # Other files and folders
 .settings/
@@ -21,3 +22,39 @@ bin-release/
 /.idea
 /upgrade
 niucloud/public/.htaccess
+output/
+# macOS 系统文件
+.DS_Store
+/.pnpm-store/
+*.md
+*/deliverables/
+deliverables/*
+*/*.mjs
+
+# 备份归档（不应进入版本库）
+归档.zip
+niucloud/addon/归档.zip
+
+# 已合并进 ERP 的旧财务插件(待手动删)
+**/hsx_finance.removed/
+
+# 在研商城插件(开发中，暂不纳入版本库)
+# niucloud/addon/phone_shop/
+niucloud/addon/shop/
+niucloud/addon/phone_shop.zip
+
+# Local installation secrets and non-source acceptance evidence
+/niucloud/.env
+/niucloud/.env.*
+/outputs/
+/.claude/settings.local.json
+*.pfx
+*.p12
+*.key
+*.p8
+*.keystore
+*.jks
+*.env.local
+*.env.*.local
+/niucloud/addon/hsx_ysepay/tests/测试-收银台rsa/
+/niucloud/vendor/SDK_PHP7.0_V8.2.0/php_sdk_demo/Config/conf.ini

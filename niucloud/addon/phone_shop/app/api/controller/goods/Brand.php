@@ -12,11 +12,12 @@
 namespace addon\phone_shop\app\api\controller\goods;
 
 use core\base\BaseApiController;
-use addon\phone_shop\app\service\api\goods\BrandService;
+use addon\phone_shop\app\service\admin\goods\BrandService;
 
 
 /**
  * 商品品牌控制器
+ * @description 商品品牌
  * Class Brand
  * @package addon\phone_shop\app\adminapi\controller\goods
  */
@@ -24,6 +25,7 @@ class Brand extends BaseApiController
 {
    /**
     * 获取商品品牌分页列表
+    * @description 查看列表-分页
     * @return \think\Response
     */
     public function pages(){
@@ -37,6 +39,7 @@ class Brand extends BaseApiController
 
     /**
      * 获取商品品牌列表
+     * @description 查看商品列表-全部
      * @return \think\Response
      */
     public function lists(){
@@ -48,6 +51,7 @@ class Brand extends BaseApiController
 
     /**
      * 商品品牌详情
+     * @description 查看详情
      * @param int $id
      * @return \think\Response
      */
@@ -55,61 +59,6 @@ class Brand extends BaseApiController
         return success((new BrandService())->getInfo($id));
     }
 
-    /**
-     * 添加商品品牌
-     * @return \think\Response
-     */
-    public function add(){
-        $data = $this->request->params([
-             ["brand_name",""],
-             ["logo",""],
-             ["desc",""],
-             ["sort",0],
-        ]);
-        $this->validate($data, 'addon\phone_shop\app\validate\goods\Brand.add');
-        $id = (new BrandService())->add($data);
-        return success('ADD_SUCCESS', ['id' => $id]);
-    }
-
-    /**
-     * 商品品牌编辑
-     * @param $id  商品品牌id
-     * @return \think\Response
-     */
-    public function edit($id){
-        $data = $this->request->params([
-             ["brand_name",""],
-             ["logo",""],
-             ["desc",""],
-             ["sort",0],
-        ]);
-        $this->validate($data, 'addon\phone_shop\app\validate\goods\Brand.edit');
-        (new BrandService())->edit($id, $data);
-        return success('EDIT_SUCCESS');
-    }
-
-    /**
-     * 商品品牌删除
-     * @param $id  商品品牌id
-     * @return \think\Response
-     */
-    public function del(int $id){
-        (new BrandService())->del($id);
-        return success('DELETE_SUCCESS');
-    }
-
-    /**
-     * 修改排序
-     * @return \think\Response
-     */
-    public function modifySort()
-    {
-        $data = $this->request->params([
-            [ 'brand_id', '' ],
-            [ 'sort', '' ],
-        ]);
-        ( new BrandService() )->modifySort($data);
-        return success('SUCCESS');
-    }
+    
 
 }

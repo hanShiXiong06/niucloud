@@ -11,7 +11,9 @@
 
 namespace addon\phone_shop\app\service\core\goods;
 
+use addon\phone_shop\app\dict\goods\EvaluateDict;
 use addon\phone_shop\app\model\goods\Evaluate;
+use addon\phone_shop\app\model\goods\Goods;
 use addon\phone_shop\app\model\order\Order;
 use core\base\BaseCoreService;
 
@@ -33,11 +35,23 @@ class CoreGoodsEvaluateService extends BaseCoreService
      */
     public function addEvaluate($data)
     {
+        $subject = (new CoreGoodsEvaluateSubjectService())->resolve(
+            (int) $data['site_id'],
+            (int) $data['goods_id'],
+            (array) ($data['order_goods_snapshot'] ?? [])
+        );
         $data = [
             'site_id' => $data['site_id'],
             'order_id' => $data[ 'order_id' ] ?? 0,
             'order_goods_id' => $data[ 'order_goods_id' ] ?? 0,
             'goods_id' => $data[ 'goods_id' ],
+            'category_id' => (int) ($subject['category_id'] ?? 0),
+            'category_name' => (string) ($subject['category_name'] ?? ''),
+            'category_path' => (string) ($subject['category_path'] ?? ''),
+            'goods_name' => (string) ($subject['goods_name'] ?? ''),
+            'sku_name' => (string) ($subject['sku_name'] ?? ''),
+            'goods_image' => (string) ($subject['goods_image'] ?? ''),
+            'is_verified_purchase' => !empty($data['is_verified_purchase']) ? 1 : 0,
             'member_id' => $data[ 'member_id' ] ?? 0,
             'member_head' => $data[ 'member_head' ],
             'member_name' => $data[ 'member_name' ],
@@ -51,6 +65,14 @@ class CoreGoodsEvaluateService extends BaseCoreService
         ];
         $res = $this->model->create($data);
         if($data[ 'order_id' ] > 0) (new Order())->where([['order_id', '=', $data[ 'order_id' ]]])->update(['is_evaluate' => 1]);
+
+        // 无需审核的增加评论统计数
+        if ($data['is_audit'] == EvaluateDict::AUDIT_NO) {
+            CoreGoodsStatService::addStat(['site_id' => $data['site_id'], 'goods_id' => $data[ 'goods_id' ], 'evaluate_num' => 1]);
+            (new Goods())->where([['goods_id', '=', $data['goods_id']]])->inc('evaluate_num', 1) ->update();
+        }
+
         return $res->evaluate_id;
     }
+
 }

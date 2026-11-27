@@ -1,0 +1,44 @@
+[
+  {
+    "name": "订单销售额",
+    "key": "sale_money",
+    "url": "mall/site/stat/total",
+    "sort": 1,
+    "page": ""
+  },
+  {
+    "name": "退款总金额",
+    "key": "refund_money",
+    "url": "mall/site/stat/total",
+    "sort": 2,
+    "page": ""
+  },
+  {
+    "name": "订单销售量",
+    "key": "order_num",
+    "url": "mall/site/stat/total",
+    "sort": 3,
+    "page": ""
+  },
+  {
+    "name": "订单退款量",
+    "key": "refund_num",
+    "url": "mall/site/stat/total",
+    "sort": 4,
+    "page": ""
+  },
+  {
+    "name": "商品浏览量",
+    "key": "access_num",
+    "url": "mall/site/stat/total",
+    "sort": 5,
+    "page": ""
+  },
+  {
+    "name": "订单下单数",
+    "key": "sale_num",
+    "url": "mall/site/stat/total",
+    "sort": 6,
+    "page": ""
+  }
+]

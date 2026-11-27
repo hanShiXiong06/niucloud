@@ -14,6 +14,7 @@ namespace addon\phone_shop\app\api\controller\order;
 use addon\phone_shop\app\dict\order\OrderDict;
 use addon\phone_shop\app\service\api\order\ConfigService;
 use addon\phone_shop\app\service\api\order\OrderService;
+use addon\phone_shop\app\service\api\order\OfflineOrderService;
 use core\base\BaseApiController;
 use think\Response;
 
@@ -29,16 +30,17 @@ class Order extends BaseApiController
             [ 'order_no', '' ],
             [ 'status', '' ],
             [ 'activity_type', '' ],
+            [ 'body', '' ],
         ]);
         return success(( new OrderService() )->getPage($data));
     }
 
     /**
      * 订单详情
-     * @param int $order_id
+     * @param $order_id
      * @return Response
      */
-    public function detail(int $order_id)
+    public function detail($order_id)
     {
         return success(( new OrderService() )->getDetail($order_id));
     }
@@ -93,5 +95,26 @@ class Order extends BaseApiController
     public function getConfig()
     {
         return success(( new ConfigService() )->getConfig());
+    }
+
+    /** 提交线下付款凭证，并按订单配置进入门店审核或继续超时倒计时。 */
+    public function submitOfflineVoucher($order_id)
+    {
+        $data = $this->request->params([
+            ['voucher_urls', []],
+            ['remark', ''],
+        ]);
+        return success((new OfflineOrderService())->submitVoucher((int)$order_id, $data));
+    }
+
+    /**
+     * 删除订单
+     * @param $id
+     * @return Response
+     */
+    public function delete($id)
+    {
+        ( new OrderService() )->delete($id);
+        return success('DELETE_SUCCESS');
     }
 }

@@ -51,14 +51,4 @@ class GoodsCategory extends BaseApiController
         return success(( new GoodsCategoryService() )->getList($data));
     }
 
-    /*
-        获取分类详情
-        getInfo
-    */ 
-    function getInfo(){
-        $data = $this->request->params([
-            [ "id", "" ],
-        ]);
-        return success(( new GoodsCategoryService() )->getInfo($data['id']));
-    }
 }

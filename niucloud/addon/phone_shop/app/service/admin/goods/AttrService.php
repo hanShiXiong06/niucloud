@@ -12,7 +12,6 @@
 namespace addon\phone_shop\app\service\admin\goods;
 
 use addon\phone_shop\app\model\goods\Attr;
-use addon\phone_shop\app\model\site\Site;
 use core\base\BaseAdminService;
 
 
@@ -39,18 +38,11 @@ class AttrService extends BaseAdminService
      */
     public function getPage(array $where = [], $field = 'attr_id,site_id,attr_name,sort')
     {
-        $order = 'sort desc attr_id desc';
+        $order = 'attr_id desc';
         if (!empty($where[ 'order' ])) {
             $order = $where[ 'order' ] . ' ' . $where[ 'sort' ];
         }
-        if($this->site_id !== 0 ){
-            $sites =  (new Site())-> field('brand_status')->where([['site_id','=', $this->site_id]]) ->findOrEmpty()->toArray();
-            
-        }
-        
-        $site_id = empty($sites['brand_status'] ) ? $this->site_id : $this->site_id.",0";
-       
-        $search_model = $this->model->where([ [ 'site_id', 'in', "{$site_id}" ] ])->withSearch([ "attr_id", "attr_name" ], $where)->field($field)->order($order);
+        $search_model = $this->model->where([ [ 'site_id', "=", $this->site_id ] ])->withSearch([ "attr_id_arr", "attr_id", "attr_name" ], $where)->field($field)->order($order);
         $list = $this->pageQuery($search_model);
         return $list;
     }
@@ -61,19 +53,13 @@ class AttrService extends BaseAdminService
      * @param string $field
      * @return mixed
      */
-    public function getList(array $where = [], $field = 'attr_id,site_id,attr_name,sort')
+    public function getList(array $where = [], $field = 'attr_id,attr_name,attr_value_format,sort')
     {
-        $order = 'sort desc attr_id desc';
+        $order = 'sort desc,attr_id desc';
         if (!empty($where[ 'order' ])) {
             $order = $where[ 'order' ] . ' ' . $where[ 'sort' ];
         }
-           if($this->site_id !== 0 ){
-            $sites =  (new Site())-> field('brand_status')->where([['site_id','=', $this->site_id]]) ->findOrEmpty()->toArray();
-            
-        }
-        
-        $site_id = empty($sites['brand_status'] ) ? $this->site_id : $this->site_id.",0";
-        return $this->model->where([ [ 'site_id', 'in', "{$site_id}" ] ])->withSearch([ "attr_id", "attr_name" ], $where)->field($field)->order($order)->select()->toArray();
+        return $this->model->where([ [ 'site_id', "=", $this->site_id ] ])->withSearch([ "attr_id_arr", "attr_id", "attr_name" ], $where)->field($field)->order($order)->select()->toArray();
     }
 
     /**
@@ -97,6 +83,8 @@ class AttrService extends BaseAdminService
     {
         $data[ 'site_id' ] = $this->site_id;
         $res = $this->model->create($data);
+        // 主站新建参数 -> 推送同步到代理子站
+        \addon\phone_shop\app\service\core\agent\RefDataSyncService::pushIfMaster('attr', $this->site_id, (int) $res->attr_id);
         return $res->attr_id;
     }
 
@@ -109,6 +97,8 @@ class AttrService extends BaseAdminService
     public function edit(int $id, array $data)
     {
         $this->model->where([ [ 'attr_id', '=', $id ], [ 'site_id', '=', $this->site_id ] ])->update($data);
+        // 主站改名 -> 同步更新代理子站副本
+        \addon\phone_shop\app\service\core\agent\RefDataSyncService::pushIfMaster('attr', $this->site_id, $id);
         return true;
     }
 

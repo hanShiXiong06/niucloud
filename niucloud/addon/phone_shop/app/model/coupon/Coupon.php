@@ -109,7 +109,7 @@ class Coupon extends BaseModel
      */
     public function searchStatusAttr($query, $value, $data)
     {
-        if ($value) {
+        if ($value != '') {
             $query->where("status",'=',$value);
         }
     }
@@ -150,6 +150,20 @@ class Coupon extends BaseModel
     public function getStatusNameAttr($value, $data)
     {
         return CouponDict::getStatus()[$data['status']] ?? '';
+    }
+
+    /**
+     * 发券按钮是否展示
+     * @param $value
+     * @param $data
+     * @return string
+     */
+    public function getIsShowSendAttr($value, $data)
+    {
+        if($data['status'] != CouponDict::NORMAL){
+            return 0;
+        }
+        return 1;
     }
 
 

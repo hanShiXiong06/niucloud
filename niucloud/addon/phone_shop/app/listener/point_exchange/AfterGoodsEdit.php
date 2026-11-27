@@ -16,7 +16,7 @@ class AfterGoodsEdit
 
     public function handle($data)
     {
-        Log::write('AfterPhoneGoodsEdit' . json_encode($data));
+        Log::write('AfterGoodsEdit' . json_encode($data));
         try {
             $where['goods_id'] = $data['goods_id'];
             $exchange_goods_info = (new ExchangeService)->getInfo($where);

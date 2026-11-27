@@ -12,6 +12,7 @@
 namespace core\template;
 
 use app\service\core\weapp\CoreWeappService;
+use core\exception\NoticeDeliveryException;
 use EasyWeChat\Kernel\Exceptions\InvalidArgumentException;
 use EasyWeChat\Kernel\Exceptions\InvalidConfigException;
 use EasyWeChat\Kernel\Support\Collection;
@@ -45,14 +46,26 @@ class Weapp extends BaseTemplate
      */
     public function send(array $data)
     {
-        $api = CoreWeappService::appApiClient($this->site_id);
-        $res = $api->postJson('cgi-bin/message/subscribe/send', [
+        try {
+            $api = NoticeTransport::client(CoreWeappService::app($this->site_id));
+        } catch (\Throwable $error) {
+            throw new NoticeDeliveryException('weapp', 'not_submitted', '', '小程序通知账号尚未就绪，本次未提交发送', $error);
+        }
+        try {
+            $res = $api->postJson('cgi-bin/message/subscribe/send', [
             'template_id' => $data['template_id'], // 所需下发的订阅模板id
             'touser' => $data['openid'],     // 接收者（用户）的 openid
             'page' => $data['page'],       // 点击模板卡片后的跳转页面，仅限本小程序内的页面。支持带参数,（示例index?foo=bar）。该字段不填则模板无跳转。
             'data' => $data['data'],
-        ]);
-        Log::write("发送小程序消息Response-" . json_encode($res->toArray(), 256));
+            ]);
+            $receipt = NoticeReceipt::accepted($res->toArray(), 'weapp');
+        } catch (NoticeDeliveryException $error) {
+            throw $error;
+        } catch (\Throwable $error) {
+            throw new NoticeDeliveryException('weapp', 'unknown', '', '小程序通知发送结果未能核实，请先核对记录，勿重复发送', $error);
+        }
+        Log::write('小程序通知接口已受理：'.json_encode($receipt, JSON_UNESCAPED_UNICODE));
+        return $receipt;
     }
 
     /**

@@ -23,12 +23,9 @@ export function getShopYesterdayCountList() {
 
 /**
  * 获取统计图数据
- * @param timeRange 时间范围：today, yesterday, week, month
  */
-export function getShopStat(timeRange: string = 'today') {
-    return request.get(`phone_shop/stat`, {
-        params: { time_range: timeRange }
-    })
+export function getShopStat() {
+    return request.get(`phone_shop/stat`)
 }
 
 /**
@@ -44,4 +41,3 @@ export function getShopOrderStat() {
 export function getShopGoodsStat() {
     return request.get(`phone_shop/stat/goods`)
 }
-

@@ -36,10 +36,13 @@ class CoreWechatServeService extends BaseCoreService
      * @param string $scopes
      * @return string
      */
-    public function authorization(int $site_id, string $url = '', string $scopes = 'snsapi_base')
+    public function authorization(int $site_id, string $url = '', string $scopes = 'snsapi_base',$state = '')
     {
-        $oauth = CoreWechatService::app($site_id)->getOauth();
-        return $oauth->scopes([ $scopes ])->redirect($url);
+        $oauth = CoreWechatService::app($site_id)->getOauth()->scopes([ $scopes ]);
+        if (!empty($state)){
+            $oauth = $oauth->withState($state);
+        }
+        return $oauth->redirect($url);
     }
 
     /**
@@ -84,7 +87,6 @@ class CoreWechatServeService extends BaseCoreService
      */
     public function serve(int $site_id)
     {
-
         $app = CoreWechatService::app($site_id);
         $server = $app->getServer();
         $server->with(function($message, \Closure $next) use ($site_id) {
@@ -149,6 +151,7 @@ class CoreWechatServeService extends BaseCoreService
                 'scene' => $scene
             ],
         ];
-        return $api->postJson('cgi-bin/qrcode/create', $param);
+        $response = $api->postJson('cgi-bin/qrcode/create', $param);
+        return json_decode($response->getContent(), true);
     }
 }

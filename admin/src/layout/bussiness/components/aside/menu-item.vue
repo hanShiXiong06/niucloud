@@ -53,7 +53,7 @@ const hasVisibleChild = computed(() => {
 
 const addons = computed(() => {
     const addons:Record<string, any> = {}
-    siteInfo?.apps.forEach((item: any) => { addons[item.key] = item })
+    siteInfo?.apps?.forEach((item: any) => { addons[item.key] = item })
     siteInfo?.site_addons.forEach((item: any) => { addons[item.key] = item })
     return addons
 })

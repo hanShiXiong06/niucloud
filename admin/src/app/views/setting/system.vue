@@ -8,28 +8,16 @@
                 <el-form-item :label="t('siteName')" prop="site_name">
                     <el-input v-model.trim="formData.site_name" :placeholder="t('siteNamePlaceholder')" class="input-width" clearable maxlength="20" show-word-limit />
                 </el-form-item>
-                <el-form-item :label="t('logo')">
+                <el-form-item :label="t('logo')" prop="logo">
                     <div>
                         <upload-image v-model="formData.logo" />
                         <p class="text-[12px] text-[#a9a9a9]">{{ t('logoPlaceholder') }}</p>
                     </div>
                 </el-form-item>
-                <el-form-item :label="t('icon')">
+                <el-form-item :label="t('icon')" prop="icon">
                     <div>
                         <upload-image v-model="formData.icon" />
                         <p class="text-[12px] text-[#a9a9a9]">{{ t('iconPlaceholder') }}</p>
-                    </div>
-                </el-form-item>
-                <el-form-item :label="t('siteLoginLogo')" v-if="appType == 'admin'">
-                    <div>
-                        <upload-image v-model="formData.site_login_logo" />
-                        <p class="text-[12px] text-[#a9a9a9]">{{ t('siteLoginLogoTips') }}</p>
-                    </div>
-                </el-form-item>
-                <el-form-item :label="t('siteLoginBgImg')" v-if="appType == 'admin'">
-                    <div>
-                        <upload-image v-model="formData.site_login_bg_img" />
-                        <p class="text-[12px] text-[#a9a9a9]">{{ t('siteLoginBgImgTips') }}</p>
                     </div>
                 </el-form-item>
                 <el-form-item :label="t('keywords')">
@@ -125,9 +113,9 @@ const formData: any = reactive<Record<string, string>>({
     tel: '',
     site_login_logo: '',
     site_login_bg_img: '',
-    meta_title:"",
-    meta_desc:"",
-    meta_keyword:"",
+    meta_title: '',
+    meta_desc: '',
+    meta_keyword: ''
 })
 
 const setFormData = async () => {
@@ -152,6 +140,12 @@ const formRef = ref<FormInstance>()
 const formRules = reactive<FormRules>({
     site_name: [
         { required: true, message: t('siteNamePlaceholder'), trigger: 'blur' }
+    ],
+    logo: [
+        { required: true, message: t('请选择长方形Logo'), trigger: 'blur' }
+    ],
+    icon: [
+        { required: true, message: t('请选择正方形Logo'), trigger: 'blur' }
     ],
     front_end_name: [
         { required: true, message: t('frontEndNamePlaceholder'), trigger: 'blur' }

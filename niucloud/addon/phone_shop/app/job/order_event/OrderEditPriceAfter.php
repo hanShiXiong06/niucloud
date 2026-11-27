@@ -21,7 +21,7 @@ class OrderEditPriceAfter extends BaseJob
     public function doJob($data)
     {
         try {
-            event('AfterShopOrderEditPrice', $data);
+            event('AfterPhoneShopOrderEditPrice', $data);
             return true;
         } catch (\Exception $e) {
             return false;

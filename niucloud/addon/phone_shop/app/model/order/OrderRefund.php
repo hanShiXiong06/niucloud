@@ -15,6 +15,7 @@ use addon\phone_shop\app\dict\order\OrderRefundDict;
 use app\model\member\Member;
 use app\model\pay\Refund;
 use core\base\BaseModel;
+use think\model\concern\SoftDelete;
 use think\model\relation\HasOne;
 
 /**
@@ -22,6 +23,7 @@ use think\model\relation\HasOne;
  */
 class OrderRefund extends BaseModel
 {
+    use SoftDelete;
 
     /**
      * 数据表主键
@@ -47,6 +49,14 @@ class OrderRefund extends BaseModel
     protected $jsonAssoc = true;
 
     /**
+     * 定义软删除标记字段.
+     * @var string
+     */
+    protected $deleteTime = 'delete_time';
+
+    protected $defaultSoftDelete = 0;
+
+    /**
      * 关联订单项
      * @return HasOne
      */
@@ -54,7 +64,6 @@ class OrderRefund extends BaseModel
     {
         return $this->hasOne(OrderGoods::class, 'order_goods_id', 'order_goods_id');
     }
-
 
     /**
      * 订单主表

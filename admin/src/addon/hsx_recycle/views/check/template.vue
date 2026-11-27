@@ -1,0 +1,1192 @@
+<template>
+    <PremiumTheme class="check-template-page">
+        <CatalogSourceNotice :policy="catalogPolicy" :error="catalogError" @retry="loadCatalog" />
+        <el-card class="box-card" shadow="never">
+            <template #header>
+                <PageHeader title="质检模板" description="管理当前资料库的质检表单、选项、文案和 API 回填字段">
+                    <template #actions>
+                        <el-button :disabled="catalogReadOnly" @click="initDefault">初始化默认模板</el-button>
+                        <el-button type="primary" :disabled="catalogReadOnly" @click="openTemplateDialog()">新增模板</el-button>
+                    </template>
+                </PageHeader>
+            </template>
+
+        <div class="workspace">
+            <aside class="panel tree-panel">
+                <div class="panel-head">
+                    <span>型号分类</span>
+                    <el-button v-if="activeCategory" link type="primary" size="small" @click="clearCategory">清除筛选</el-button>
+                </div>
+                <div class="tree-current" :title="activeCategory?.model_full_name">
+                    {{ activeCategory ? activeCategory.model_full_name : '点分类筛选模板（含其子级型号）' }}
+                </div>
+                <el-tree
+                    ref="categoryTreeRef"
+                    class="category-filter__tree"
+                    lazy
+                    :load="loadCategoryChildren"
+                    :props="categoryTreeProps"
+                    node-key="id"
+                    highlight-current
+                    @node-click="onCategoryClick"
+                >
+                    <template #default="{ data }">
+                        <span class="category-node">
+                            <span class="category-node__name">{{ data.node_name }}</span>
+                            <span class="category-node__type">{{ nodeTypeText(data.node_type) }}</span>
+                        </span>
+                    </template>
+                </el-tree>
+            </aside>
+
+            <section class="panel list-panel">
+                <div class="panel-head">
+                    <div class="list-head-left">
+                        <span class="panel-title">质检模板</span>
+                        <el-radio-group v-model="templateQuery.source" size="small" @change="reloadTemplates">
+                            <el-radio-button label="manual">手工</el-radio-button>
+                            <el-radio-button label="pjt">拍机堂</el-radio-button>
+                            <el-radio-button label="">全部</el-radio-button>
+                        </el-radio-group>
+                    </div>
+                    <el-input v-model="templateQuery.keyword" clearable placeholder="搜索模板名称" size="small" class="list-search" @keyup.enter="reloadTemplates" @clear="reloadTemplates" />
+                </div>
+
+                <el-table
+                    v-loading="templateLoading"
+                    :data="templates"
+                    height="600"
+                    row-key="id"
+                    highlight-current-row
+                    @row-click="selectTemplate"
+                >
+                    <el-table-column label="模板" min-width="220" show-overflow-tooltip>
+                        <template #default="{ row }">
+                            <div class="name-main">
+                                {{ row.template_name }}
+                                <el-tag v-if="row.scene === 'pjt'" size="small" type="warning" effect="plain" class="source-tag">拍机堂</el-tag>
+                                <el-tag v-else size="small" type="primary" effect="plain" class="source-tag">手工</el-tag>
+                            </div>
+                            <div class="name-sub">{{ row.scene }} · v{{ row.version }}</div>
+                        </template>
+                    </el-table-column>
+                    <el-table-column label="状态" width="90" align="center">
+                        <template #default="{ row }">
+                            <el-tag size="small" :type="row.is_default ? 'success' : 'info'">{{ row.is_default ? '默认' : (row.status ? '启用' : '停用') }}</el-tag>
+                        </template>
+                    </el-table-column>
+                    <el-table-column label="操作" width="160" fixed="right">
+                        <template #default="{ row }">
+                            <el-button link type="primary" :disabled="catalogReadOnly" @click.stop="openTemplateEditor(row)">编辑质检项</el-button>
+                            <el-dropdown :disabled="catalogReadOnly" trigger="click" @command="cmd => handleTemplateCommand(String(cmd), row)">
+                                <el-button link type="primary">更多</el-button>
+                                <template #dropdown>
+                                    <el-dropdown-menu>
+                                        <el-dropdown-item command="edit">编辑信息</el-dropdown-item>
+                                        <el-dropdown-item command="default">设为默认</el-dropdown-item>
+                                        <el-dropdown-item command="delete">删除</el-dropdown-item>
+                                    </el-dropdown-menu>
+                                </template>
+                            </el-dropdown>
+                        </template>
+                    </el-table-column>
+                </el-table>
+
+                <el-pagination
+                    v-model:current-page="templatePage.page"
+                    class="template-pager"
+                    background
+                    layout="total, prev, pager, next, jumper"
+                    :page-size="templatePage.limit"
+                    :total="templatePage.total"
+                    @current-change="loadTemplates"
+                />
+            </section>
+        </div>
+        </el-card>
+
+        <HsxDrawer
+            v-model="editorDrawerVisible"
+            size="82%"
+            destroy-on-close
+            :title="currentTemplate ? ('编辑质检项 · ' + currentTemplate.template_name) : '编辑质检项'"
+            class="check-template-editor-drawer"
+        >
+            <div class="editor-drawer-body">
+            <section class="panel group-panel">
+                <div class="panel-head">
+                    <div>
+                        <div class="panel-title">分组</div>
+                        <div class="panel-subtitle">{{ currentTemplate?.template_name || '请选择模板' }}</div>
+                    </div>
+                    <el-button type="primary" :disabled="!currentTemplate || isImportedTemplate" @click="openGroupDialog()">新增分组</el-button>
+                </div>
+                <el-table
+                    v-loading="groupLoading"
+                    :data="groups"
+                    height="680"
+                    row-key="id"
+                    highlight-current-row
+                    @row-click="selectGroup"
+                >
+                    <el-table-column label="分组" min-width="170" show-overflow-tooltip>
+                        <template #default="{ row }">
+                            <div class="name-main">{{ row.group_name }}</div>
+                            <div class="name-sub">{{ row.group_key }} · 排序 {{ row.sort }}</div>
+                        </template>
+                    </el-table-column>
+                    <el-table-column label="状态" width="70">
+                        <template #default="{ row }">
+                            <el-switch v-model="row.status" :disabled="isImportedTemplate" :active-value="1" :inactive-value="0" @change="saveGroupInline(row)" />
+                        </template>
+                    </el-table-column>
+                    <el-table-column label="操作" width="96" fixed="right">
+                        <template #default="{ row }">
+                            <el-button link type="primary" :disabled="isImportedTemplate" @click.stop="openGroupDialog(row)">编辑</el-button>
+                            <el-button link type="danger" :disabled="isImportedTemplate" @click.stop="removeGroup(row)">删</el-button>
+                        </template>
+                    </el-table-column>
+                </el-table>
+            </section>
+
+            <section class="panel field-panel">
+                <div class="panel-head">
+                    <div>
+                        <div class="panel-title">字段</div>
+                        <div class="panel-subtitle">{{ currentGroup?.group_name || '请选择分组' }}</div>
+                    </div>
+                    <el-button type="primary" :disabled="!currentGroup || isImportedTemplate" @click="openFieldDialog()">新增字段</el-button>
+                </div>
+                <el-table
+                    v-loading="fieldLoading"
+                    :data="fields"
+                    height="360"
+                    row-key="id"
+                    border
+                    highlight-current-row
+                    @row-click="selectField"
+                >
+                    <el-table-column label="字段" min-width="180" show-overflow-tooltip>
+                        <template #default="{ row }">
+                            <div class="name-main">{{ row.field_name }}</div>
+                            <div class="name-sub">{{ row.field_key }} · {{ row.component }}</div>
+                            <div v-if="fieldDefaultText(row)" class="name-default">默认：{{ fieldDefaultText(row) }}</div>
+                        </template>
+                    </el-table-column>
+                    <el-table-column label="文案" min-width="150" show-overflow-tooltip>
+                        <template #default="{ row }">{{ row.result_template || '-' }}</template>
+                    </el-table-column>
+                    <el-table-column label="控制" width="150">
+                        <template #default="{ row }">
+                            <div class="switch-line">
+                                <span>显示</span>
+                                <el-switch v-model="row.is_show" :active-value="1" :inactive-value="0" @change="saveFieldInline(row)" />
+                            </div>
+                            <div class="switch-line">
+                                <span>结果</span>
+                                <el-switch v-model="row.result_visible" :active-value="1" :inactive-value="0" @change="saveFieldInline(row)" />
+                            </div>
+                            <div class="switch-line">
+                                <span>摘要</span>
+                                <el-switch
+                                    v-model="row.extra_config.summary_visible"
+                                    :active-value="1"
+                                    :inactive-value="0"
+                                    @change="saveFieldInline(row)"
+                                />
+                            </div>
+                        </template>
+                    </el-table-column>
+                    <el-table-column label="操作" width="100" fixed="right">
+                        <template #default="{ row }">
+                            <el-button link type="primary" @click.stop="openFieldDialog(row)">编辑</el-button>
+                            <el-button link type="danger" :disabled="isImportedTemplate" @click.stop="removeField(row)">删</el-button>
+                        </template>
+                    </el-table-column>
+                </el-table>
+
+                <div class="option-head">
+                    <div>
+                        <div class="panel-title">选项</div>
+                        <div class="panel-subtitle">{{ currentField?.field_name || '选择 radio / checkbox / select 字段维护选项' }}</div>
+                    </div>
+                    <el-button type="primary" :disabled="!currentField || !fieldNeedsOptions(currentField) || isImportedTemplate" @click="openOptionDialog()">新增选项</el-button>
+                </div>
+                <el-table :data="currentFieldOptions" height="260" border>
+                    <el-table-column label="选项名称" min-width="150">
+                        <template #default="{ row }">
+                            <span>{{ row.option_label }}</span>
+                            <el-tag v-if="Number(row.is_default) === 1" size="small" type="success" effect="plain" class="source-tag">默认</el-tag>
+                        </template>
+                    </el-table-column>
+                    <el-table-column prop="option_value" label="选项值" width="100" />
+                    <el-table-column :label="currentFieldIsSingle ? '默认选中（单选）' : '默认选中（多选）'" width="130" align="center">
+                        <template #default="{ row }">
+                            <el-switch
+                                :model-value="Number(row.is_default) === 1"
+                                :disabled="isImportedTemplate"
+                                @change="(val: boolean) => setOptionDefault(row, val)"
+                            />
+                        </template>
+                    </el-table-column>
+                    <el-table-column label="展示样式" width="130">
+                        <template #default="{ row }">
+                            <div class="option-style-preview">
+                                <span
+                                    class="option-style-chip"
+                                    :style="getOptionPreviewStyle(row)"
+                                >{{ row.option_label || '预览' }}</span>
+                            </div>
+                        </template>
+                    </el-table-column>
+                    <el-table-column prop="sort" label="排序" width="80" />
+                    <el-table-column label="状态" width="86">
+                        <template #default="{ row }">
+                            <el-switch v-model="row.is_show" :disabled="isImportedTemplate" :active-value="1" :inactive-value="0" @change="saveOptionInline(row)" />
+                        </template>
+                    </el-table-column>
+                    <el-table-column label="操作" width="100" fixed="right">
+                        <template #default="{ row }">
+                            <el-button link type="primary" :disabled="isImportedTemplate" @click="openOptionDialog(row)">编辑</el-button>
+                            <el-button link type="danger" :disabled="isImportedTemplate" @click="removeOption(row)">删除</el-button>
+                        </template>
+                    </el-table-column>
+                </el-table>
+            </section>
+            </div>
+        </HsxDrawer>
+
+        <HsxDialog v-model="templateDialog.visible" :title="templateDialog.form.id ? '编辑模板' : '新增模板'" width="520px" :destroy-on-close="false">
+            <el-form label-width="92px" :model="templateDialog.form">
+                <el-form-item label="模板名称"><el-input v-model="templateDialog.form.template_name" /></el-form-item>
+                <el-form-item label="模板标识"><el-input v-model="templateDialog.form.template_key" placeholder="default_phone" /></el-form-item>
+                <el-form-item label="场景"><el-input v-model="templateDialog.form.scene" placeholder="phone" /></el-form-item>
+                <el-form-item label="排序"><el-input-number v-model="templateDialog.form.sort" :min="0" /></el-form-item>
+                <el-form-item label="启用"><el-switch v-model="templateDialog.form.status" :active-value="1" :inactive-value="0" /></el-form-item>
+                <el-form-item label="默认"><el-switch v-model="templateDialog.form.is_default" :active-value="1" :inactive-value="0" /></el-form-item>
+            </el-form>
+            <template #footer>
+                <el-button @click="templateDialog.visible = false">取消</el-button>
+                <el-button type="primary" @click="submitTemplate">保存</el-button>
+            </template>
+        </HsxDialog>
+
+        <HsxDialog v-model="groupDialog.visible" :title="groupDialog.form.id ? '编辑分组' : '新增分组'" width="520px" :destroy-on-close="false">
+            <el-form label-width="92px" :model="groupDialog.form">
+                <el-form-item label="分组名称"><el-input v-model="groupDialog.form.group_name" /></el-form-item>
+                <el-form-item label="分组标识"><el-input v-model="groupDialog.form.group_key" placeholder="appearance" /></el-form-item>
+                <el-form-item label="说明"><el-input v-model="groupDialog.form.description" /></el-form-item>
+                <el-form-item label="排序"><el-input-number v-model="groupDialog.form.sort" :min="0" /></el-form-item>
+                <el-form-item label="启用"><el-switch v-model="groupDialog.form.status" :active-value="1" :inactive-value="0" /></el-form-item>
+            </el-form>
+            <template #footer>
+                <el-button @click="groupDialog.visible = false">取消</el-button>
+                <el-button type="primary" @click="submitGroup">保存</el-button>
+            </template>
+        </HsxDialog>
+
+        <HsxDialog v-model="fieldDialog.visible" :title="fieldDialog.form.id ? '编辑字段' : '新增字段'" width="720px" :destroy-on-close="false">
+            <el-form label-width="108px" :model="fieldDialog.form" class="field-form">
+                <HsxNotice default-expanded
+                    v-if="isImportedTemplate"
+                    class="mb-3"
+                    type="info"
+                    :closable="false"
+                    show-icon
+                    title="导入模板仅允许修改展示配置；字段名称、标识、组件和选项仍以导入数据为准。"
+                />
+                <el-form-item label="字段名称">
+                    <el-input v-model="fieldDialog.form.field_name" :disabled="isImportedTemplate" placeholder="例如：外屏规格、电池健康度" />
+                    <div class="form-tip">显示在质检弹窗中间的字段标题；勾选设备摘要后，也会作为左侧摘要标题展示。</div>
+                </el-form-item>
+                <el-form-item label="字段标识">
+                    <el-input v-model="fieldDialog.form.field_key" :disabled="isImportedTemplate" placeholder="例如：screen_id、battery" />
+                    <div class="form-tip">用于保存数据、恢复草稿和 API 回填的唯一标识。已上线字段不要随意改，否则历史质检数据无法自动对应。</div>
+                </el-form-item>
+                <el-form-item label="组件类型">
+                    <el-select v-model="fieldDialog.form.component" :disabled="isImportedTemplate" class="w-full">
+                        <el-option v-for="item in componentOptions" :key="item.value" :label="item.label" :value="item.value" />
+                    </el-select>
+                    <div class="form-tip">决定质检时的填写方式：输入框适合文本，数字输入适合电池/次数，单选/多选/下拉需要维护下方选项。</div>
+                </el-form-item>
+                <el-form-item label="选择模式">
+                    <el-select v-model="fieldDialog.form.selection_mode" :disabled="isImportedTemplate" clearable class="w-full">
+                        <el-option label="单选" value="single" />
+                        <el-option label="多选" value="multiple" />
+                    </el-select>
+                    <div class="form-tip">用于表达业务含义。单选表示只能取一个结果，多选表示可以同时记录多个问题或状态。</div>
+                </el-form-item>
+                <el-form-item label="单位">
+                    <el-input v-model="fieldDialog.form.unit" :disabled="isImportedTemplate" placeholder="例如：%、次、GB" />
+                    <div class="form-tip">显示在字段旁边，也会参与质检结果表达；没有单位可以留空。</div>
+                </el-form-item>
+                <el-form-item label="提示语">
+                    <el-input v-model="fieldDialog.form.placeholder" :disabled="isImportedTemplate" placeholder="例如：请输入电池健康度" />
+                    <div class="form-tip">显示在输入框或选择框内部，引导质检人员填写正确内容。</div>
+                </el-form-item>
+                <el-form-item label="默认值">
+                    <template v-if="fieldNeedsOptions(fieldDialog.form)">
+                        <div class="form-tip default-hint">该字段为选项类，请在下方「选项」列表用「默认选中」开关设置默认；单选只能有一个，多选可多个。</div>
+                    </template>
+                    <el-switch
+                        v-else-if="fieldDialog.form.component === 'switch'"
+                        v-model="fieldDialog.form.default_value"
+                        :disabled="isImportedTemplate"
+                        active-value="1"
+                        inactive-value=""
+                        active-text="默认开启"
+                        inactive-text="默认关闭"
+                        inline-prompt
+                    />
+                    <el-input-number
+                        v-else-if="fieldDialog.form.component === 'number'"
+                        v-model="fieldDialog.form.default_value"
+                        :disabled="isImportedTemplate"
+                        :controls="false"
+                        placeholder="留空表示无默认"
+                        class="w-full"
+                    />
+                    <el-input
+                        v-else
+                        v-model="fieldDialog.form.default_value"
+                        :disabled="isImportedTemplate"
+                        :type="fieldDialog.form.component === 'textarea' ? 'textarea' : 'text'"
+                        placeholder="留空表示无默认值"
+                    />
+                    <div v-if="!fieldNeedsOptions(fieldDialog.form)" class="form-tip">进入质检时若该设备没有历史记录，会用这个值预填，质检员可再修改。</div>
+                </el-form-item>
+                <el-form-item label="结果文案">
+                    <el-input v-model="fieldDialog.form.result_template" placeholder="例如：外屏{label} / 电池健康度{value}%" />
+                    <div class="form-tip">参与自动生成质检结果。可用 {label} 表示选项名称，{value} 表示填写值；不填写则按字段名称和结果自动拼接。</div>
+                </el-form-item>
+                <el-form-item label="排序">
+                    <el-input-number v-model="fieldDialog.form.sort" :min="0" />
+                    <div class="form-tip">数字越小越靠前，影响质检弹窗中间表单、设备摘要和选项展示顺序。</div>
+                </el-form-item>
+                <el-form-item label="开关">
+                    <div class="inline-switches">
+                        <el-checkbox v-model="fieldDialog.form.is_show" :true-label="1" :false-label="0">显示</el-checkbox>
+                        <el-checkbox v-model="fieldDialog.form.is_required" :true-label="1" :false-label="0">必填</el-checkbox>
+                        <el-checkbox v-model="fieldDialog.form.result_visible" :true-label="1" :false-label="0">参与文案</el-checkbox>
+                        <el-checkbox v-model="fieldDialog.form.api_fill_enabled" :true-label="1" :false-label="0">API回填</el-checkbox>
+                        <el-checkbox
+                            v-model="fieldDialog.form.extra_config.summary_visible"
+                            :true-label="1"
+                            :false-label="0"
+                            @change="handleSummaryVisibleChange"
+                        >设备摘要</el-checkbox>
+                    </div>
+                    <div class="form-tip">
+                        显示：控制质检弹窗是否出现这个字段；必填：提交质检时必须填写；
+                        参与文案：会进入卖家/买家质检结果；API回填：允许第三方查询结果自动写入；
+                        设备摘要：显示在左侧设备摘要中，最多可配置 10 个。
+                    </div>
+                </el-form-item>
+            </el-form>
+            <template #footer>
+                <el-button @click="fieldDialog.visible = false">取消</el-button>
+                <el-button type="primary" @click="submitField">保存</el-button>
+            </template>
+        </HsxDialog>
+
+        <HsxDialog v-model="optionDialog.visible" :title="optionDialog.form.id ? '编辑选项' : '新增选项'" width="480px" :destroy-on-close="false">
+            <el-form label-width="92px" :model="optionDialog.form">
+                <el-form-item label="选项名称"><el-input v-model="optionDialog.form.option_label" /></el-form-item>
+                <el-form-item label="选项值"><el-input v-model="optionDialog.form.option_value" /></el-form-item>
+                <el-form-item label="默认选中">
+                    <el-switch v-model="optionDialog.form.is_default" :active-value="1" :inactive-value="0" />
+                    <span class="form-tip default-hint">{{ currentFieldIsSingle ? '单选字段：设为默认会取消同字段其它默认项' : '多选字段：可同时设置多个默认项' }}</span>
+                </el-form-item>
+                <el-form-item label="文字颜色">
+                    <el-color-picker v-model="optionDialog.form.extra_config.result_style.text_color" show-alpha />
+                    <span class="color-value">{{ optionDialog.form.extra_config.result_style.text_color || '默认' }}</span>
+                </el-form-item>
+                <el-form-item label="背景颜色">
+                    <el-color-picker v-model="optionDialog.form.extra_config.result_style.background_color" show-alpha />
+                    <span class="color-value">{{ optionDialog.form.extra_config.result_style.background_color || '默认' }}</span>
+                </el-form-item>
+                <el-form-item label="边框颜色">
+                    <el-color-picker v-model="optionDialog.form.extra_config.result_style.border_color" show-alpha />
+                    <span class="color-value">{{ optionDialog.form.extra_config.result_style.border_color || '默认' }}</span>
+                </el-form-item>
+                <el-form-item label="效果预览">
+                    <div class="option-style-preview">
+                        <span
+                            class="option-style-chip option-style-chip--large"
+                            :style="getOptionPreviewStyle(optionDialog.form)"
+                        >{{ optionDialog.form.option_label || '选项预览' }}</span>
+                        <el-button link type="primary" @click="resetOptionStyle">清空样式</el-button>
+                    </div>
+                    <div class="form-tip">颜色会随质检结果元数据保存，用户移动端验机报告会按这里的配置展示。</div>
+                </el-form-item>
+                <el-form-item label="排序"><el-input-number v-model="optionDialog.form.sort" :min="0" /></el-form-item>
+                <el-form-item label="显示"><el-switch v-model="optionDialog.form.is_show" :active-value="1" :inactive-value="0" /></el-form-item>
+            </el-form>
+            <template #footer>
+                <el-button @click="optionDialog.visible = false">取消</el-button>
+                <el-button type="primary" @click="submitOption">保存</el-button>
+            </template>
+        </HsxDialog>
+    </PremiumTheme>
+</template>
+
+<script setup lang="ts">
+import { useDeviceCatalog } from '@/addon/hsx_recycle/composables/useDeviceCatalog'
+import CatalogSourceNotice from '@/addon/hsx_recycle/components/device-entry/CatalogSourceNotice.vue'
+const { catalogPolicy, catalogReadOnly, catalogError, loadCatalog } = useDeviceCatalog()
+import { HsxDialog, HsxDrawer, HsxNotice, useFeedback } from '@/addon/hsx_components/core'
+import PremiumTheme from '@/addon/hsx_recycle/components/PremiumTheme.vue'
+import PageHeader from '@/addon/hsx_recycle/components/PageHeader.vue'
+import { computed, onMounted, reactive, ref } from 'vue'
+import { useRoute } from 'vue-router'
+import { ElMessageBox } from 'element-plus'
+import { Filter } from '@element-plus/icons-vue'
+import {
+    addCheckTemplate,
+    deleteCheckField,
+    deleteCheckGroup,
+    deleteCheckOption,
+    deleteCheckTemplate,
+    editCheckTemplate,
+    getCheckFields,
+    getCheckGroups,
+    getCheckTemplatePages,
+    getCheckTemplateSchema,
+    initDefaultCheckTemplate,
+    saveCheckField,
+    saveCheckGroup,
+    saveCheckOption,
+    setCheckOptionDefault,
+    setDefaultCheckTemplate
+} from '@/addon/hsx_recycle/api/check_template'
+import { getRecycleDeviceModelDictChildren } from '@/addon/hsx_recycle/api/recycle_device_model_dict'
+const hsxFeedback = useFeedback()
+
+
+const templateLoading = ref(false)
+const route = useRoute()
+const groupLoading = ref(false)
+const fieldLoading = ref(false)
+const templates = ref<any[]>([])
+const groups = ref<any[]>([])
+const fields = ref<any[]>([])
+const currentTemplate = ref<any>(null)
+const editorDrawerVisible = ref(false)
+const currentGroup = ref<any>(null)
+const currentField = ref<any>(null)
+const isImportedTemplate = computed(() => currentTemplate.value?.scene === 'pjt')
+// source 默认 manual:进入先看手工模板,避免一次拉上万条导入模板
+const templateQuery = reactive({ keyword: '', source: 'manual' })
+const templatePage = reactive({ page: 1, limit: 50, total: 0 })
+
+const showCategoryTree = ref(false)
+const activeCategory = ref<any>(null)
+const categoryTreeRef = ref<any>(null)
+const categoryTreeProps = {
+    label: 'node_name',
+    isLeaf: (data: any) => Number(data.has_children) !== 1
+}
+const nodeTypeTextMap: Record<string, string> = {
+    category: '分类', subcategory: '子类', brand: '品牌',
+    series: '系列', model: '型号', group: '分组'
+}
+const nodeTypeText = (type: string) => nodeTypeTextMap[type] || ''
+
+const loadCategoryChildren = async (node: any, resolve: (data: any[]) => void) => {
+    try {
+        const pid = node.level === 0 ? 0 : Number(node.data.id)
+        const res: any = await getRecycleDeviceModelDictChildren({ pid, limit: 300 })
+        resolve(res.data || [])
+    } catch (error) {
+        resolve([])
+    }
+}
+
+const toggleCategoryTree = () => {
+    showCategoryTree.value = !showCategoryTree.value
+}
+
+const onCategoryClick = (data: any) => {
+    activeCategory.value = data
+    reloadTemplates()
+}
+
+const clearCategory = () => {
+    activeCategory.value = null
+    categoryTreeRef.value?.setCurrentKey(null)
+    reloadTemplates()
+}
+
+const componentOptions = [
+    { label: '单行输入', value: 'input' },
+    { label: '数字输入', value: 'number' },
+    { label: '单选标签', value: 'radio' },
+    { label: '多选标签', value: 'checkbox' },
+    { label: '下拉选择', value: 'select' },
+    { label: '开关', value: 'switch' },
+    { label: '多行文本', value: 'textarea' }
+]
+
+const templateDialog = reactive({ visible: false, form: {} as any })
+const groupDialog = reactive({ visible: false, form: {} as any })
+const fieldDialog = reactive({ visible: false, form: {} as any })
+const optionDialog = reactive({
+    visible: false,
+    form: {
+        extra_config: {
+            result_style: {
+                text_color: '',
+                background_color: '',
+                border_color: ''
+            }
+        }
+    } as any
+})
+
+const currentFieldOptions = computed(() => currentField.value?.options || [])
+
+// 当前字段是否单选(radio/select 或选择模式为 single):决定默认选中的互斥语义
+const currentFieldIsSingle = computed(() => {
+    const field = currentField.value
+    if (!field) return true
+    return ['radio', 'select'].includes(field.component) || field.selection_mode === 'single'
+})
+
+// 字段当前默认值的可读文案:选项类取默认选项名,其它取 default_value
+const fieldDefaultText = (field: any) => {
+    if (['radio', 'checkbox', 'select'].includes(field?.component)) {
+        const labels = (field.options || [])
+            .filter((opt: any) => Number(opt.is_default) === 1)
+            .map((opt: any) => opt.option_label)
+        return labels.join('、')
+    }
+    if (field?.component === 'switch') {
+        return Number(field.default_value) === 1 || field.default_value === '1' ? '开启' : ''
+    }
+    return field?.default_value ? String(field.default_value) : ''
+}
+
+const setOptionDefault = async (row: any, val: boolean) => {
+    if (isImportedTemplate.value) return
+    const fieldId = currentField.value?.id || 0
+    await setCheckOptionDefault(row.id, val ? 1 : 0)
+    await loadFields(fieldId)
+}
+
+const normalizeExtraConfig = (config: any) => {
+    if (!config) return {}
+    if (typeof config === 'string') {
+        try {
+            const parsed = JSON.parse(config)
+            return parsed && typeof parsed === 'object' ? parsed : {}
+        } catch (error) {
+            return {}
+        }
+    }
+    return typeof config === 'object' ? { ...config } : {}
+}
+
+const defaultOptionStyle = () => ({
+    text_color: '',
+    background_color: '',
+    border_color: ''
+})
+
+const normalizeOptionExtraConfig = (config: any) => {
+    const extra = normalizeExtraConfig(config)
+    const rawStyle = normalizeExtraConfig(extra.result_style || extra.option_style || {})
+    return {
+        ...extra,
+        result_style: {
+            ...defaultOptionStyle(),
+            ...rawStyle,
+            text_color: rawStyle.text_color || extra.text_color || '',
+            background_color: rawStyle.background_color || extra.background_color || extra.bg_color || '',
+            border_color: rawStyle.border_color || extra.border_color || ''
+        }
+    }
+}
+
+const normalizeFieldForm = (field: any) => ({
+    ...field,
+    extra_config: {
+        summary_visible: 0,
+        ...normalizeExtraConfig(field?.extra_config)
+    }
+})
+
+const normalizeOptionForm = (option: any) => ({
+    ...option,
+    extra_config: normalizeOptionExtraConfig(option?.extra_config)
+})
+
+const selectedSummaryFieldCount = computed(() => {
+    return fields.value.filter((field: any) => {
+        const config = normalizeExtraConfig(field.extra_config)
+        const isCurrentField = fieldDialog.form?.id && String(field.id) === String(fieldDialog.form.id)
+        return !isCurrentField && Number(config.summary_visible || 0) === 1
+    }).length
+})
+
+const loadTemplates = async () => {
+    templateLoading.value = true
+    try {
+        const currentId = currentTemplate.value?.id
+        const res: any = await getCheckTemplatePages({
+            keyword: templateQuery.keyword,
+            source: templateQuery.source,
+            category_id: activeCategory.value?.id || 0,
+            category_match: 'subtree',
+            page: templatePage.page,
+            limit: templatePage.limit
+        })
+        templates.value = res.data.data || []
+        templatePage.total = Number(res.data.total || 0)
+        if (!templates.value.length) {
+            currentTemplate.value = null
+            groups.value = []
+            fields.value = []
+            currentGroup.value = null
+            currentField.value = null
+            return
+        }
+
+        const currentMatch = templates.value.find((item: any) => String(item.id) === String(currentId))
+        const defaultTemplate = templates.value.find((item: any) => Number(item.is_default) === 1 && Number(item.status) === 1)
+        const nextTemplate = currentTemplate.value
+            ? (currentMatch || defaultTemplate || templates.value[0])
+            : (defaultTemplate || templates.value[0])
+        await selectTemplate(nextTemplate)
+    } finally {
+        templateLoading.value = false
+    }
+}
+
+// 筛选条件变化:回到第 1 页重新加载
+const reloadTemplates = () => {
+    templatePage.page = 1
+    return loadTemplates()
+}
+
+const selectTemplate = async (row: any) => {
+    currentTemplate.value = row
+    currentGroup.value = null
+    currentField.value = null
+    await loadGroups()
+}
+
+// 点「编辑质检项」才打开抽屉；单纯点行只是选中，不自动弹出
+const openTemplateEditor = async (row: any) => {
+    await selectTemplate(row)
+    editorDrawerVisible.value = true
+}
+
+const loadGroups = async () => {
+    if (!currentTemplate.value) return
+    groupLoading.value = true
+    try {
+        const res: any = await getCheckGroups({ template_id: currentTemplate.value.id })
+        groups.value = res.data || []
+        if (groups.value.length) {
+            await selectGroup(groups.value[0])
+        } else {
+            fields.value = []
+        }
+    } finally {
+        groupLoading.value = false
+    }
+}
+
+const selectGroup = async (row: any) => {
+    currentGroup.value = row
+    currentField.value = null
+    await loadFields()
+}
+
+const loadFields = async (preferredFieldId: number | string = currentField.value?.id || 0) => {
+    if (!currentTemplate.value || !currentGroup.value) return
+    fieldLoading.value = true
+    try {
+        const res: any = await getCheckFields({ template_id: currentTemplate.value.id, group_id: currentGroup.value.id })
+        fields.value = (res.data || []).map(normalizeFieldForm)
+        currentField.value = fields.value.find((item: any) => String(item.id) === String(preferredFieldId)) || fields.value[0] || null
+    } finally {
+        fieldLoading.value = false
+    }
+}
+
+const selectField = (row: any) => {
+    currentField.value = row
+}
+
+const initDefault = async () => {
+    await initDefaultCheckTemplate()
+    currentTemplate.value = null
+    await loadTemplates()
+}
+
+const openTemplateDialog = (row: any = null) => {
+    templateDialog.form = row ? { ...row } : { template_name: '', template_key: '', scene: 'phone', sort: 0, status: 1, is_default: 0 }
+    templateDialog.visible = true
+}
+
+const submitTemplate = async () => {
+    let savedId = templateDialog.form.id || 0
+    if (templateDialog.form.id) {
+        await editCheckTemplate(templateDialog.form.id, templateDialog.form)
+    } else {
+        const res: any = await addCheckTemplate(templateDialog.form)
+        savedId = res.data?.id || 0
+    }
+    templateDialog.visible = false
+    currentTemplate.value = templateDialog.form.is_default ? null : (savedId ? { id: savedId } : currentTemplate.value)
+    await loadTemplates()
+}
+
+const handleTemplateCommand = async (cmd: string, row: any) => {
+    if (cmd === 'edit') return openTemplateDialog(row)
+    if (cmd === 'default') {
+        await setDefaultCheckTemplate(row.id)
+        currentTemplate.value = null
+        await loadTemplates()
+        return
+    }
+    if (cmd === 'delete') {
+        await ElMessageBox.confirm(`确认删除模板「${row.template_name}」？`, '删除确认', { type: 'warning' })
+        await deleteCheckTemplate(row.id)
+        currentTemplate.value = null
+        await loadTemplates()
+    }
+}
+
+const openGroupDialog = (row: any = null) => {
+    if (!currentTemplate.value) return
+    if (isImportedTemplate.value) {
+        hsxFeedback.warning('导入模板使用紧凑结构存储，仅支持查看；如需修改请新建手工模板')
+        return
+    }
+    groupDialog.form = row ? { ...row } : { template_id: currentTemplate.value.id, group_name: '', group_key: '', description: '', sort: 0, status: 1 }
+    groupDialog.visible = true
+}
+
+const submitGroup = async () => {
+    await saveCheckGroup({ ...groupDialog.form, template_id: currentTemplate.value.id })
+    groupDialog.visible = false
+    await loadGroups()
+}
+
+const saveGroupInline = async (row: any) => {
+    if (isImportedTemplate.value) return
+    await saveCheckGroup(row)
+}
+
+const removeGroup = async (row: any) => {
+    if (isImportedTemplate.value) return
+    await ElMessageBox.confirm(`确认删除分组「${row.group_name}」？字段和选项会一起删除。`, '删除确认', { type: 'warning' })
+    await deleteCheckGroup(row.id)
+    await loadGroups()
+}
+
+const openFieldDialog = (row: any = null) => {
+    if (!currentTemplate.value || !currentGroup.value) return
+    fieldDialog.form = row ? normalizeFieldForm(row) : normalizeFieldForm({
+        template_id: currentTemplate.value.id,
+        group_id: currentGroup.value.id,
+        field_name: '',
+        field_key: '',
+        component: 'input',
+        selection_mode: '',
+        unit: '',
+        placeholder: '',
+        default_value: '',
+        is_required: 0,
+        is_show: 1,
+        seller_visible: 1,
+        buyer_visible: 0,
+        result_visible: 1,
+        result_template: '',
+        api_fill_enabled: 0,
+        api_fill_policy: 'empty_only',
+        sort: 0,
+        extra_config: {}
+    })
+    fieldDialog.visible = true
+}
+
+const handleSummaryVisibleChange = (value: any) => {
+    if (Number(value) !== 1) return
+    if (selectedSummaryFieldCount.value < 10) return
+    fieldDialog.form.extra_config.summary_visible = 0
+    hsxFeedback.warning('设备摘要最多展示 10 个字段')
+}
+
+const submitField = async () => {
+    const res: any = await saveCheckField({ ...fieldDialog.form, template_id: currentTemplate.value.id, group_id: currentGroup.value.id })
+    fieldDialog.visible = false
+    await loadFields(fieldDialog.form.id || res.data?.id || 0)
+}
+
+const saveFieldInline = async (row: any) => {
+    const fieldId = row.id
+    try {
+        await saveCheckField(row)
+    } finally {
+        await loadFields(fieldId)
+    }
+}
+
+const removeField = async (row: any) => {
+    if (isImportedTemplate.value) return
+    await ElMessageBox.confirm(`确认删除字段「${row.field_name}」？`, '删除确认', { type: 'warning' })
+    await deleteCheckField(row.id)
+    await loadFields()
+}
+
+const fieldNeedsOptions = (field: any) => ['radio', 'checkbox', 'select'].includes(field?.component)
+
+const openOptionDialog = (row: any = null) => {
+    if (!currentField.value) return
+    if (isImportedTemplate.value) {
+        hsxFeedback.warning('导入模板使用紧凑结构存储，仅支持查看；如需修改请新建手工模板')
+        return
+    }
+    optionDialog.form = row
+        ? normalizeOptionForm(row)
+        : normalizeOptionForm({ field_id: currentField.value.id, option_label: '', option_value: '', sort: 0, is_show: 1, is_default: 0, extra_config: {} })
+    optionDialog.visible = true
+}
+
+const getOptionStyleConfig = (option: any) => {
+    return normalizeOptionExtraConfig(option?.extra_config).result_style
+}
+
+const getOptionPreviewStyle = (option: any) => {
+    const style = getOptionStyleConfig(option)
+    return {
+        color: style.text_color || '#334155',
+        backgroundColor: style.background_color || '#f8fafc',
+        borderColor: style.border_color || style.background_color || '#dbe4ef'
+    }
+}
+
+const resetOptionStyle = () => {
+    optionDialog.form.extra_config = {
+        ...normalizeOptionExtraConfig(optionDialog.form.extra_config),
+        result_style: defaultOptionStyle(),
+        text_color: '',
+        background_color: '',
+        bg_color: '',
+        border_color: ''
+    }
+}
+
+const submitOption = async () => {
+    const fieldId = currentField.value.id
+    const isDefault = Number(optionDialog.form.is_default) === 1
+    const res: any = await saveCheckOption({ ...normalizeOptionForm(optionDialog.form), field_id: fieldId })
+    const savedId = optionDialog.form.id || res?.data?.id || 0
+    // 单选字段:通过专用接口确保默认项互斥(saveOption 本身不清理同字段其它默认)
+    if (isDefault && savedId && currentFieldIsSingle.value) {
+        await setCheckOptionDefault(savedId, 1)
+    }
+    optionDialog.visible = false
+    await loadFields(fieldId)
+}
+
+const saveOptionInline = async (row: any) => {
+    if (isImportedTemplate.value) return
+    const fieldId = currentField.value?.id || 0
+    await saveCheckOption(row)
+    await loadFields(fieldId)
+}
+
+const removeOption = async (row: any) => {
+    if (isImportedTemplate.value) return
+    const fieldId = currentField.value?.id || 0
+    await ElMessageBox.confirm(`确认删除选项「${row.option_label}」？`, '删除确认', { type: 'warning' })
+    await deleteCheckOption(row.id)
+    await loadFields(fieldId)
+}
+
+const openTemplateFromRoute = async () => {
+    const templateId = Number(route.query.template_id || 0)
+    if (templateId <= 0) return
+    try {
+        const res: any = await getCheckTemplateSchema({ template_id: templateId })
+        const template = res.data?.template || null
+        if (!template) {
+            hsxFeedback.warning('指定的质检模板不存在或已停用')
+            return
+        }
+        await openTemplateEditor(template)
+    } catch (error) {
+        hsxFeedback.error('加载指定质检模板失败')
+    }
+}
+
+onMounted(async () => {
+    await loadTemplates()
+    await openTemplateFromRoute()
+})
+</script>
+
+<style scoped>
+.check-template-page {
+    min-height: 100%;
+}
+
+.page-toolbar,
+.panel-head,
+.option-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.page-title {
+    color: #303133;
+    font-size: 20px;
+    font-weight: 700;
+}
+
+.page-subtitle,
+.panel-subtitle,
+.name-sub {
+    color: #909399;
+    font-size: 12px;
+}
+
+.toolbar-actions,
+.inline-switches {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.inline-switches {
+    flex-wrap: wrap;
+}
+
+.form-tip {
+    width: 100%;
+    margin-top: 6px;
+    color: #909399;
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.color-value {
+    margin-left: 10px;
+    color: #64748b;
+    font-size: 12px;
+}
+
+.option-style-preview {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+}
+
+.option-style-chip {
+    max-width: 100%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 24px;
+    padding: 2px 10px;
+    border: 1px solid #dbe4ef;
+    border-radius: 999px;
+    background: #f8fafc;
+    color: #334155;
+    font-size: 12px;
+    line-height: 1.4;
+    word-break: break-all;
+}
+
+.option-style-chip--large {
+    min-height: 30px;
+    padding: 4px 14px;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.workspace {
+    /* 主从布局：左分类树，右模板列表；编辑落到抽屉 */
+    display: grid;
+    grid-template-columns: 300px minmax(0, 1fr);
+    gap: 12px;
+    align-items: start;
+}
+.tree-panel .tree-current {
+    margin: 6px 0 10px;
+    padding: 6px 10px;
+    border-radius: 6px;
+    background: #f5f7fa;
+    color: #909399;
+    font-size: 12px;
+    line-height: 1.5;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.tree-panel .category-filter__tree {
+    max-height: 620px;
+    overflow: auto;
+}
+.list-panel .panel-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 10px;
+}
+.list-head-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+.list-search {
+    width: 220px;
+}
+@media (max-width: 1000px) {
+    .workspace {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* 抽屉内：左分组、右字段+选项 两栏 */
+.editor-drawer-body {
+    display: grid;
+    grid-template-columns: minmax(280px, 0.8fr) minmax(520px, 1.6fr);
+    gap: 12px;
+    align-items: start;
+    padding: 4px 4px 12px;
+}
+@media (max-width: 1100px) {
+    .editor-drawer-body {
+        grid-template-columns: 1fr;
+    }
+}
+
+.template-filter {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.category-filter {
+    margin-bottom: 10px;
+    padding: 8px;
+    border: 1px solid #ebeef5;
+    border-radius: 6px;
+    background: #fafcff;
+}
+
+.category-filter__current {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 6px;
+}
+
+.category-filter__path {
+    overflow: hidden;
+    color: #475569;
+    font-size: 12px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.category-filter__tree {
+    max-height: 220px;
+    overflow: auto;
+    background: transparent;
+}
+
+.category-node {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+}
+
+.category-node__name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.category-node__type {
+    flex: 0 0 auto;
+    color: #b0b7c3;
+    font-size: 11px;
+}
+
+.source-tag {
+    margin-left: 6px;
+    transform: scale(0.88);
+    transform-origin: left center;
+}
+
+.template-pager {
+    margin-top: 10px;
+    justify-content: center;
+}
+
+.name-default {
+    margin-top: 2px;
+    color: #16a34a;
+    font-size: 12px;
+}
+
+.default-hint {
+    margin-top: 0;
+    margin-left: 10px;
+    display: inline;
+}
+
+.panel {
+    min-width: 0;
+    padding: 14px;
+    border: 1px solid #ebeef5;
+    border-radius: 6px;
+    background: #fff;
+}
+
+.panel-title,
+.name-main {
+    color: #303133;
+    font-weight: 600;
+}
+
+.switch-line {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 12px;
+    line-height: 22px;
+}
+
+.field-form {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 14px;
+}
+
+.field-form :deep(.el-form-item:last-child) {
+    grid-column: 1 / -1;
+}
+
+@media (max-width: 1280px) {
+    .workspace {
+        grid-template-columns: 1fr;
+    }
+}
+</style>

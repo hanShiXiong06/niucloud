@@ -10,8 +10,7 @@
                 </div>
             </slot>
         </div>
-        <el-dialog v-model="showDialog" :title="t('goodsSelectPopupSelectGoodsDialog')" width="1000px"
-            :close-on-press-escape="false" :destroy-on-close="true" :close-on-click-modal="false">
+        <el-dialog v-model="showDialog" :title="t('goodsSelectPopupSelectGoodsDialog')" width="1000px" :destroy-on-close="true" :close-on-click-modal="false">
 
             <el-form :inline="true" :model="goodsTable.searchParam" ref="searchFormRef">
                 <el-form-item prop="select_type" class="form-item-wrap">
@@ -21,17 +20,15 @@
                     </el-select>
                 </el-form-item>
                 <el-form-item :label="t('goodsSelectPopupGoodsName')" prop="keyword" class="form-item-wrap">
-                    <el-input v-model.trim="goodsTable.searchParam.keyword"
-                        :placeholder="t('goodsSelectPopupGoodsNamePlaceholder')" maxlength="60" />
+                    <el-input v-model.trim="goodsTable.searchParam.keyword" :placeholder="t('goodsSelectPopupGoodsNamePlaceholder')" maxlength="60" />
                 </el-form-item>
                 <el-form-item :label="t('goodsSelectPopupGoodsCategory')" prop="goods_category" class="form-item-wrap">
-                    <el-cascader v-model="goodsTable.searchParam.goods_category" :options="goodsCategoryOptions"
-                        :placeholder="t('goodsSelectPopupGoodsCategoryPlaceholder')" clearable
-                        :props="{ value: 'value', label: 'label', emitPath: false }" />
+                    <el-cascader  v-model="goodsTable.searchParam.goods_category"
+                        :options="goodsCategoryOptions" :placeholder="t('goodsSelectPopupGoodsCategoryPlaceholder')"
+                        clearable :props="{ value: 'value', label: 'label', emitPath:false }" />
                 </el-form-item>
                 <el-form-item :label="t('goodsSelectPopupGoodsType')" prop="goods_type" class="form-item-wrap">
-                    <el-select v-model="goodsTable.searchParam.goods_type"
-                        :placeholder="t('goodsSelectPopupGoodsTypePlaceholder')" clearable>
+                    <el-select v-model="goodsTable.searchParam.goods_type" :placeholder="t('goodsSelectPopupGoodsTypePlaceholder')" clearable>
                         <el-option v-for="item in goodsType" :key="item.type" :label="item.name" :value="item.type" />
                     </el-select>
                 </el-form-item>
@@ -45,82 +42,62 @@
                 <div class="table-head flex items-center bg-[#f5f7f9] py-[8px]">
                     <div class="w-[3%]"></div>
                     <div class="w-[7%]">
-                        <el-checkbox v-model="staircheckAll" :indeterminate="isStairIndeterminate"
-                            @change="handleCheckAllChange" />
+                        <el-checkbox v-model="staircheckAll" :indeterminate="isStairIndeterminate" @change="handleCheckAllChange" />
                     </div>
                     <div class="w-[50%]">商品信息</div>
                     <div class="w-[20%]">商品价格</div>
                     <div class="w-[20%]">库存</div>
                 </div>
                 <div class="table-body h-[350px] overflow-y-auto">
-                    <div v-for="(row, rowIndex) in goodsTable.data" :key="rowIndex" class="flex flex-col">
+                    <div v-for="(row,rowIndex) in goodsTable.data" :key="rowIndex" class="flex flex-col">
                         <!-- 内容 -->
                         <div class="flex items-center border-solid border-[#e5e7eb] py-[8px] border-b-[1px]">
                             <div v-if="prop.mode == 'spu'" class="w-[3%]"></div>
-                            <div v-if="prop.mode == 'sku' && row.skuList.length > 1"
-                                class="w-[3%] cursor-pointer text-center !text-[10px]"
-                                @click="secondLevelArrowChange(row)"
-                                :class="{ 'iconfont iconxiangyoujiantou': row.skuList.length, 'arrow-show': row.isShow }">
-                            </div>
+                            <div v-if="prop.mode == 'sku' && row.skuList.length > 1" class="w-[3%] cursor-pointer text-center !text-[10px]" @click="secondLevelArrowChange(row)" :class="{'iconfont iconxiangyoujiantou': row.skuList.length, 'arrow-show': row.isShow}"></div>
                             <div v-if="prop.mode == 'sku' && row.skuList.length <= 1" class="w-[3%]"></div>
                             <div class="w-[7%]">
-                                <el-checkbox v-model="row.secondLevelCheckAll"
-                                    :indeterminate="row.isSecondLevelIndeterminate"
-                                    @change="secondLevelHandleCheckAllChange($event, row)" />
+                                <el-checkbox v-model="row.secondLevelCheckAll" :indeterminate="row.isSecondLevelIndeterminate" @change="secondLevelHandleCheckAllChange($event,row)" />
                             </div>
                             <div class="flex items-center cursor-pointer w-[50%]">
                                 <div class="min-w-[60px] h-[60px] flex items-center justify-center">
-                                    <el-image v-if="row.goods_cover_thumb_small" class="w-[60px] h-[60px]"
-                                        :src="img(row.goods_cover_thumb_small)" fit="contain">
+                                    <el-image v-if="row.goods_cover_thumb_small" class="w-[60px] h-[60px]" :src="img(row.goods_cover_thumb_small)" fit="contain">
                                         <template #error>
                                             <div class="image-slot">
-                                                <img class="w-[60px] h-[60px]"
-                                                    src="@/addon/phone_shop//assets/goods_default.png" />
+                                                <img class="w-[60px] h-[60px]" src="@/addon/phone_shop/assets/goods_default.png" />
                                             </div>
                                         </template>
                                     </el-image>
-                                    <img v-else class="w-[60px] h-[60px]"
-                                        src="@/addon/phone_shop//assets/goods_default.png" fit="contain" />
+                                    <img v-else class="w-[60px] h-[60px]" src="@/addon/phone_shop/assets/goods_default.png" fit="contain" />
                                 </div>
                                 <div class="ml-2">
-                                    <span :title="row.goods_name" class="multi-hidden leading-[1.4]">{{ row.goods_name
-                                        }}</span>
+                                    <span :title="row.goods_name" class="multi-hidden leading-[1.4]">{{ row.goods_name }}</span>
                                     <span class="text-primary text-[12px]">{{ row.goods_type_name }}</span>
                                 </div>
                             </div>
-                            <div class="w-[20%]">￥{{ row.skuList.length > 1 ? row.goodsSku.price :
-                                row.goodsSku.newcomer_price }}</div>
-                            <div class="w-[20%]">{{ row.stock }}</div>
+                            <div class="w-[20%]">￥{{ row.skuList.length > 1 ? row.goodsSku.price : row.goodsSku.newcomer_price }}</div>
+                            <div class="w-[20%]">{{row.stock}}</div>
                         </div>
 
                         <div v-show="prop.mode == 'sku' && row.skuList.length > 1">
                             <!-- 子级 -->
-                            <div v-for="(item, index) in row.skuList" :key="index"
-                                class="flex items-center py-[8px] border-solid border-transparent border-b-[1px]"
-                                :class="{ 'hidden': !row.isShow, 'border-[#e5e7eb]': index == (row.skuList.length - 1) }">
+                            <div v-for="(item,index) in row.skuList" :key="index" class="flex items-center py-[8px] border-solid border-transparent border-b-[1px]" :class="{'hidden': !row.isShow, 'border-[#e5e7eb]': index == (row.skuList.length-1)}">
                                 <div class="w-[6%]"></div>
                                 <div class="w-[4%]">
-                                    <el-checkbox v-model="item.threeLevelCheckAll"
-                                        @change="subChildHandleCheckAllChange($event, row, item)" />
+                                    <el-checkbox v-model="item.threeLevelCheckAll"  @change="subChildHandleCheckAllChange($event,row,item)" />
                                 </div>
                                 <div class="flex items-center cursor-pointer w-[50%]">
                                     <div class="min-w-[60px] h-[60px] flex items-center justify-center">
-                                        <el-image v-if="item.sku_image" class="w-[60px] h-[60px]"
-                                            :src="img(item.sku_image)" fit="contain">
+                                        <el-image v-if="item.sku_image" class="w-[60px] h-[60px]" :src="img(item.sku_image)" fit="contain">
                                             <template #error>
                                                 <div class="image-slot">
-                                                    <img class="w-[60px] h-[60px]"
-                                                        src="@/addon/phone_shop//assets/goods_default.png" />
+                                                    <img class="w-[60px] h-[60px]" src="@/addon/phone_shop/assets/goods_default.png" />
                                                 </div>
                                             </template>
                                         </el-image>
-                                        <img v-else class="w-[60px] h-[60px]"
-                                            src="@/addon/phone_shop//assets/goods_default.png" fit="contain" />
+                                        <img v-else class="w-[60px] h-[60px]" src="@/addon/phone_shop/assets/goods_default.png" fit="contain" />
                                     </div>
                                     <div class="ml-2">
-                                        <span :title="item.sku_name || row.goods_name"
-                                            class="multi-hidden leading-[1.4]">{{ item.sku_name ||
-                                            row.goods_name }}</span>
+                                        <span :title="item.sku_name || row.goods_name" class="multi-hidden leading-[1.4]">{{ item.sku_name || row.goods_name }}</span>
                                         <span class="text-primary text-[12px]">{{ row.goods_type_name }}</span>
                                     </div>
                                 </div>
@@ -130,24 +107,18 @@
                         </div>
                     </div>
 
-                    <div v-if="!goodsTable.data.length && !goodsTable.loading"
-                        class="h-[60px] flex items-center justify-center border-solid border-[#e5e7eb] py-[12px] border-b-[1px]">
-                        暂无数据
-                    </div>
+                    <div v-if="!goodsTable.data.length && !goodsTable.loading" class="h-[60px] flex items-center justify-center border-solid border-[#e5e7eb] py-[12px] border-b-[1px]">暂无数据</div>
                 </div>
             </div>
 
-
             <div class="mt-[16px] flex">
                 <div class="flex items-center flex-1">
-                    <div class="layui-table-bottom-left-container mr-[10px]" v-show="selectGoodsNum">
+                    <div class="mr-[10px]" v-show="selectGoodsNum">
                         <span>{{ t('goodsSelectPopupBeforeTip') }}</span>
                         <span class="text-primary mx-[2px]">{{ selectGoodsNum }}</span>
                         <span>{{ t('goodsSelectPopupAfterTip') }}</span>
                     </div>
-                    <el-button type="primary" link @click="clear" v-show="selectGoodsNum">{{
-                        t('goodsSelectPopupClearGoods')
-                        }}</el-button>
+                    <el-button type="primary" link @click="clear" v-show="selectGoodsNum">{{ t('goodsSelectPopupClearGoods') }}</el-button>
                 </div>
                 <el-pagination v-model:current-page="goodsTable.page" v-model:page-size="goodsTable.limit"
                     layout="total, sizes, prev, pager, next, jumper" :total="goodsTable.total"
@@ -168,12 +139,11 @@
 import { t } from '@/lang'
 import { ref, reactive, computed, nextTick } from 'vue'
 import { cloneDeep } from 'lodash-es'
-import { img, deepClone } from '@/utils/common'
+import { img,deepClone } from '@/utils/common'
 import { ElMessage } from 'element-plus'
-import { getGoodsSelectPageList, getGoodsSkuNoPageList, getCategoryTree, getGoodsType } from '@/addon/phone_shop//api/goods'
-import { getNewcomerSelectGoodsList, getNewcomerGoodsList } from '@/addon/phone_shop//api/marketing'
+import { getCategoryTree, getGoodsType } from '@/addon/phone_shop/api/goods'
+import { getNewcomerSelectGoodsList, getNewcomerGoodsList } from '@/addon/phone_shop/api/marketing'
 
-import { number } from 'echarts'
 const prop = defineProps({
     modelValue: {
         type: String,
@@ -197,20 +167,19 @@ const prop = defineProps({
     },
 })
 
-const emit = defineEmits(['update:modelValue', 'goodsSelect'])
+const emit = defineEmits(['update:modelValue','goodsSelect'])
 
 // 通过prop.mode来决定 数据前缀是sku_还是goods_
 let replacePrefix = prop.mode == "sku" ? 'sku_' : 'goods_';
-
 
 const isStairIndeterminate = ref(false);
 const staircheckAll = ref(false);
 
 const goodsIds: any = computed({
-    get() {
+    get () {
         return prop.modelValue
     },
-    set(value) {
+    set (value) {
         emit('update:modelValue', value)
     }
 })
@@ -260,7 +229,7 @@ const goodsType: any = reactive([])
 
 // 初始化数据
 const initData = () => {
-    // 查询商品分类树结构
+// 查询商品分类树结构
     getCategoryTree().then((res) => {
         const data = res.data
         if (data) {
@@ -300,19 +269,15 @@ initData()
 
 const goodsListTableRef = ref()
 
-// 选中数据
-const multipleSelection: any = ref([])
-
-
 // 箭头选择事件
-const secondLevelArrowChange = (data) => {
+const secondLevelArrowChange = (data)=>{
     data.isShow = !data.isShow;
 }
 
 // 一级复选框
-const handleCheckAllChange = (isSelect) => {
+const handleCheckAllChange = (isSelect) =>{
     isStairIndeterminate.value = false;
-    goodsTable.data.forEach((item, index) => {
+    goodsTable.data.forEach((item,index) => {
         item.secondLevelCheckAll = isSelect;
         item.skuList.forEach((subItem, subIndex) => {
             subItem.threeLevelCheckAll = isSelect;
@@ -320,11 +285,11 @@ const handleCheckAllChange = (isSelect) => {
     });
     if (isSelect) {
         goodsTable.data.forEach((item: any) => {
-            if (prop.mode == 'spu') {
+            if(prop.mode == 'spu') {
                 selectGoods[replacePrefix + item.goods_id] = item
                 selectGoodsId.push(item.goods_id)
-            } else {
-                item.skuList.forEach((skuItem: any) => {
+            }else{
+                item.skuList.forEach((skuItem:any)=>{
                     selectGoodsId.push(skuItem.sku_id);
                     selectGoods[replacePrefix + skuItem.sku_id] = deepClone(skuItem);
                     selectGoods[replacePrefix + skuItem.sku_id].goods_name = item.goods_name; // 多规格模式，要增加商品名称、商品类型，后续还会增加，满足不同业务场景
@@ -337,11 +302,11 @@ const handleCheckAllChange = (isSelect) => {
     } else {
         // 未选中，删除当前页面的数据
         goodsTable.data.forEach((item: any) => {
-            if (prop.mode == 'spu') {
+            if(prop.mode == 'spu') {
                 selectGoodsId.splice(selectGoodsId.indexOf(item.goods_id), 1)
                 delete selectGoods[replacePrefix + item.goods_id]
-            } else {
-                item.skuList.forEach((skuItem: any) => {
+            }else{
+                item.skuList.forEach((skuItem:any)=>{
                     selectGoodsId.splice(selectGoodsId.indexOf(skuItem.sku_id), 1)
                     delete selectGoods[replacePrefix + skuItem.sku_id]
                 })
@@ -351,25 +316,25 @@ const handleCheckAllChange = (isSelect) => {
 }
 
 // 二级复选框
-const secondLevelHandleCheckAllChange = (isSelect, row) => {
+const secondLevelHandleCheckAllChange = (isSelect,row)=>{
 
-    row.skuList.forEach((item, index) => {
+    row.skuList.forEach((item,index) => {
         item.threeLevelCheckAll = isSelect;
     });
     detectionAllSelect();
 
-    if (prop.mode == 'spu') {
+    if(prop.mode == 'spu'){
         if (isSelect) {
             selectGoodsId.push(row.goods_id)
             selectGoods[replacePrefix + row.goods_id] = deepClone(row)
         } else {
-            selectGoodsId.splice(selectGoodsId.indexOf(row.goods_id), 1)
+            selectGoodsId.splice(selectGoodsId.indexOf(row.goods_id),1)
             // 未选中，删除当前商品
             delete selectGoods[replacePrefix + row.goods_id]
         }
-    } else {
+    }else{
         if (isSelect) {
-            row.skuList.forEach((item, index) => {
+            row.skuList.forEach((item,index) => {
                 selectGoodsId.push(item.sku_id);
                 selectGoods[replacePrefix + item.sku_id] = deepClone(item);
                 selectGoods[replacePrefix + item.sku_id].goods_name = row.goods_name; // 多规格模式，要增加商品名称、商品类型，后续还会增加，满足不同业务场景
@@ -377,8 +342,8 @@ const secondLevelHandleCheckAllChange = (isSelect, row) => {
                 selectGoods[replacePrefix + item.sku_id].goods_type = row.goods_type;
             });
         } else {
-            row.skuList.forEach((item, index) => {
-                selectGoodsId.splice(selectGoodsId.indexOf(item.sku_id), 1)
+            row.skuList.forEach((item,index) => {
+                selectGoodsId.splice(selectGoodsId.indexOf(item.sku_id),1)
                 // 未选中，删除当前商品
                 delete selectGoods[replacePrefix + item.sku_id]
             });
@@ -391,38 +356,37 @@ const secondLevelHandleCheckAllChange = (isSelect, row) => {
     // }, 0);
 
     // 当所选数量超出限制数量【prop.max】时，添加一个就会删除开头的第一个或多个，最终保证所选的数量小于等于prop.max
-    if (prop.max && prop.max > 0 && Object.keys(selectGoods).length > 0 && Object.keys(selectGoods).length > prop.max) {
+    if(prop.max && prop.max > 0 && Object.keys(selectGoods).length > 0 && Object.keys(selectGoods).length > prop.max){
         let len = Object.keys(selectGoods).length;
         len = len - prop.max;
 
         let goodsIdCopy = cloneDeep(selectGoodsId);
-        goodsIdCopy.forEach((item, index, arr) => {
-            if (index < len) {
+        goodsIdCopy.forEach((item,index,arr) => {
+            if(index < len){
                 let indent = selectGoodsId.indexOf(item)
-                delete selectGoods[replacePrefix + selectGoodsId[indent]]
-                selectGoodsId.splice(indent, 1)
+                delete selectGoods[replacePrefix+selectGoodsId[indent]]
+                selectGoodsId.splice(indent,1)
             }
         });
         setGoodsSelected();
     }
 }
 
-
 // 三级复选框
-const subChildHandleCheckAllChange = (selected: any, parentData: any, data: any) => {
+const subChildHandleCheckAllChange  = (selected: any,parentData: any,data: any)=>{
     let selectNum = 0;
-    parentData.skuList.forEach((item, index) => {
-        if (item.threeLevelCheckAll) {
+    parentData.skuList.forEach((item,index) => {
+        if(item.threeLevelCheckAll){
             selectNum++;
         }
     });
-    if (selectNum > 0 && selectNum != parentData.skuList.length) {
+    if(selectNum > 0 && selectNum != parentData.skuList.length){
         parentData.secondLevelCheckAll = false;
         parentData.isSecondLevelIndeterminate = true;
-    } else if (selectNum == parentData.skuList.length) {
+    }else if(selectNum == parentData.skuList.length){
         parentData.isSecondLevelIndeterminate = false;
         parentData.secondLevelCheckAll = true
-    } else {
+    }else{
         parentData.isSecondLevelIndeterminate = false;
         parentData.secondLevelCheckAll = false;
     }
@@ -431,15 +395,15 @@ const subChildHandleCheckAllChange = (selected: any, parentData: any, data: any)
 
     let currSku = deepClone(data)
 
-    if (selected) {
+    if(selected){
         selectGoodsId.push(currSku.sku_id);
 
         currSku.goods_name = parentData.goods_name; // 多规格模式，要增加商品名称、商品类型，后续还会增加，满足不同业务场景
         currSku.goods_type_name = parentData.goods_type_name;
         currSku.goods_type = parentData.goods_type;
         selectGoods[replacePrefix + currSku.sku_id] = currSku;
-    } else {
-        selectGoodsId.splice(selectGoodsId.indexOf(currSku.sku_id), 1)
+    }else{
+        selectGoodsId.splice(selectGoodsId.indexOf(currSku.sku_id),1)
         // 未选中，删除当前商品
         delete selectGoods[replacePrefix + currSku.sku_id]
     }
@@ -447,21 +411,21 @@ const subChildHandleCheckAllChange = (selected: any, parentData: any, data: any)
 
 
 // 检测是否选中
-const detectionAllSelect = () => {
+const detectionAllSelect = ()=> {
     let selectNum = 0;
-    goodsTable.data.forEach((item, index) => {
-        if (item.secondLevelCheckAll) {
+    goodsTable.data.forEach((item,index) => {
+        if(item.secondLevelCheckAll){
             selectNum++;
         }
     });
 
-    if (selectNum > 0 && selectNum != goodsTable.data.length) {
+    if(selectNum > 0 && selectNum != goodsTable.data.length){
         staircheckAll.value = false;
         isStairIndeterminate.value = true;
-    } else if (selectNum > 0 && selectNum == goodsTable.data.length) {
+    }else if(selectNum > 0 && selectNum == goodsTable.data.length){
         isStairIndeterminate.value = false;
         staircheckAll.value = true
-    } else {
+    }else{
         isStairIndeterminate.value = false;
         staircheckAll.value = false;
     }
@@ -484,9 +448,9 @@ const loadGoodsList = (page: number = 1, callback: any = null) => {
         for (let k in selectGoods) {
             goods_ids.push(parseInt(k.replace(replacePrefix, '')))
         }
-        searchData[replacePrefix + 'ids'] = goods_ids
+        searchData[replacePrefix+'ids'] = goods_ids
     } else {
-        searchData[replacePrefix + 'ids'] = '';
+        searchData[replacePrefix+'ids'] = '';
     }
 
     getNewcomerGoodsList({
@@ -501,7 +465,7 @@ const loadGoodsList = (page: number = 1, callback: any = null) => {
             item.secondLevelCheckAll = false;
         })
 
-        if (prop.mode == "sku") {
+        if(prop.mode == "sku") {
             goodsTableData.forEach((item: any) => {
                 if (item.skuList.length) {
                     item.skuList.forEach((skuItem: any) => {
@@ -527,14 +491,14 @@ const loadGoodsList = (page: number = 1, callback: any = null) => {
 // 表格设置选中状态 spu
 const setGoodsSelected = () => {
     nextTick(() => {
-        if (prop.mode == "spu") {
+        if(prop.mode == "spu"){
             for (let i = 0; i < goodsTable.data.length; i++) {
                 goodsTable.data[i].secondLevelCheckAll = false;
                 if (selectGoods[replacePrefix + goodsTable.data[i].goods_id]) {
                     goodsTable.data[i].secondLevelCheckAll = true;
                 }
             }
-        } else {
+        }else{
             let isAllSelectSku = true;
             for (let i = 0; i < goodsTable.data.length; i++) {
                 goodsTable.data[i].secondLevelCheckAll = false;
@@ -542,16 +506,16 @@ const setGoodsSelected = () => {
                 isAllSelectSku = true;
 
                 goodsTable.data[i].isSecondLevelIndeterminate = false;
-                goodsTable.data[i].skuList.forEach((item, index) => {
+                goodsTable.data[i].skuList.forEach((item,index) => {
                     item.threeLevelCheckAll = false;
                     if (selectGoods[replacePrefix + item.sku_id]) {
                         goodsTable.data[i].isSecondLevelIndeterminate = true;
                         item.threeLevelCheckAll = true;
-                    } else {
+                    }else{
                         isAllSelectSku = false;
                     }
                 });
-                if (isAllSelectSku) {
+                if(isAllSelectSku){
                     goodsTable.data[i].isSecondLevelIndeterminate = false;
                     goodsTable.data[i].secondLevelCheckAll = true;
                 }
@@ -589,10 +553,10 @@ const show = () => {
         if (goodsIds.value && goodsIds.value.length) {
             goodsIds.value.splice(0, goodsIds.value.length, ...verify_ids)
             selectGoodsId.splice(0, selectGoodsId.length, ...verify_ids)
-            if (Object.keys(selectGoods).length) {
-                for (let key in selectGoods) {
+            if(Object.keys(selectGoods).length){
+                for(let key in selectGoods){
                     let num = Number(key.split(replacePrefix)[1]);
-                    if (goodsIds.value.indexOf(num) == -1) {
+                    if(goodsIds.value.indexOf(num) == -1){
                         delete selectGoods[key];
                     }
                 }
@@ -603,9 +567,9 @@ const show = () => {
     showDialog.value = true
 }
 
-const getGoodsSkuNoPageListFn = () => {
+const getGoodsSkuNoPageListFn = () =>{
     const searchData = cloneDeep(goodsTable.searchParam);
-    getNewcomerSelectGoodsList({ ...searchData }).then((res: any) => {
+    getNewcomerSelectGoodsList({...searchData}).then((res:any)=>{
         const selectGoodsData = res.data;
         // 赋值已选择的商品
         if (prop.mode == 'sku') {
@@ -627,15 +591,14 @@ const getGoodsSkuNoPageListFn = () => {
             }
         }
 
-        if (Object.keys(selectGoods).length && goodsIds.value.length) {
-            for (let key in selectGoods) {
+        if(Object.keys(selectGoods).length && goodsIds.value.length){
+            for(let key in selectGoods){
                 let num = Number(key.split(replacePrefix)[1]);
-                if (goodsIds.value.indexOf(num) == -1) {
+                if(goodsIds.value.indexOf(num) == -1){
                     delete selectGoods[key];
                 }
             }
         }
-
 
         setGoodsSelected();
     })
@@ -666,13 +629,13 @@ const save = () => {
         return;
     }
 
-    if (prop.way == 'single') {
+    if(prop.way == 'single'){
         let realTypeNum = 0;
         let virtualTypeNum = 0;
         for (let k in selectGoods) {
-            if (selectGoods[k].goods_type == "virtual") {
+            if(selectGoods[k].goods_type == "virtual"){
                 virtualTypeNum++;
-            } else if (selectGoods[k].goods_type == "real") {
+            }else if(selectGoods[k].goods_type == "real"){
                 realTypeNum++;
             }
         }
@@ -692,13 +655,13 @@ const save = () => {
     }
 
     goodsIds.value.splice(0, goodsIds.value.length, ...ids)
-    emit('goodsSelect', selectGoods)
+    emit('goodsSelect',selectGoods)
     initSearchParam();
     showDialog.value = false
 }
 
 // 重置表单搜索
-const initSearchParam = () => {
+const initSearchParam = ()=>{
     goodsTable.searchParam.keyword = '';
     goodsTable.searchParam.goods_category = [];
     goodsTable.searchParam.select_type = 'all';
@@ -724,8 +687,7 @@ defineExpose({
         margin-right: 0 !important;
     }
 }
-
-.arrow-show {
+.arrow-show{
     transform: rotate(90deg);
 }
 </style>

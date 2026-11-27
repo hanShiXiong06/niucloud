@@ -24,6 +24,7 @@ class Label extends BaseAdminController
 {
     /**
      * 获取商品标签分页列表
+     * @description 获取商品标签列表-分页
      * @return \think\Response
      */
     public function pages()
@@ -31,6 +32,7 @@ class Label extends BaseAdminController
         $data = $this->request->params([
             [ "label_name", "" ],
             [ 'group_id', 0 ],
+            [ 'status', '' ],
             [ 'order', '' ],
             [ 'sort', '' ]
         ]);
@@ -39,6 +41,7 @@ class Label extends BaseAdminController
 
     /**
      * 获取商品标签列表
+     * @description 获取商品标签列表-全部
      * @return \think\Response
      */
     public function lists()
@@ -51,6 +54,7 @@ class Label extends BaseAdminController
 
     /**
      * 商品标签详情
+     * @description 查看商品标签详情
      * @param int $id
      * @return \think\Response
      */
@@ -61,6 +65,7 @@ class Label extends BaseAdminController
 
     /**
      * 添加商品标签
+     * @description 添加商品标签
      * @return \think\Response
      */
     public function add()
@@ -75,15 +80,16 @@ class Label extends BaseAdminController
             [ "memo", "" ],
             [ "sort", 0 ],
         ]);
-        
-        // $this->validate($data, 'addon\phone_shop\app\validate\goods\Label.add');
+
+        $this->validate($data, 'addon\phone_shop\app\validate\goods\Label.add');
         $id = ( new LabelService() )->add($data);
         return success('ADD_SUCCESS', [ 'id' => $id ]);
     }
 
     /**
      * 商品标签编辑
-     * @param $id  商品标签id
+     * @description 编辑商品标签
+     * @param $id  `商品标签id`
      * @return \think\Response
      */
     public function edit($id)
@@ -99,13 +105,14 @@ class Label extends BaseAdminController
             [ "sort", 0 ],
 
         ]);
-        // $this->validate($data, 'addon\shop\app\validate\goods\Label.edit');
+        $this->validate($data, 'addon\phone_shop\app\validate\goods\Label.edit');
         ( new LabelService() )->edit($id, $data);
         return success('EDIT_SUCCESS');
     }
 
     /**
      * 商品标签删除
+     * @description 删除商品标签
      * @param $id  商品标签id
      * @return \think\Response
      */
@@ -117,6 +124,7 @@ class Label extends BaseAdminController
 
     /**
      * 修改排序
+     * @description 修改商品标签排序
      * @return \think\Response
      */
     public function modifySort()
@@ -131,15 +139,31 @@ class Label extends BaseAdminController
 
     /**
      * 修改状态
+     * @description 添加商品标签状态
      * @return \think\Response
      */
     public function modifyStatus()
     {
         $data = $this->request->params([
             [ 'label_id', '' ],
+            [ 'label_ids', null ],
             [ 'status', '' ],
         ]);
-        ( new LabelService() )->modifyStatus($data);
+        return success('SUCCESS', (new LabelService())->modifyStatus($data));
+    }
+
+    /**
+     * 复制分类
+     * @description 复制商品标签
+     * @param int $id
+     * @return \think\Response
+     * @throws \think\db\exception\DataNotFoundException
+     * @throws \think\db\exception\DbException
+     * @throws \think\db\exception\ModelNotFoundException
+     */
+    public function copy(int $id)
+    {
+        (new LabelService())->copy($id);
         return success('SUCCESS');
     }
 

@@ -24,6 +24,7 @@ class Category extends BaseAdminController
 {
     /**
      * 获取商品分类列表
+     * @description 查看商品分类列表-分页
      * @return \think\Response
      */
     public function pages()
@@ -36,6 +37,7 @@ class Category extends BaseAdminController
 
     /**
      * 获取商品分类列表
+     * @description 查看商品分类列表-全部
      * @return \think\Response
      */
     public function lists()
@@ -49,19 +51,17 @@ class Category extends BaseAdminController
 
     /**
      * 获取商品分类树结构
+     * @description 查看商品分类树结构-树结构
      * @return \think\Response
      */
     public function tree()
     {
-        $data = $this->request->params([
-            [ "flag", 0 ],
-           
-        ]);
-        return success(( new CategoryService() )->getTree( $data ));
+        return success(( new CategoryService() )->getTree());
     }
 
     /**
      * 商品分类详情
+     * @description 查看商品分类详情
      * @param int $id
      * @return \think\Response
      */
@@ -72,6 +72,7 @@ class Category extends BaseAdminController
 
     /**
      * 添加商品分类
+     * @description 添加商品分类
      * @return \think\Response
      */
     public function add()
@@ -81,8 +82,7 @@ class Category extends BaseAdminController
             [ "image", "" ],
             [ "pid", 0 ],
             [ "is_show", 0 ],
-            [ "sort", 0 ],
-            [ "memory_group", 0 ]
+            [ "sort", 0 ]
         ]);
         $this->validate($data, 'addon\phone_shop\app\validate\goods\Category.add');
         $id = ( new CategoryService() )->add($data);
@@ -91,6 +91,7 @@ class Category extends BaseAdminController
 
     /**
      * 商品分类编辑
+     * @description 编辑商品分类
      * @param $id  商品分类id
      * @return \think\Response
      */
@@ -101,8 +102,7 @@ class Category extends BaseAdminController
             [ "image", "" ],
             [ "pid", 0 ],
             [ "is_show", 0 ],
-            [ "sort", '' ],
-            [ "memory_group", '' ]
+            [ "sort", '' ]
         ]);
         $this->validate($data, 'addon\phone_shop\app\validate\goods\Category.edit');
         ( new CategoryService() )->edit($id, $data);
@@ -111,6 +111,7 @@ class Category extends BaseAdminController
 
     /**
      * 商品分类删除
+     * @description 删除商品分类
      * @param $id  商品分类id
      * @return \think\Response
      */
@@ -122,6 +123,7 @@ class Category extends BaseAdminController
 
     /**
      * 拖拽修改分类
+     * @description 拖拽修改分类排序
      */
     public function editCategory()
     {
@@ -134,6 +136,7 @@ class Category extends BaseAdminController
 
     /**
      * 设置商品分类配置
+     * @description 设置商品分类配置
      * @return \think\Response
      */
     public function setGoodsCategoryConfig()
@@ -146,6 +149,10 @@ class Category extends BaseAdminController
             [ "goods", "" ],
             [ "sort", "" ],
             [ "cart", '' ],
+            [ "show_quality", 0 ],
+            [ "warehouse_switch", 0 ],
+            [ "detail_login_required", 0 ],
+            [ "imei_tail_only", 0 ],
         ]);
         ( new CategoryService() )->setGoodsCategoryConfig($data);
         return success('SUCCESS');
@@ -153,6 +160,7 @@ class Category extends BaseAdminController
 
     /**
      * 获取商品分类配置
+     * @description 查看商品分类配置
      * @return \think\Response
      */
     public function getGoodsCategoryConfig()
@@ -162,6 +170,7 @@ class Category extends BaseAdminController
 
     /**
      * 获取商品分类树结构供弹框调用
+     * @description 获取商品分类树结构供弹框调用-树结构
      * @return \think\Response
      */
     public function components()

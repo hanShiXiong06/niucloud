@@ -1,7 +1,7 @@
 <template>
     <view :style="warpCss" class="goods-carousel-search-wrap">
         <view class="relative pb-[20rpx]">
-            <view class="bg-img" :class="{'!-bottom-[200rpx]': diyComponent.bgGradient == true}">
+            <view class="bg-img" :class="{'imp-minus-bottom200': diyComponent.bgGradient == true}">
                 <image
                     v-if="diyComponent.swiper.control && diyComponent.swiper.list && diyComponent.swiper.list[swiperIndex].imageUrl"
                     :src="img(diyComponent.swiper.list[swiperIndex].imageUrl)" mode="scaleToFill" class="w-full h-full"
@@ -87,7 +87,7 @@
             </template>
 
             <!-- 轮播图 -->
-            <view class="relative" :class="{'mx-[20rpx]': swiperStyleBool && diyComponent.swiper.swiperStyle != 'style-3', 'swiper-style-3': diyComponent.swiper.swiperStyle == 'style-3'}" :style="carouselSwiperStyle()">
+            <view class="relative" :class="{'mx20': swiperStyleBool && diyComponent.swiper.swiperStyle != 'style-3', 'swiper-style-3': diyComponent.swiper.swiperStyle == 'style-3'}" :style="carouselSwiperStyle()">
                 <swiper v-if="diyComponent.swiper.control" class="swiper" :style="{ height: imgHeight }" autoplay="true"
                         circular="true" @change="swiperChange"
                         :class="{ 'swiper-left': diyComponent.swiper.indicatorAlign == 'left', 'swiper-right': diyComponent.swiper.indicatorAlign == 'right', 'ns-indicator-dots': diyComponent.swiper.indicatorStyle == 'style-2', 'ns-indicator-dots-three': diyComponent.swiper.indicatorStyle == 'style-3' }"
@@ -128,8 +128,8 @@
             <u-popup :safeAreaInsetTop="true" :show="tabAllPopup" mode="top" @close="tabAllPopup = false">
                 <view class="text-sm px-[30rpx] pt-3" :style="{'padding-top':(systemStore.menuButtonInfo.top+'px')}">全部分类</view>
                 <view class="flex flex-wrap pl-[30rpx] pt-[30rpx]">
-                    <view @click="changeData({ source : 'home' },-1)" :class="['px-[26rpx] border-[2rpx] border-solid border-transparent h-[60rpx] mr-[30rpx] mb-[30rpx] flex items-center justify-center bg-[#F4F4F4] rounded-[8rpx] text-xs', { 'tab-select-popup': currTabIndex == -1 }]">首页</view>
-                    <text @click="changeData(item,index)" v-for="(item, index) in diyComponent.tab.list" :key="index" :class="['px-[26rpx] border-[2rpx] border-solid border-transparent h-[60rpx] mr-[30rpx] mb-[30rpx] flex items-center justify-center bg-[#F4F4F4] rounded-[8rpx] text-xs', { 'tab-select-popup': index == currTabIndex }]">{{ item.text }}</text>
+                    <view @click="changeData({ source : 'home' },-1)" class="tab-wrap text-xs" :class="[{ 'tab-select-popup': currTabIndex == -1 }]">首页</view>
+                    <text @click="changeData(item,index)" v-for="(item, index) in diyComponent.tab.list" :key="index" class="tab-wrap text-xs" :class="[{ 'tab-select-popup': index == currTabIndex }]">{{ item.text }}</text>
                 </view>
             </u-popup>
         </view>
@@ -155,6 +155,7 @@ import diyGroup from '@/addon/components/diy/group/index.vue';
 import { getDiyInfo } from '@/app/api/diy';
 import { useLocation } from '@/hooks/useLocation'
 import useSystemStore from '@/stores/system';
+import { parseJsonValue } from '@/utils/json';
 
 const systemStore = useSystemStore();
 const instance = getCurrentInstance();
@@ -479,11 +480,11 @@ const getDiyInfoFn = (id: any) => {
             diyPageData.pageMode = data.mode;
             diyPageData.title = data.title;
 
-            let sources = JSON.parse(data.value);
-            diyPageData.global = sources.global;
-            diyPageData.global.topStatusBar.isShow = false; // 子页面不需要展示顶部导航栏
-            diyPageData.global.bottomTabBar.isShow = false; // 子页面不需要展示底部导航
-            diyPageData.value = sources.value;
+            const sources = parseJsonValue<any>(data.value, { global: {}, value: [] });
+            diyPageData.global = sources.global || {};
+            if (diyPageData.global.topStatusBar) diyPageData.global.topStatusBar.isShow = false; // 子页面不需要展示顶部导航栏
+            if (diyPageData.global.bottomTabBar) diyPageData.global.bottomTabBar.isShow = false; // 子页面不需要展示底部导航
+            diyPageData.value = Array.isArray(sources.value) ? sources.value : [];
 
             diyPageData.value.forEach((item: any, index) => {
                 item.componentIsShow = true // 是否显示
@@ -545,6 +546,9 @@ if (componentsScrollVal && (typeof componentsScrollVal == "object")) {
         -webkit-filter: blur(0);
         filter: blur(0);
         overflow: hidden;
+        &.imp-minus-bottom200 {
+            bottom: -200rpx !important;
+        }
 
         uni-image, image {
             -webkit-filter: blur(15px);
@@ -844,5 +848,24 @@ if (componentsScrollVal && (typeof componentsScrollVal == "object")) {
     .swiper-dot-box {
         bottom: 38rpx !important;
     }
+}
+.mx20 {
+    margin-left: 20rpx;
+    margin-right: 20rpx;
+}
+.tab-wrap {
+    padding-left: 26rpx;
+    padding-right: 26rpx;
+    border-width: 2rpx;
+    border-style: solid;
+    border-color: transparent;
+    height: 60rpx;
+    margin-right: 30rpx;
+    margin-bottom: 30rpx;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: #F4F4F4;
+    border-radius: 8rpx;
 }
 </style>

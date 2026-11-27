@@ -5,17 +5,18 @@ namespace addon\phone_shop\app\listener\notice_template;
 
 use addon\phone_shop\app\service\core\order\CoreOrderService;
 use app\listener\notice_template\BaseNoticeTemplate;
+use app\model\site\SiteMerchantBind;
 
 /**
  * 订单支付通知
  */
 class OrderPay extends BaseNoticeTemplate
 {
-    private $key = 'phone_shop_order_pay';
+    private $keys = ['shop_order_pay','admin_shop_order_pay'];
 
     public function handle(array $params)
     {
-        if ($this->key == $params['key']) {
+        if (in_array($params['key'],$this->keys)) {
             $order = (new CoreOrderService())->getInfo($params['data']['order_id']);
             if (!empty($order)) {
                 $wap_domain = get_wap_domain($order['site_id']);
@@ -31,7 +32,8 @@ class OrderPay extends BaseNoticeTemplate
                         'url' => $wap_domain . '/addon/phone_shop/pages/order/detail?order_id=' . $order['order_id']
                     ],
                     [
-                        'member_id' => $order['member_id']
+                        'member_id' => $order['member_id'],
+                        'merchant_id' => (new SiteMerchantBind())->where('site_id',$order['site_id'])->value('id') ?? 0,
                     ]
                 );
             }

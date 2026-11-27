@@ -11,6 +11,7 @@
 
 namespace addon\phone_shop\app\service\admin\order;
 
+use addon\phone_shop\app\service\admin\goods\EvaluateService;
 use addon\phone_shop\app\service\core\order\CoreOrderConfigService;
 use core\base\BaseAdminService;
 
@@ -39,6 +40,9 @@ class ConfigService extends BaseAdminService
     public function setConfig($params)
     {
         $params['site_id'] = $this->site_id;
+        if ($params['evaluate_is_to_examine'] == 0) {
+            ( new EvaluateService() )->auditEditBatch();
+        }
         return $this->order_config_service->setConfig($params);
     }
 

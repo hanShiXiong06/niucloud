@@ -4,6 +4,7 @@ namespace addon\phone_shop\app\service\core\delivery\electronic_sheet\sdk;
 
 
 use think\facade\Cache;
+use think\facade\Log;
 
 class Kdbird
 {
@@ -45,6 +46,7 @@ class Kdbird
 
         $result = $this->sendPost($this->electronic_sheet_url, $data);
         //根据公司业务处理返回的信息......
+        Log::write('电子面单返回数据 electronicSheetByJson：', $result);
         $result = json_decode($result, true);
 
         $res = [

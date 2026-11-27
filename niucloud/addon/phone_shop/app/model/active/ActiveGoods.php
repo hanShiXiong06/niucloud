@@ -58,8 +58,17 @@ class ActiveGoods extends BaseModel
     }
 
     /**
+     * 关联默认商品规格
+     * @return \think\model\relation\HasOne
+     */
+    public function goodsSkuOne()
+    {
+        return $this->hasOne(GoodsSku::class, 'sku_id', 'sku_id');
+    }
+
+    /**
      * 优惠券商品项
-     * @return \think\model\relation\HasMany
+     * @return \think\model\relation\HasOne
      */
     public function active()
     {

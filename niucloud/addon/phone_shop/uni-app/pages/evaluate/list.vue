@@ -1,119 +1,161 @@
 <template>
-    <view class="bg-[#f8f8f8] min-h-screen overflow-hidden" :style="themeColor()">
+    <view class="bg-[var(--page-bg-color)] min-h-screen overflow-hidden" :style="themeColor()">
         <view class="fixed left-0 top-0 right-0 z-10">
-            <scroll-view scroll-x="true" class="scroll-Y box-border px-[24rpx] bg-white">
-                <view class="flex whitespace-nowrap justify-around">
-                    <view :class="['text-[27rpx] leading-[90rpx]', { 'class-select': evaluateStatus === item.status }]" @click="statusClickFn(item.status, item.value)" v-for="(item, index) in statusList">{{ item.name }}
-                    </view>
+            <scroll-view scroll-x="true" class="tab-style-2">
+                <view class="tab-content">
+                    <view class="tab-items" :class="{ 'class-select': evaluateStatus === item.status }" @click="statusClickFn(item.status, item.value)" v-for="(item, index) in statusList">{{ item.name }}</view>
                 </view>
             </scroll-view>
         </view>
-
-        <mescroll-body ref="mescrollRef" top="90rpx" @init="mescrollInit" :down="{ use: false }" @up="getEvaluateListFn">
-            <view class="py-[20rpx] px-[24rpx]">
+        <mescroll-body ref="mescrollRef" top="88rpx" @init="mescrollInit" :down="{ use: false }" @up="getEvaluateListFn">
+            <view v-if="subject.type === 'category'" class="sidebar-margin pt-[var(--top-m)]">
+                <view class="card-template flex items-start">
+                    <view class="w-[64rpx] h-[64rpx] rounded-full flex-center bg-[var(--primary-color-light)] shrink-0">
+                        <u-icon name="checkmark-circle-fill" color="var(--primary-color)" size="21"></u-icon>
+                    </view>
+                    <view class="ml-[18rpx] min-w-0 flex-1">
+                        <text class="block text-[28rpx] font-500 text-[#333]">同型号真实成交评价</text>
+                        <text class="block mt-[8rpx] text-[24rpx] leading-[34rpx] text-[var(--text-color-light6)]">
+                            {{ subject.category_path || subject.category_name }} · 评价来自该型号历史成交设备
+                        </text>
+                    </view>
+                </view>
+            </view>
+            <view class="sidebar-margin pt-[var(--top-m)]" v-if="list.length">
                 <template v-for="(item, index) in list">
-                    <view class=" py-[20rpx] px-[24rpx] bg-[#fff] mb-[20rpx] rounded-[12rpx]">
+                    <view class="mb-[var(--top-m)] card-template !pb-[20rpx]">
                         <view class="flex items-center  justify-between">
                             <view class="flex items-center">
-                                <u-avatar :src="img(item.member_head)" :default-url="img('static/resource/images/default_headimg.png')" :size="'50rpx'" leftIcon="none"></u-avatar>
-                                <text class="text-[28rpx] ml-[10rpx]">{{ item.member_name }}</text>
+                                <u-avatar :src="img(item.member_head)" :default-url="img('static/resource/images/default_headimg.png')" :size="'50rpx'" leftIcon="none" />
+                                <text class="text-[30rpx] font-500 ml-[10rpx]">{{ item.member_name }}</text>
+                                <view v-if="item.is_verified_purchase" class="ml-[12rpx] px-[10rpx] h-[34rpx] flex-center rounded-[6rpx] bg-[var(--primary-color-light)]">
+                                    <text class="text-[20rpx] text-[var(--primary-color)]">真实购买</text>
+                                </view>
                             </view>
-                            <text class="text--[26rpx] text-[#737373]">{{ item.create_time ? item.create_time.slice(0, 10) : '' }}</text>
+                            <text class="text-[24rpx] text-[var(--text-color-light9)]">{{ item.create_time ? item.create_time.slice(0, 10) : '' }}</text>
                         </view>
 
-                        <view class="pt-[20rpx] flex items-center">
-                            <u-rate :count="5" v-model="item.scores" active-color="var(--primary-color)" :size="'32rpx'" readonly></u-rate>
-                            <text class="ml-[20rpx] text-[28rpx] text-[#888]">{{ item.scores === 1 ? '差评' : item.scores === 2 || item.scores === 3 ? '中评' : '好评' }}</text>
+                        <view v-if="item.category_path || item.category_name || item.goods_name"
+                              class="mt-[18rpx] px-[18rpx] py-[14rpx] rounded-[var(--rounded-small)] bg-[var(--temp-bg)]">
+                            <view class="flex items-center">
+                                <u-icon name="checkmark-circle" color="var(--primary-color)" size="15"></u-icon>
+                                <text class="ml-[8rpx] text-[24rpx] text-[var(--text-color-light6)] truncate">
+                                    {{ item.category_path || item.category_name || item.goods_name }}
+                                </text>
+                            </view>
+                            <text v-if="item.sku_name" class="block mt-[6rpx] ml-[38rpx] text-[22rpx] text-[var(--text-color-light9)] truncate">
+                                成交规格：{{ item.sku_name }}
+                            </text>
                         </view>
-                        <view class="text-[26rpx] break-all leading-[1.2] text-[#666] my-[20rpx] overflow-clip">{{ item.content }}</view>
+                        <view class="pt-[30rpx] flex items-center">
+                            <u-rate :count="5" v-model="item.scores" active-color="var(--primary-color)" :size="'36rpx'" gutter="1" readonly></u-rate>
+                            <text class="ml-[20rpx] text-[26rpx] text-[var(--text-color-light9)]">{{ item.scores === 1 ? '差评' : item.scores === 2 || item.scores === 3 ? '中评' : '好评' }}</text>
+                        </view>
+                        <view class="text-[28rpx] break-all leading-[1.2] text-[#333] my-[20rpx] overflow-clip">{{ item.content }}</view>
                         <template v-if="item.image_mid.length === 1">
-                            <u--image class="rounded-[8rpx] overflow-hidden mt-[10rpx]" width="420rpx" height="420rpx" :src="img(item.image_mid[0])" model="aspectFill" @click="imgListPreview(item.images[0])">
-                                <template #error>
-                                    <u-icon name="photo" color="#999" size="50"></u-icon>
-                                </template>
-                            </u--image>
+                            <view class="w-[420rpx] mt-[10rpx]">
+                                <up-image width="420rpx" height="420rpx" :radius="'var(--goods-rounded-big)'" :src="img(item.image_mid[0])" model="aspectFill" @click="imgListPreview(item.images[0],item.images)">
+                                    <template #error>
+                                        <u-icon name="photo" color="var(--text-color-light9)" size="50"></u-icon>
+                                    </template>
+                                </up-image>
+                            </view>
                         </template>
                         <template v-if="item.image_mid.length === 2">
                             <view class="flex justify-between mt-[10rpx]">
-                                <u--image class="rounded-[8rpx] overflow-hidden" width="322rpx" height="322rpx" :src="img(item.image_mid[0])" model="aspectFill" @click="imgListPreview(item.images[0])">
-                                    <template #error>
-                                        <u-icon name="photo" color="#999" size="50"></u-icon>
-                                    </template>
-                                </u--image>
-                                <u--image class="rounded-[8rpx] overflow-hidden" width="322rpx" height="322rpx" :src="img(item.image_mid[1])" model="aspectFill" @click="imgListPreview(item.images[1])">
-                                    <template #error>
-                                        <u-icon name="photo" color="#999" size="50"></u-icon>
-                                    </template>
-                                </u--image>
+                                <view class="w-[322rpx]">
+                                    <up-image width="322rpx" height="322rpx" :src="img(item.image_mid[0])" :radius="'var(--goods-rounded-big)'" model="aspectFill" @click="imgListPreview(item.images[0],item.images)">
+                                        <template #error>
+                                            <u-icon name="photo" color="var(--text-color-light9)" size="50"></u-icon>
+                                        </template>
+                                    </up-image>
+                                </view>
+                                <view class="w-[322rpx]">
+                                    <up-image width="322rpx" height="322rpx" :src="img(item.image_mid[1])" :radius="'var(--goods-rounded-big)'" model="aspectFill" @click="imgListPreview(item.images[1],item.images)">
+                                        <template #error>
+                                            <u-icon name="photo" color="var(--text-color-light9)" size="50"></u-icon>
+                                        </template>
+                                    </up-image>
+                                </view>
                             </view>
                         </template>
                         <template v-if="item.image_mid.length === 3">
                             <view class="flex justify-between mt-[10rpx]">
-                                <u--image class="rounded-[8rpx] overflow-hidden" width="430rpx" height="430rpx" :src="img(item.image_mid[0])" model="aspectFill" @click="imgListPreview(item.images[0])">
+                                <up-image width="430rpx" height="430rpx" :radius="'var(--goods-rounded-big)'" :src="img(item.image_mid[0])" model="aspectFill" @click="imgListPreview(item.images[0],item.images)">
                                     <template #error>
-                                        <u-icon name="photo" color="#999" size="50"></u-icon>
+                                        <u-icon name="photo" color="var(--text-color-light9)" size="50"></u-icon>
                                     </template>
-                                </u--image>
+                                </up-image>
                                 <view>
-                                    <u--image class="rounded-[8rpx] overflow-hidden mb-[20rpx]" width="205rpx" height="205rpx" :src="img(item.image_mid[1])" model="aspectFill" @click="imgListPreview(item.images[1])">
+                                    <up-image width="205rpx" height="205rpx" :radius="'var(--goods-rounded-big)'" :src="img(item.image_mid[1])" model="aspectFill" @click="imgListPreview(item.images[1],item.images)">
                                         <template #error>
-                                            <u-icon name="photo" color="#999" size="50"></u-icon>
+                                            <u-icon name="photo" color="var(--text-color-light9)" size="50"></u-icon>
                                         </template>
-                                    </u--image>
-                                    <u--image class="rounded-[8rpx] overflow-hidden" width="205rpx" height="205rpx" :src="img(item.image_mid[2])" model="aspectFill" @click="imgListPreview(item.images[2])">
-                                        <template #error>
-                                            <u-icon name="photo" color="#999" size="50"></u-icon>
-                                        </template>
-                                    </u--image>
+                                    </up-image>
+                                    <view class="mt-[20rpx]">
+                                        <up-image width="205rpx" height="205rpx" :radius="'var(--goods-rounded-big)'" :src="img(item.image_mid[2])" model="aspectFill" @click="imgListPreview(item.images[2],item.images)">
+                                            <template #error>
+                                                <u-icon name="photo" color="var(--text-color-light9)" size="50"></u-icon>
+                                            </template>
+                                        </up-image>
+                                    </view>
                                 </view>
                             </view>
                         </template>
+
                         <template v-if="item.image_mid.length === 4">
                             <view class="flex flex-wrap mt-[10rpx]">
-                                <u--image class="rounded-[8rpx] overflow-hidden mr-[15rpx] mb-[15rpx]" width="215rpx" height="215rpx" :src="img(item.image_mid[0])" model="aspectFill" @click="imgListPreview(item.images[0])">
-                                    <template #error>
-                                        <u-icon name="photo" color="#999" size="50"></u-icon>
-                                    </template>
-                                </u--image>
-                                <u--image class="rounded-[8rpx] overflow-hidden mr-[15rpx] mb-[15rpx]" width="215rpx" height="215rpx" :src="img(item.image_mid[1])" model="aspectFill" @click="imgListPreview(item.images[1])">
-                                    <template #error>
-                                        <u-icon name="photo" color="#999" size="50"></u-icon>
-                                    </template>
-                                </u--image>
-                                <u--image class="rounded-[8rpx] overflow-hidden mr-[15rpx]" width="215rpx" height="215rpx" :src="img(item.image_mid[2])" model="aspectFill" @click="imgListPreview(item.images[2])">
-                                    <template #error>
-                                        <u-icon name="photo" color="#999" size="50"></u-icon>
-                                    </template>
-                                </u--image>
-                                <u--image class="rounded-[8rpx] overflow-hidden mr-[15rpx]" width="215rpx" height="215rpx" :src="img(item.image_mid[3])" model="aspectFill" @click="imgListPreview(item.images[3])">
-                                    <template #error>
-                                        <u-icon name="photo" color="#999" size="50"></u-icon>
-                                    </template>
-                                </u--image>
+                                <view class="mr-[15rpx] mb-[15rpx]">
+                                    <up-image width="215rpx" height="215rpx" :radius="'var(--goods-rounded-big)'" :src="img(item.image_mid[0])" model="aspectFill" @click="imgListPreview(item.images[0],item.images)">
+                                        <template #error>
+                                            <u-icon name="photo" color="var(--text-color-light9)" size="50"></u-icon>
+                                        </template>
+                                    </up-image>
+                                </view>
+                                <view class="mr-[15rpx] mb-[15rpx]">
+                                    <up-image width="215rpx" height="215rpx" :radius="'var(--goods-rounded-big)'" :src="img(item.image_mid[1])" model="aspectFill" @click="imgListPreview(item.images[1],item.images)">
+                                        <template #error>
+                                            <u-icon name="photo" color="var(--text-color-light9)" size="50"></u-icon>
+                                        </template>
+                                    </up-image>
+                                </view>
+                                <view class="mr-[15rpx]">
+                                    <up-image width="215rpx" height="215rpx" :radius="'var(--goods-rounded-big)'" :src="img(item.image_mid[2])" model="aspectFill" @click="imgListPreview(item.images[2],item.images)">
+                                        <template #error>
+                                            <u-icon name="photo" color="var(--text-color-light9)" size="50"></u-icon>
+                                        </template>
+                                    </up-image>
+                                </view>
+                                <view class="mr-[15rpx]">
+                                    <up-image width="215rpx" height="215rpx" :radius="'var(--goods-rounded-big)'" :src="img(item.image_mid[3])" model="aspectFill" @click="imgListPreview(item.images[3],item.images)">
+                                        <template #error>
+                                            <u-icon name="photo" color="var(--text-color-light9)" size="50"></u-icon>
+                                        </template>
+                                    </up-image>
+                                </view>
                             </view>
                         </template>
                         <template v-if="item.image_mid.length > 4">
                             <view class="flex flex-wrap mt-[10rpx]">
-                                <u--image v-for="(imageItem, imageIndex) in item.image_mid"
-                                    :class="['rounded-[8rpx] overflow-hidden mb-[10rpx]', (imageIndex + 1) % 3 === 0 ? '' : 'mr-[10rpx]']"
-                                    width="211rpx" height="211rpx" :src="img(imageItem)" model="aspectFill"
-                                    @click="imgListPreview(item.images[imageIndex])">
-                                    <template #error>
-                                        <u-icon name="photo" color="#999" size="50"></u-icon>
-                                    </template>
-                                </u--image>
+                                <view v-for="(imageItem, imageIndex) in item.image_mid" class="mb-[10rpx]" :class="{'mr-[10rpx]':(imageIndex + 1) % 3 != 0}">
+                                    <up-image width="211rpx" height="211rpx" :src="img(imageItem)" model="aspectFill"
+                                              :radius="'var(--goods-rounded-big)'"
+                                              @click="imgListPreview(item.images[imageIndex],item.images)">
+                                        <template #error>
+                                            <u-icon name="photo" color="var(--text-color-light9)" size="50"></u-icon>
+                                        </template>
+                                    </up-image>
+                                </view>
                             </view>
                         </template>
-                        <view v-if="item.explain_first !=''" class="text-[26rpx]  !text-[#666] mt-[20rpx] pt-[20rpx] border-0 border-t-[2rpx] border-solid border-[#ebebec] w-[100%] overflow-clip leading-[1.2]  break-all">
-                            <text class=" text-[var(--primary-color)]">商家回复：</text>{{ item.explain_first }}
+                        <view v-if="item.explain_first !=''" class="text-[26rpx]  !text-[var(--text-color-light6)] mt-[20rpx] pt-[20rpx] border-0 border-t-[2rpx] border-solid border-[#ebebec] w-[100%] overflow-clip leading-[1.2] break-all">
+                            <text class=" text-[var(--primary-color)]">商家回复：</text>
+                            {{ item.explain_first }}
                         </view>
                     </view>
                 </template>
-                <view class="bg-[#fff] noData rounded-[12rpx] flex items-center justify-center" v-if="!list.length && loading">
-                    <mescroll-empty :option="{tip : '暂无评价'}"></mescroll-empty>
-                </view>
             </view>
-            
+            <mescroll-empty v-if="!list.length && loading" :option="{tip : '暂无评价'}"></mescroll-empty>
         </mescroll-body>
         <pay ref="payRef"></pay>
     </view>
@@ -126,7 +168,7 @@ import { getEvaluateList } from '@/addon/phone_shop/api/evaluate'
 import MescrollBody from '@/components/mescroll/mescroll-body/mescroll-body.vue'
 import MescrollEmpty from '@/components/mescroll/mescroll-empty/mescroll-empty.vue'
 import useMescroll from '@/components/mescroll/hooks/useMescroll.js'
-import { onLoad, onUnload,onPageScroll, onReachBottom } from '@dcloudio/uni-app'
+import { onLoad, onUnload, onPageScroll, onReachBottom } from '@dcloudio/uni-app'
 
 const { mescrollInit, downCallback, getMescroll } = useMescroll(onPageScroll, onReachBottom)
 const list = ref<Array<Object>>([]);
@@ -140,7 +182,8 @@ const statusList = <Array<Object>>([
 const evaluateStatus = ref(1);
 const evaluateValue = ref([]);
 const goodsId = ref('')
-onLoad((option) => {
+const subject = ref<Record<string, any>>({})
+onLoad((option: any) => {
     goodsId.value = option.goods_id || ''
 })
 
@@ -151,7 +194,7 @@ const statusClickFn = (status: any, value: any) => {
     getMescroll().resetUpScroll();
 };
 
-const getEvaluateListFn = (mescroll:any) => {
+const getEvaluateListFn = (mescroll: any) => {
     loading.value = false;
     let data: object = {
         page: mescroll.num,
@@ -160,14 +203,15 @@ const getEvaluateListFn = (mescroll:any) => {
         scores: evaluateValue.value
     };
 
-    getEvaluateList(data).then((res:any) => {
+    getEvaluateList(data).then((res: any) => {
         let newArr = (res.data.data as Array<Object>);
         //设置列表数据
         if (mescroll.num == 1) {
             list.value = []; //如果是第一页需手动制空列表
+            subject.value = res.data.subject || {}
         }
         list.value = list.value.concat(newArr);
-		
+
         mescroll.endSuccess(newArr.length);
         loading.value = true;
     }).catch(() => {
@@ -176,22 +220,29 @@ const getEvaluateListFn = (mescroll:any) => {
     })
 }
 //预览图片
-const imgListPreview = (item:any) => {
-    if (item === '') return false
-    var urlList = []
-    urlList.push(img(item))  //push中的参数为 :src="item.img_url" 中的图片地址
-    uni.previewImage({
-        indicator: "number",
-        loop: true,
-        urls: urlList
-    })
+const imgListPreview = (current: string, all: string[]) => {
+	if (!current || !all?.length) return
+
+	const urlList = all.map(img)
+	const currentUrl = img(current)
+
+	uni.previewImage({
+		current: currentUrl,
+		urls: urlList,
+		indicator: 'number',
+		loop: true
+	})
 }
 
 //关闭预览图片
-onUnload(()=>{
-	// #ifdef  H5 || APP
-	uni.closePreviewImage()
-	// #endif
+onUnload(() => {
+    // #ifdef  H5 || APP
+    try {
+        uni.closePreviewImage()
+    } catch (e) {
+
+    }
+    // #endif
 })
 </script>
 
@@ -211,8 +262,4 @@ onUnload(()=>{
         transform: translateX(-50%);
     }
 }
-.noData{
-	height: calc(100vh - 130rpx - constant(safe-area-inset-bottom));
-	height: calc(100vh - 130rpx - env(safe-area-inset-bottom));
- }
 </style>

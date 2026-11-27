@@ -10,8 +10,6 @@
 // +----------------------------------------------------------------------
 
 namespace addon\phone_shop\app\model\goods;
-// 引入memory_group模型
-use addon\phone_shop\app\model\goods\MemoryGroup;
 
 use core\base\BaseModel;
 
@@ -70,44 +68,5 @@ class Category extends BaseModel
             $query->where("pid", "=",  $value );
         }
     }
-    /**
-     * 计数器: 计算当前分类下有多少件商品
-     * @param $value
-     * @param $data
-     * */ 
-   /**
- * 计数器: 计算当前分类下有多少件商品
- * @param array $categoryIds
- * @return int
- */
-public function calcCount($categoryIds, $site_id)
-{
-    // 如果 $categoryIds 不是数组，则将其转换为数组
-    if (!is_array($categoryIds)) {
-        $categoryIds = [$categoryIds];
-    }
-
-    // 处理多个分类 ID 的情况
-    return $this->table('sass_phone_shop_goods')
-                ->where([['status', '=', 1 ] , ['site_id','=',$site_id] ]) 
-                ->where(function($query) use ($categoryIds) {
-                    
-                    // 添加第一个 whereRaw 使用 JSON_CONTAINS
-                    $query->whereRaw('JSON_CONTAINS(goods_category, JSON_QUOTE(?))', [$categoryIds[0]]);
-
-                    // 循环处理剩余的分类 ID，使用 whereOr
-                    for ($i = 1; $i < count($categoryIds); $i++) {
-                        $query->whereOrRaw('JSON_CONTAINS(goods_category, JSON_QUOTE(?))', [$categoryIds[$i]]);
-                    }
-                })
-                ->count();
-}
-    // 处理 内存分组
-    public function getMemoryGroup($memory_group)
-    {
-        return MemoryGroup::where('group_id', $memory_group)->value('group_name');
-    }
-
-
 
 }

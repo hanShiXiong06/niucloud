@@ -15,7 +15,7 @@
                 </view>
                 <view class="mx-[var(--popup-sidebar-m)] px-[30rpx] bg-white rounded-[20rpx] bg-[var(--temp-bg)]">
                     <template v-if="payInfo.pay_type_list.length">
-                        <view class="pay-item py-[30rpx] flex items-center border-0 border-b border-solid border-[#eee]" v-for="(item, index) in payInfo.pay_type_list" :key="index" @click="type = item.key">
+                        <view class="pay-item py-[30rpx] flex items-center border-0 border-b border-solid border-[#eee]" v-for="(item, index) in payInfo.pay_type_list" :key="item.key" @click="!loading && !requiresOrderCheck && (type = item.key)">
                             <u-image :src="img(item.icon)" width="50rpx" height="50rpx"></u-image>
                             <view class="flex-1 px-[20rpx] text-[28rpx] font-500">{{ item.name }}</view>
                             <u-icon name="checkbox-mark" color="var(--primary-color)" v-if="item.key == type"></u-icon>
@@ -23,9 +23,11 @@
                     </template>
                     <view class="py-[30rpx] text-center text-[24rpx] text-gray-subtitle" v-else>{{ t('pay.notHavePayType') }}</view>
                 </view>
+                <view v-if="paymentFeedback" class="mx-[var(--popup-sidebar-m)] mt-[20rpx] px-[30rpx] text-[26rpx] leading-[40rpx] text-[var(--text-color-light6)]" role="status">{{ paymentFeedback }}</view>
             </scroll-view>
             <view class="btn-wrap">
-                <button class="primary-btn-bg btn" hover-class="none" :loading="loading" @click="confirmPay">{{ t('pay.confirmPay') }}</button>
+                <button class="primary-btn-bg bg-[var(--primary-color)] btn" hover-class="none" :loading="loading" @click="confirmPay">{{ requiresOrderCheck ? '返回订单核对' : t('pay.confirmPay') }}</button>
+                <slot name="help" :busy="loading" :pending="requiresOrderCheck" />
             </view>
         </view>
     </u-popup>
@@ -37,6 +39,7 @@ import { t } from '@/locale'
 import { getPayInfo, pay } from '@/app/api/pay'
 import { img, redirect, isWeixinBrowser, moneyFormat } from '@/utils/common'
 import wechat from '@/utils/wechat'
+import { preparePaymentClientRequest, executePaymentClientAction, VirtualPaymentClientError, type VirtualPaymentBridge } from '@/utils/virtual-payment'
 
 const prop = defineProps({
     ignorePay: {
@@ -60,11 +63,37 @@ const loading = ref(false)
 
 const payInfo = ref<AnyObject | null>(null)
 const type = ref('')
+const requiresOrderCheck = ref(false)
+const paymentFeedback = ref('')
+let paymentAttempt = 0
+
+const rememberPayment = () => {
+    uni.setStorageSync('paymenting', {
+        trade_type: payInfo.value?.trade_type,
+        trade_id: payInfo.value?.trade_id
+    })
+}
 
 /**
  * 确认支付
  */
-const confirmPay = () => {
+const virtualPaymentBridge = (): VirtualPaymentBridge | undefined => {
+    // #ifdef MP-WEIXIN
+    if (typeof wx !== 'undefined' && typeof (wx as any).requestVirtualPayment === 'function') {
+        return {
+            login: options => uni.login({ provider: 'weixin', ...options }),
+            requestVirtualPayment: options => (wx as any).requestVirtualPayment(options),
+            canIUse: name => typeof wx.canIUse !== 'function' || wx.canIUse(name)
+        }
+    }
+    // #endif
+    return undefined
+}
+
+const confirmPay = async () => {
+    // Client cancellation is not proof of an unpaid/closed server order.
+    // Let the owning page reconcile it; do not repeat native payment here.
+    if (requiresOrderCheck.value) { handleClose(); return }
     if (uni.$u.test.isEmpty(type.value)) {
         uni.showToast({ title: t('pay.notHavePayType'), icon: 'none' })
         return
@@ -83,23 +112,68 @@ const confirmPay = () => {
     if (loading.value) return
     loading.value = true
 
-    pay({
-        trade_type: payInfo.value?.trade_type,
-        trade_id: payInfo.value?.trade_id,
-        type: type.value,
-        openid: uni.getStorageSync('openid') || ''
-    }).then((res: any) => {
-        switch (type.value) {
-            case 'wechatpay':
+    const attempt = ++paymentAttempt
+    const currentAttempt = () => attempt === paymentAttempt && show.value
+    const tradeType = payInfo.value?.trade_type
+    const tradeId = payInfo.value?.trade_id
+    const selectedType = type.value
+    const clientAction = payInfo.value?.pay_type_list?.find((item: any) => item.key === selectedType)?.client_action
+    let clientParams: { login_code?: string }
+    try {
+        clientParams = await preparePaymentClientRequest(clientAction, virtualPaymentBridge())
+    } catch (error) {
+        if (attempt !== paymentAttempt) return
+        loading.value = false
+        uni.showToast({ title: error instanceof VirtualPaymentClientError ? error.message : '付款准备未完成，请重新点击付款', icon: 'none' })
+        return
+    }
+    if (attempt !== paymentAttempt || !show.value) return
+
+    // The transport can also throw before returning a Promise (for example a
+    // request interceptor). Treat it like an asynchronous failure so the
+    // cashier never remains in its busy state.
+    Promise.resolve().then(() => {
+        if (!currentAttempt()) return null
+        return pay({
+        trade_type: tradeType,
+        trade_id: tradeId,
+        type: selectedType,
+        openid: uni.getStorageSync('openid') || '',
+        ...clientParams
+        })
+    }).then(async (res: any) => {
+        if (attempt !== paymentAttempt || !show.value) return
+        if (clientAction || (res.data && typeof res.data === 'object' && res.data.client_action)) {
+            await executePaymentClientAction(clientAction, res.data, virtualPaymentBridge())
+            if (attempt !== paymentAttempt || !show.value) return
+            rememberPayment()
+            loading.value = false
+            toPayResult()
+            return
+        }
+        switch (selectedType) {
+            case 'wechatpay': {
+                const onWechatInterrupted = (cancelled: boolean) => {
+                    if (!currentAttempt()) return
+                    loading.value = false
+                    paymentFeedback.value = cancelled
+                        ? '已退出微信付款，订单尚未取消，请核对原订单后再操作。'
+                        : '本次微信付款结果未确认，请核对原订单；若已扣款，请勿重复付款。'
+                    uni.showToast({ title: cancelled ? '已退出微信付款' : '微信付款结果待核对', icon: 'none' })
+                    // The owning page may reconcile the original order. This
+                    // optional event never closes/locks legacy cashiers that
+                    // do not listen, and never asserts payment or closure.
+                    emits('check')
+                }
                 // #ifndef H5
                 uni.requestPayment({
                     provider: 'wxpay',
                     ...res.data,
                     success: (res: any) => {
-                        toPayResult()
+                        if (currentAttempt()) toPayResult()
                     },
                     fail: (res: any) => {
-                        loading.value = false
+                        onWechatInterrupted(String(res?.errMsg || '').toLowerCase().includes('cancel'))
                     }
                 })
                 // #endif
@@ -110,10 +184,13 @@ const confirmPay = () => {
                     wechat.pay({
                         ...res.data,
                         success: () => {
-                            toPayResult()
+                            if (currentAttempt()) toPayResult()
                         },
                         cancel: () => {
-                            loading.value = false
+                            onWechatInterrupted(true)
+                        },
+                        fail: (res: any) => {
+                            onWechatInterrupted(String(res?.errMsg || '').toLowerCase().includes('cancel'))
                         }
                     })
                 } else {
@@ -125,6 +202,7 @@ const confirmPay = () => {
                 }
                 // #endif
                 break;
+            }
             case 'alipay':
                 // #ifdef H5
                 if (isWeixinBrowser()) {
@@ -148,30 +226,126 @@ const confirmPay = () => {
                 // #ifndef H5
                 uni.requestPayment({
                     provider: 'alipay',
-                    ...res.data,
+                    orderInfo: res.data,
                     success: (res: any) => {
-                        toPayResult()
+                        if (currentAttempt()) toPayResult()
                     },
                     fail: (res: any) => {
-                        loading.value = false
+                        if (currentAttempt()) loading.value = false
                     }
                 })
                 // #endif
                 break;
             default:
-                if (res.data.url) {
-                    redirect({
-                        url: res.data.url,
-                        param: res.data.param || {},
-                        mode: 'redirectTo'
+                rememberPayment()
+                if (res.data.jsapi) {
+                    const jsapi = res.data.jsapi
+                    // #ifdef MP-WEIXIN
+                    uni.requestPayment({
+                        provider: 'wxpay',
+                        ...jsapi,
+                        success: () => {
+                            if (currentAttempt()) toPayResult()
+                        },
+                        fail: () => {
+                            if (currentAttempt()) loading.value = false
+                        }
+                    })
+                    return undefined
+                    // #endif
+
+                    // #ifdef H5
+                    if (!isWeixinBrowser()) {
+                        loading.value = false
+                        uni.showToast({ title: 'JS支付请在微信内打开', icon: 'none' })
+                        return undefined
+                    }
+                    const h5Jsapi = {
+                        ...jsapi,
+                        timestamp: jsapi.timeStamp
+                    }
+                    delete h5Jsapi.timeStamp
+                    wechat.pay({
+                        ...h5Jsapi,
+                        success: () => {
+                            if (currentAttempt()) toPayResult()
+                        },
+                        cancel: () => {
+                            if (currentAttempt()) loading.value = false
+                        }
+                    })
+                    return undefined
+                    // #endif
+
+                    loading.value = false
+                    uni.showToast({ title: '当前终端不支持JS支付', icon: 'none' })
+                    return undefined
+                }
+                if (res.data.mini_program) {
+                    // #ifdef MP-WEIXIN
+                    const miniProgram = res.data.mini_program
+                    uni.navigateToMiniProgram({
+                        appId: miniProgram.appId,
+                        path: miniProgram.path || 'pages/index/index',
+                        extraData: miniProgram.extraData || {},
+                        envVersion: miniProgram.envVersion || 'release',
+                        success: () => {
+                            if (!currentAttempt()) return
+                            loading.value = false
+                            show.value = false
+                        },
+                        fail: () => {
+                            if (currentAttempt()) loading.value = false
+                        }
                     })
                     return
+                    // #endif
                 }
-                toPayResult()
+                if (res.data.url) {
+                    // #ifdef H5
+                    window.location.href = res.data.url
+                    return
+                    // #endif
+
+                    // #ifdef MP
+                    redirect({
+                        url: '/app/pages/webview/index',
+                        param: { src: encodeURIComponent(res.data.url) }
+                    })
+                    return
+                    // #endif
+
+                    // #ifdef APP-PLUS
+                    redirect({
+                        url: '/app/pages/webview/index',
+                        param: { src: encodeURIComponent(res.data.url) }
+                    })
+                    return
+                    // #endif
+                }
+                if (res.data === true) {
+                    toPayResult()
+                } else {
+                    loading.value = false
+                    uni.showToast({ title: '未取得可识别的付款参数，请刷新订单后重试', icon: 'none' })
+                }
                 break;
         }
-    }).catch(() => {
+    }).catch((error: unknown) => {
+        if (attempt !== paymentAttempt) return
         loading.value = false
+        if (clientAction) {
+            requiresOrderCheck.value = true
+            paymentFeedback.value = error instanceof VirtualPaymentClientError && error.code === 'cancelled'
+                ? '已退出微信付款，原订单结果尚待核对。请返回订单查看，不要重复付款。'
+                : '本次付款结果尚未确认，请返回订单核对。系统不会自动切换付款方式。'
+            // Optional owning-page hook: reconcile the original immediately
+            // instead of requiring another tap. It is not a paid/closed event.
+            emits('check')
+        }
+        if (error instanceof VirtualPaymentClientError && error.code !== 'cancelled') {
+            uni.showToast({ title: error.message, icon: 'none' })
+        }
     })
 }
 
@@ -181,7 +355,7 @@ const confirmPay = () => {
 uni.$on('checkIsReturnAfterPayment', () => {
     const data = uni.getStorageSync('paymenting')
     if (uni.getStorageSync('paymenting')) {
-        
+
         redirect({
             url: '/app/pages/pay/result',
             param: {
@@ -196,10 +370,17 @@ uni.$on('checkIsReturnAfterPayment', () => {
     }
 })
 const repeat = ref(false)
-const open = (tradeType: string, tradeId: number, payReturn: string = '', scene: string = '') => {
+const open = (tradeType: string, tradeId: number, payReturn: string = '', scene: string = ''): Promise<boolean> => {
 
-    if (repeat.value) return
+    if (repeat.value || loading.value) return Promise.resolve(false)
+    const attempt = ++paymentAttempt
+    loading.value = false
     repeat.value = true
+    show.value = false
+    payInfo.value = null
+    type.value = ''
+    requiresOrderCheck.value = false
+    paymentFeedback.value = ''
 
     // 设置支付后跳转页面
     uni.setStorageSync('payReturn', encodeURIComponent(payReturn))
@@ -209,17 +390,25 @@ const open = (tradeType: string, tradeId: number, payReturn: string = '', scene:
     if (scene) {
         obj.scene = scene
     }
-    getPayInfo(tradeType, tradeId, obj).then((res: any) => {
-
+    // Existing callers may ignore this promise. Awaiting pages can keep their
+    // own loading state until the native cashier is actually ready; this is
+    // not a payment-success result and never grants any business entitlement.
+    return Promise.resolve().then(() => getPayInfo(tradeType, tradeId, obj)).then((res: any) => {
+        if (attempt !== paymentAttempt) return false
         let { data } = res
 
-        if (uni.$u.test.isEmpty(data)) {
+        if (!data || typeof data !== 'object' || Array.isArray(data) || uni.$u.test.isEmpty(data)) {
             uni.showToast({ title: t('pay.notObtainedInfo'), icon: 'none' })
-            return
+            return false
         }
         if (data.money == 0) {
+            payInfo.value = { ...data, pay_type_list: [] }
             toPayResult()
-            return
+            return true
+        }
+        if (!Array.isArray(data.pay_type_list) || data.pay_type_list.some((item: any) => !item || typeof item !== 'object' || typeof item.key !== 'string' || !item.key)) {
+            uni.showToast({ title: t('pay.notObtainedInfo'), icon: 'none' })
+            return false
         }
         payInfo.value = data
         if(prop.ignorePay) {
@@ -229,35 +418,45 @@ const open = (tradeType: string, tradeId: number, payReturn: string = '', scene:
         }
         type.value = data.pay_type_list[0] ? data.pay_type_list[0].key : ''
         show.value = true
-        repeat.value = false
-
+        return true
     }).catch(() => {
-        repeat.value = false
+        if (attempt === paymentAttempt) uni.showToast({ title: '收银台加载未完成，请稍后重试', icon: 'none' })
+        return false
+    }).finally(() => {
+        if (attempt === paymentAttempt) repeat.value = false
     })
 }
 
-const emits = defineEmits(['close', 'confirm'])
+const emits = defineEmits(['close', 'confirm', 'check'])
 
 const toPayResult = () => {
+    loading.value = false
+    requiresOrderCheck.value = true
+    paymentFeedback.value = '付款操作已返回，正在核对订单结果'
     emits('confirm')
     // console.log(prop.reformat)
     if(prop.reformat){
         redirect({
             url: prop.reformat,
-            mode: 'redirectTo'
+            mode: 'redirectTo',
+            fail: () => { uni.showToast({ title: '结果页暂未打开，请返回原订单核对付款结果', icon: 'none' }); emits('check') }
         })
         return
     }
-    
+
     redirect({
         url: '/app/pages/pay/result',
         param: { trade_type: payInfo.value?.trade_type, trade_id: payInfo.value?.trade_id },
-        mode: 'redirectTo'
+        mode: 'redirectTo',
+        fail: () => { uni.showToast({ title: '结果页暂未打开，请返回原订单核对付款结果', icon: 'none' }); emits('check') }
     })
 }
 
 
 const handleClose = () => {
+    paymentAttempt++
+    loading.value = false
+    repeat.value = false
     uni.removeStorageSync('paymenting')
     show.value = false
     emits('close')
@@ -265,6 +464,7 @@ const handleClose = () => {
 
 defineExpose({
     open,
+    close: handleClose,
     payInfo
 })
 </script>

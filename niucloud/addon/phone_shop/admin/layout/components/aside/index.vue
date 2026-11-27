@@ -15,6 +15,7 @@ import { watch, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import side from './side.vue'
 import useSystemStore from '@/stores/modules/system'
+
 const systemStore = useSystemStore()
 const dark = computed(() => {
     return systemStore.dark
@@ -49,7 +50,7 @@ watch(route, () => {
 
 .aside-drawer {
     .el-drawer__body {
-        padding: 0px !important;
+        padding: 0 !important;
     }
 }
 </style>

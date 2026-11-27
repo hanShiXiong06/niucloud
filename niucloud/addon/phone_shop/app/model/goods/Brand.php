@@ -33,6 +33,13 @@ class Brand extends BaseModel
      */
     protected $name = 'phone_shop_goods_brand';
 
+
+    // 设置json类型字段
+    protected $json = [ 'color_json' ];
+
+    // 设置JSON数据返回数组
+    protected $jsonAssoc = true;
+
     /**
      * 搜索器:商品品牌品牌名称
      * @param $value

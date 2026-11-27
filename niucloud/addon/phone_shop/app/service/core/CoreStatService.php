@@ -55,6 +55,33 @@ class CoreStatService extends BaseCoreService
     }
 
     /**
+     * 累减统计数据
+     * @param $data
+     * @return true
+     */
+    public static function decStat($data = [])
+    {
+        $time = strtotime($data['time']);
+        // 更新天统计
+        $stat_data = [
+            'date' => date('Y-m-d', $time),
+            'date_time' => strtotime(date('Y-m-d', $time)),
+            'site_id' => $data[ 'site_id' ],
+        ];
+
+        $stat = ( new ShopStat() )->where($stat_data)->findOrEmpty();
+        if (!$stat->isEmpty()) {
+            unset($data[ 'site_id' ]);
+            unset($data[ 'time' ]);
+            foreach ($data as $key => $value) {
+                $stat->$key = Db::raw("CASE WHEN {$key} - {$value} >= 0 THEN {$key} - {$value} ELSE 0 END");
+            }
+            $stat->allowField(self::STAT_FIELD)->save();
+        }
+        return true;
+    }
+
+    /**
      * 获取时间区间内天统计数据
      * @param string $start_date
      * @param string $end_date

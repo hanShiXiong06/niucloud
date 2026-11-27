@@ -12,7 +12,6 @@
 namespace addon\phone_shop\app\service\admin\goods;
 
 use addon\phone_shop\app\model\goods\Service;
-use addon\phone_shop\app\model\site\Site;
 use core\base\BaseAdminService;
 
 
@@ -36,15 +35,10 @@ class ServiceService extends BaseAdminService
      */
     public function getPage(array $where = [])
     {
-        $field = 'service_id,site_id,service_name,image,desc,create_time,update_time';
+        $field = 'service_id,service_name,image,desc,create_time,update_time';
         $order = 'create_time desc';
-        if($this->site_id !== 0 ){
-            $sites =  (new Site())-> field('service_status')->where([['site_id','=', $this->site_id]]) ->findOrEmpty()->toArray();
-            
-        }
-        
-        $site_id = empty($sites['service_status'] ) ? $this->site_id : $this->site_id.",0";
-        $search_model = $this->model->where([ [ 'site_id',  'in', $site_id  ] ])->withSearch([ "service_name" ], $where)->field($field)->order($order);
+
+        $search_model = $this->model->where([ [ 'site_id', '=', $this->site_id ] ])->withSearch([ "service_name" ], $where)->field($field)->order($order);
         $list = $this->pageQuery($search_model);
         return $list;
     }
@@ -55,16 +49,10 @@ class ServiceService extends BaseAdminService
      * @param string $field
      * @return array
      */
-    public function getList(array $where = [], $field = 'service_id,site_id,service_name,image,desc,create_time,update_time')
+    public function getList(array $where = [], $field = 'service_id,service_name,image,desc,create_time,update_time')
     {
         $order = "create_time desc";
-        if($this->site_id !== 0 ){
-            $sites =  (new Site())-> field('service_status')->where([['site_id','=', $this->site_id]]) ->findOrEmpty()->toArray();
-            
-        }
-        
-        $site_id = empty($sites['service_status'] ) ? $this->site_id : $this->site_id.",0";
-        return $this->model->where([ [ 'site_id', 'in', $site_id ] ])->withSearch([ "service_name" ], $where)->field($field)->order($order)->select()->toArray();
+        return $this->model->where([ [ 'site_id', '=', $this->site_id ] ])->withSearch([ "service_name" ], $where)->field($field)->order($order)->select()->toArray();
     }
 
     /**
@@ -75,13 +63,8 @@ class ServiceService extends BaseAdminService
     public function getInfo(int $id)
     {
         $field = 'service_id,service_name,image,desc,create_time,update_time';
-        if($this->site_id !== 0 ){
-            $sites =  (new Site())-> field('service_status')->where([['site_id','=', $this->site_id]]) ->findOrEmpty()->toArray();
-            
-        }
-        
-        $site_id = empty($sites['service_status'] ) ? $this->site_id : $this->site_id.",0";
-        $info = $this->model->field($field)->where([ [ 'service_id', '=', $id ], [ 'site_id', 'in', $site_id ] ])->findOrEmpty()->toArray();
+
+        $info = $this->model->field($field)->where([ [ 'service_id', '=', $id ], [ 'site_id', '=', $this->site_id ] ])->findOrEmpty()->toArray();
         return $info;
     }
 

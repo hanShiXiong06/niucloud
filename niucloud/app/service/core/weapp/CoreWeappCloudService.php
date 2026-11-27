@@ -64,7 +64,7 @@ class CoreWeappCloudService extends CoreCloudBaseService
      */
     public function uploadWeapp(array $data)
     {
-        if (strpos($this->config[ 'base_url' ], 'https://') === false) throw new CommonException('CURR_SITE_IS_NOT_OPEN_SSL');
+       // if (strpos($this->config[ 'base_url' ], 'https://') === false) throw new CommonException('CURR_SITE_IS_NOT_OPEN_SSL');
         $this->site_id = $data[ 'site_id' ] ?? 0;
 
         if (empty($this->config[ 'app_id' ])) throw new CommonException('WEAPP_APPID_EMPTY');
@@ -126,7 +126,8 @@ class CoreWeappCloudService extends CoreCloudBaseService
 
         if (isset($response[ 'code' ]) && $response[ 'code' ] == 0) throw new CommonException($response[ 'msg' ]);
 
-        return [ 'key' => $query[ 'timestamp' ] ];
+        $task_id = $response[ 'data' ][ 'task_id' ] ?? $query[ 'timestamp' ];
+        return [ 'key' => $task_id ];
     }
 
     /**
@@ -306,16 +307,53 @@ class CoreWeappCloudService extends CoreCloudBaseService
 
     /**
      * 获取小程序编译日志
-     * @param string $timestamp
-     * @return void
+     * @param string $taskId 任务ID (格式: authorize_code_timestamp)
+     * @return \Psr\Http\Message\ResponseInterface
      */
-    public function getWeappCompileLog(string $timestamp)
+    public function getWeappCompileLog(string $taskId)
+    {
+        $query = [
+            'task_id' => $taskId
+        ];
+        return ( new CloudService(true) )->httpGet('cloud/get_weapp_logs?' . http_build_query($query));
+    }
+
+    /**
+     * 中断上传并清除日志
+     */
+    public function stopUploadAndClearLogs(string $timestamp)
+    {
+        // 1. 中断上传
+        $this->stopWeappUpload($timestamp);
+
+        // 2. 删除日志（del_weapp_logs）
+        return $this->delWeappLogs($timestamp);
+    }
+
+    /**
+     * 中断小程序上传
+     * @param string $timestamp
+     * @return mixed
+     */
+    public function stopWeappUpload(string $timestamp)
     {
         $query = [
             'authorize_code' => $this->auth_code,
             'timestamp' => $timestamp
         ];
-        return ( new CloudService(true) )->httpGet('cloud/get_weapp_logs?' . http_build_query($query));
+        return ( new CloudService(true) )->httpGet('cloud/stop_weapp_upload?' . http_build_query($query));
+    }
+
+    /**
+     * 删除小程序上传日志
+     */
+    public function delWeappLogs(string $timestamp)
+    {
+        $query = [
+            'authorize_code' => $this->auth_code,
+            'timestamp' => $timestamp
+        ];
+        return (new CloudService(true))->httpGet('cloud/del_weapp_logs?' . http_build_query($query));
     }
 
     /**

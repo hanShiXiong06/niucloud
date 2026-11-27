@@ -7,15 +7,15 @@
                 <span class="text-sm text-[#a19f98]">{{t('updateTime')}}</span>
                 <span class="text-sm text-[#a19f98]">{{ time }}</span>
             </template>
-            <el-row :gutter="10">
-                <el-col :span="8">
+            <el-row>
+                <el-col :span="6">
                     <div class="ml-[10px]">
                         <div class="text-sm text-[#a19f98] leading-8">
-                            <el-statistic :value="statToday.listed_goods_num || 0">
+                            <el-statistic :value="statToday.order_num">
                                 <template #title>
                                     <div style="display: inline-flex; align-items: center">
-                                        <span class="mr-[5px]">{{t('todayListedGoods')}}</span>
-                                        <el-tooltip class="box-item" effect="light" :content="t('todayListedGoods')" placement="top">
+                                        <span class="mr-[5px]">{{t('todayOrderCount')}}</span>
+                                        <el-tooltip class="box-item" effect="light" :content="t('todayOrderCount')" placement="top">
                                             <el-icon>
                                                 <QuestionFilled />
                                             </el-icon>
@@ -26,18 +26,21 @@
                         </div>
                         <div class="text-sm text-[#a19f98] leading-8">
                             <span>{{t('yesterday')}}</span>
-                            <span>{{statYesterday.listed_goods_num || 0}}</span>
+                            <span>{{statYesterday.order_num}}</span>
+                        </div>
+                        <div class="text-sm text-[#a19f98] leading-8 mt-[15px]">
+                            <el-statistic :title="t('orderCount')" :value="statTotal.order_num" />
                         </div>
                     </div>
                 </el-col>
-                <el-col :span="8">
+                <el-col :span="6">
                     <div class="ml-[10px]">
                         <div class="text-sm text-[#a19f98] leading-8">
-                            <el-statistic :value="statToday.delisted_goods_num || 0">
+                            <el-statistic :value="statToday.sale_money">
                                 <template #title>
                                     <div style="display: inline-flex; align-items: center">
-                                        <span class="mr-[5px]">{{t('todayDelistedGoods')}}</span>
-                                        <el-tooltip class="box-item" effect="light" :content="t('todayDelistedGoods')" placement="top">
+                                        <span class="mr-[5px]">{{t('todayOrderSale')}}</span>
+                                        <el-tooltip class="box-item" effect="light" :content="t('todayOrderSale')" placement="top">
                                             <el-icon>
                                                 <QuestionFilled />
                                             </el-icon>
@@ -48,14 +51,42 @@
                         </div>
                         <div class="text-sm text-[#a19f98] leading-8">
                             <span>{{t('yesterday')}}</span>
-                            <span>{{statYesterday.delisted_goods_num || 0}}</span>
+                            <span>{{statYesterday.sale_money}}</span>
+                        </div>
+                        <div class="text-sm text-[#a19f98] leading-8 mt-[15px]">
+                            <el-statistic :title="t('salesTotal')" :value="statTotal.sale_money" />
                         </div>
                     </div>
                 </el-col>
-                <el-col :span="8">
+                <el-col :span="6">
                     <div class="ml-[10px]">
                         <div class="text-sm text-[#a19f98] leading-8">
-                            <el-statistic :value="statToday.access_sum || 0">
+                            <el-statistic :value="statToday.refund_money">
+                                <template #title>
+                                    <div style="display: inline-flex; align-items: center">
+                                        <span class="mr-[5px]">{{t('todayAddMemberCount')}}</span>
+                                        <el-tooltip class="box-item" effect="light" :content="t('todayAddMemberCount')" placement="top">
+                                            <el-icon>
+                                                <QuestionFilled />
+                                            </el-icon>
+                                        </el-tooltip>
+                                    </div>
+                                </template>
+                            </el-statistic>
+                        </div>
+                        <div class="text-sm text-[#a19f98] leading-8">
+                            <span>{{t('yesterday')}}</span>
+                            <span>{{statYesterday.refund_money}}</span>
+                        </div>
+                        <div class="text-sm text-[#a19f98] leading-8 mt-[15px]">
+                            <el-statistic :title="t('memberTotal')" :value="statTotal.refund_money" />
+                        </div>
+                    </div>
+                </el-col>
+                <el-col :span="6">
+                    <div class="ml-[10px]">
+                        <div class="text-sm text-[#a19f98] leading-8">
+                            <el-statistic :value="statToday.access_sum">
                                 <template #title>
                                     <div style="display: inline-flex; align-items: center">
                                         <span class="mr-[5px]">{{t('todayBrowseCount')}}</span>
@@ -70,10 +101,10 @@
                         </div>
                         <div class="text-sm text-[#a19f98] leading-8">
                             <span>{{t('yesterday')}}</span>
-                            <span>{{statYesterday.access_sum || 0}}</span>
+                            <span>{{statYesterday.access_sum}}</span>
                         </div>
                         <div class="text-sm text-[#a19f98] leading-8 mt-[15px]">
-                            <el-statistic :title="t('browseTotal')" :value="statTotal.access_sum || 0" />
+                            <el-statistic :title="t('browseTotal')" :value="statTotal.access_sum" />
                         </div>
                     </div>
                 </el-col>
@@ -86,32 +117,55 @@
             <template #header>
                 <span class="text-lg font-extrabold">{{t('agentMatters')}}</span>
             </template>
-            <el-row :gutter="10">
-                <el-col :span="6" class="cursor-pointer" @click="router.push({ path: '/phone_shop/goods/list', query: { status: 1 }})">
+            <el-row>
+                <el-col :span="4" class="cursor-pointer" @click="router.push({ path: '/phone_shop/order/index', query: {status: 1}})">
+                    <div class="ml-[10px]">
+                        <el-statistic :value="statOrder.wait_pay_order">
+                            <template #title>
+                                <div style="display: inline-flex; align-items: center">
+                                    <span class="mr-[5px]">{{t('waitPayOrder')}}</span>
+                                    <el-tooltip class="box-item" effect="light" :content="t('waitPayOrder')" placement="top">
+                                        <el-icon>
+                                            <QuestionFilled />
+                                        </el-icon>
+                                    </el-tooltip>
+                                </div>
+                            </template>
+                        </el-statistic>
+                    </div>
+                </el-col>
+                <el-col :span="4" class="cursor-pointer" @click="router.push({ path: '/phone_shop/order/index', query: {status: 2}})">
+                    <el-statistic :value="statOrder.wait_delivery_order">
+                        <template #title>
+                            <div style="display: inline-flex; align-items: center">{{t('waitDeliveryOrder')}}</div>
+                        </template>
+                    </el-statistic>
+                </el-col>
+                <el-col :span="4" class="cursor-pointer" @click="router.push({ path: '/phone_shop/order/index', query: {status: 3}})">
+                    <el-statistic :value="statOrder.wait_take_order">
+                        <template #title>
+                            <div style="display: inline-flex; align-items: center">{{t('waitTakeOrder')}}</div>
+                        </template>
+                    </el-statistic>
+                </el-col>
+                <el-col :span="4" class="cursor-pointer" @click="router.push({ path: '/phone_shop/order/refund'})">
+                    <el-statistic :value="statOrder.refund_order">
+                        <template #title>
+                            <div style="display: inline-flex; align-items: center">退款订单</div>
+                        </template>
+                    </el-statistic>
+                </el-col>
+                <el-col :span="4" class="cursor-pointer" @click="router.push({ path: '/phone_shop/goods/list'})">
                     <el-statistic :value="statGoods.sale_goods_num">
                         <template #title>
                             <div style="display: inline-flex; align-items: center">{{t('saleGoodsNum')}}</div>
                         </template>
                     </el-statistic>
                 </el-col>
-                <el-col :span="6" class="cursor-pointer" @click="router.push({ path: '/phone_shop/goods/list', query: { status: 0 }})">
+                <el-col :span="4" class="cursor-pointer" @click="router.push({ path: '/phone_shop/goods/list', query: {status: 0}})">
                     <el-statistic :value="statGoods.warehouse_goods_num">
                         <template #title>
                             <div style="display: inline-flex; align-items: center">{{t('warehouseGoodsNum')}}</div>
-                        </template>
-                    </el-statistic>
-                </el-col>
-                <el-col :span="6" class="cursor-pointer" @click="router.push({ path: '/phone_shop/goods/list', query: { status: 1 }})">
-                    <el-statistic :value="statGoods.sale_goods_over_30_unsold_num">
-                        <template #title>
-                            <div style="display: inline-flex; align-items: center">{{t('listedOver30')}}</div>
-                        </template>
-                    </el-statistic>
-                </el-col>
-                <el-col :span="6" class="cursor-pointer" @click="router.push({ path: '/phone_shop/goods/list', query: { status: 1 }})">
-                    <el-statistic :value="statGoods.sale_goods_over_90_unsold_num">
-                        <template #title>
-                            <div style="display: inline-flex; align-items: center">{{t('listedOver90')}}</div>
                         </template>
                     </el-statistic>
                 </el-col>
@@ -119,235 +173,187 @@
         </el-card>
         <!-- 代办事项 end -->
 
-        <!-- 商品上下架趋势 -->
+        <!-- 订单趋势 -->
         <el-row :gutter="15" class="mt-[15px]">
             <el-col :span="12">
                 <el-card shadow="never" class="!border-none">
                     <template #header>
-                        <span class="text-lg font-extrabold">{{t('categoryUnshelfComparison')}}</span>
+                        <span class="text-lg font-extrabold">订单量趋势</span>
                     </template>
-                    <div ref="unshelfChartRef" :style="{ width: '100%', height: '300px' }"></div>
+                    <div ref="visitStat" :style="{ width: '100%', height: '300px' }"></div>
                 </el-card>
             </el-col>
             <el-col :span="12">
                 <el-card shadow="never" class="!border-none">
                     <template #header>
-                        <span class="text-lg font-extrabold">{{t('categoryShelfComparison')}}</span>
+                        <span class="text-lg font-extrabold">销售额（元）</span>
                     </template>
-                    <div ref="shelfChartRef" :style="{ width: '100%', height: '300px' }"></div>
+                    <div ref="hourStat" :style="{ width: '100%', height: '300px' }"></div>
                 </el-card>
             </el-col>
         </el-row>
-        <!-- 商品上下架趋势 end -->
+        <!-- 订单趋势 end -->
     </div>
 </template>
 
 <script lang="ts" setup>
-import { ref, onBeforeUnmount, nextTick } from 'vue'
+import { ref } from 'vue'
 import { t } from '@/lang'
+import { ElMessage, ElNotification } from 'element-plus'
 import {
     getShopCountList,
     getShopTodayCountList,
     getShopYesterdayCountList,
     getShopStat,
+    getShopOrderStat,
     getShopGoodsStat
 } from '@/addon/phone_shop/api/shop'
+import { checkJobStatus } from '@/app/api/sys'
 import * as echarts from 'echarts'
-import type { EChartsOption } from 'echarts'
 import { useRouter } from 'vue-router'
-import { QuestionFilled } from '@element-plus/icons-vue'
 
 const router = useRouter()
-const unshelfChartRef = ref<HTMLElement | null>(null)
-const shelfChartRef = ref<HTMLElement | null>(null)
+const visitStat = ref<any>(null)
+const hourStat = ref<any>(null)
 
-interface StatTotalType {
-    order_num: number
-    sale_money: number
-    refund_money: number
-    access_sum: number
-}
-interface StatDayType {
-    order_num: number
-    sale_money: number
-    refund_money: number
-    access_sum: number
-    listed_goods_num: number
-    delisted_goods_num: number
-}
-interface StatGoodsType {
-    sale_goods_num: number
-    warehouse_goods_num: number
-    sale_goods_over_30_unsold_num: number
-    sale_goods_over_90_unsold_num: number
-}
-interface TrendSeries {
-    name: string
-    data: number[]
-}
-interface TrendPayload {
-    legend: string[]
-    categories: string[]
-    series: TrendSeries[]
+interface statTotalType {
+    order_num: [number, string],
+    sale_money: [number, string],
+    refund_money: [number, string],
+    access_sum: [number, string]
 }
 
-const defaultTotal: StatTotalType = { order_num: 0, sale_money: 0, refund_money: 0, access_sum: 0 }
-const defaultDay: StatDayType = { order_num: 0, sale_money: 0, refund_money: 0, access_sum: 0, listed_goods_num: 0, delisted_goods_num: 0 }
-const defaultGoods: StatGoodsType = {
-    sale_goods_num: 0,
-    warehouse_goods_num: 0,
-    sale_goods_over_30_unsold_num: 0,
-    sale_goods_over_90_unsold_num: 0
+interface statTodayType {
+    order_num: [number, string],
+    sale_money: [number, string],
+    refund_money: [number, string],
+    access_sum: [number, string]
 }
 
-const statTotal = ref<StatTotalType>({ ...defaultTotal })
-const statToday = ref<StatDayType>({ ...defaultDay })
-const statYesterday = ref<StatDayType>({ ...defaultDay })
-const statGoods = ref<StatGoodsType>({ ...defaultGoods })
-const categoryTrend = ref<{ shelf: TrendPayload; unshelf: TrendPayload }>({
-    shelf: { legend: [], categories: [], series: [] },
-    unshelf: { legend: [], categories: [], series: [] }
-})
-
-const normalizeNumberMap = (payload: Record<string, any>) => {
-    const result: Record<string, number> = {}
-    Object.keys(payload || {}).forEach((key) => {
-        const value = Number(payload[key] ?? 0)
-        result[key] = Number.isNaN(value) ? 0 : value
-    })
-    return result
+interface statYesterdayType {
+    order_num: [number, string],
+    sale_money: [number, string],
+    refund_money: [number, string],
+    access_sum: [number, string]
 }
 
-const renderTrendChart = (el: HTMLElement | null, trend: TrendPayload, emptyText: string) => {
-    if (!el) return
-    let chart = echarts.getInstanceByDom(el)
-    if (!chart) chart = echarts.init(el)
-
-    // 过滤掉所有值为0的分类
-    const validIndices: number[] = []
-    const categoryCounts = new Array(trend.categories.length).fill(0)
-    
-    // 计算每个分类在所有系列中的总和
-    trend.series.forEach((series) => {
-        series.data.forEach((value, index) => {
-            if (value > 0) {
-                categoryCounts[index] += value
-            }
-        })
-    })
-    
-    // 找出有数据的分类索引
-    categoryCounts.forEach((count, index) => {
-        if (count > 0) {
-            validIndices.push(index)
-        }
-    })
-
-    // 如果没有有效数据，显示空状态
-    if (validIndices.length === 0) {
-        const option: EChartsOption = {
-            legend: { data: [] },
-            xAxis: { type: 'category', data: [] },
-            yAxis: { type: 'value' },
-            series: [],
-            graphic: [
-                {
-                    type: 'text',
-                    left: 'center',
-                    top: 'middle',
-                    style: {
-                        text: emptyText,
-                        fill: '#909399',
-                        fontSize: 16
-                    }
-                }
-            ]
-        }
-        chart.setOption(option, true)
-        return
-    }
-
-    // 过滤分类和系列数据
-    const filteredCategories = validIndices.map((idx) => trend.categories[idx])
-    const filteredSeries = trend.series.map((series) => ({
-        ...series,
-        type: 'bar',
-        barMaxWidth: 28,
-        data: validIndices.map((idx) => series.data[idx] || 0)
-    }))
-
-    const option: EChartsOption = {
-        tooltip: { 
-            trigger: 'axis',
-            formatter: (params: any) => {
-                if (!params || params.length === 0) return ''
-                let result = params[0].axisValue + '<br/>'
-                params.forEach((item: any) => {
-                    if (item.value > 0) {
-                        result += `${item.seriesName}: ${item.value}<br/>`
-                    }
-                })
-                return result
-            }
-        },
-        legend: { data: trend.legend },
-        xAxis: {
-            type: 'category',
-            data: filteredCategories,
-            axisLabel: { 
-                interval: 0,
-                rotate: filteredCategories.length > 5 ? 45 : 0
-            }
-        },
-        yAxis: { type: 'value' },
-        series: filteredSeries
-    }
-
-    chart.setOption(option, true)
+interface statOrderType {
+    wait_pay_order: [number, string],
+    wait_delivery_order: [number, string],
+    wait_take_order: [number, string],
+    refund_order: [number, string]
 }
 
-const refreshTrendCharts = () => {
-    renderTrendChart(unshelfChartRef.value, categoryTrend.value.unshelf, '暂无数据')
-    renderTrendChart(shelfChartRef.value, categoryTrend.value.shelf, '暂无数据')
+interface statGoodsType {
+    sale_goods_num: [number, string],
+    warehouse_goods_num: [number, string]
 }
+
+interface statCountType {
+    order_num: [number, string],
+    time: string,
+    sale_money: [number, string]
+}
+
+const statTotal = ref<statTotalType|any>([])
+const statToday = ref<statTodayType|any>([])
+const statYesterday = ref<statYesterdayType|any>([])
+const statCount = ref<statCountType|any>([])
+const statOrder = ref<statOrderType|any>([])
+const statGoods = ref<statGoodsType|any>([])
 
 const getStatInfoFn = async () => {
-    const [totalRes, todayRes, yesterdayRes, goodsRes, trendRes] = await Promise.all([
-        getShopCountList(),
-        getShopTodayCountList(),
-        getShopYesterdayCountList(),
-        getShopGoodsStat(),
-        getShopStat()
-    ])
-
-    statTotal.value = { ...defaultTotal, ...normalizeNumberMap(totalRes.data || {}) }
-    statToday.value = { ...defaultDay, ...normalizeNumberMap(todayRes.data || {}) }
-    statYesterday.value = { ...defaultDay, ...normalizeNumberMap(yesterdayRes.data || {}) }
-    statGoods.value = { ...defaultGoods, ...normalizeNumberMap(goodsRes.data || {}) }
-
-    const trendData = trendRes.data || {}
-    const defaultTrend: TrendPayload = { legend: [], categories: [], series: [] }
-    categoryTrend.value = {
-        shelf: trendData.shelf || { ...defaultTrend },
-        unshelf: trendData.unshelf || { ...defaultTrend }
+    let statTotalData = await (await getShopCountList()).data
+    for (let i in statTotalData) {
+        statTotalData[i] = Number(statTotalData[i])
     }
-
-    await nextTick()
-    refreshTrendCharts()
+    statTotal.value = statTotalData
+    statToday.value = await (await getShopTodayCountList()).data
+    statToday.value.sale_money = statToday.value.sale_money == '0.00' ? 0 : Number(statToday.value.sale_money)
+    statToday.value.refund_money = statToday.value.refund_money == '0.00' ? 0 : Number(statToday.value.refund_money)
+    statToday.value.order_num = Number(statToday.value.order_num)
+    statToday.value.access_sum = Number(statToday.value.access_sum)
+    statYesterday.value = await (await getShopYesterdayCountList()).data
+    statOrder.value = await (await getShopOrderStat()).data
+    statGoods.value = await (await getShopGoodsStat()).data
+    statCount.value = await (await getShopStat()).data
+    setTimeout(() => {
+        drawChart('')
+        drawChartTo('')
+    }, 20)
 }
+
 getStatInfoFn()
 
-onBeforeUnmount(() => {
-    if (unshelfChartRef.value) {
-        const chart = echarts.getInstanceByDom(unshelfChartRef.value)
-        chart?.dispose()
-    }
-    if (shelfChartRef.value) {
-        const chart = echarts.getInstanceByDom(shelfChartRef.value)
-        chart?.dispose()
-    }
-})
+const drawChart = (item:any) => {
+    let value = statCount.value.order_num
+    if (item) value = item
+    if (!visitStat.value) return
+    const visitStatChart = echarts.init(visitStat.value)
+    const visitStatOption = ref({
+        // title: {
+        //     text: '订单量趋势'
+        // },
+        legend: {},
+        xAxis: {
+            data: []
+        },
+        yAxis: {},
+        tooltip: {
+            trigger: 'axis',
+            formatter: (params: any[]) => {
+                if (!params.length) return '';
+                const date = params[0].axisValue; // 时间
+                const data = params[0].data;
+                return `${date}<br/>订单量: ${data} 单`;
+            }
+        },
 
+        series: [
+            {
+                type: 'line',
+                data: []
+            }
+        ]
+    })
+    visitStatOption.value.xAxis.data = statCount.value.time
+    visitStatOption.value.series[0].data = value
+    visitStatChart.setOption(visitStatOption.value)
+}
+const drawChartTo = (item:any) => {
+    let valueTo = statCount.value.sale_money
+    if (item) valueTo = item
+    if (!hourStat.value) return
+    const hourStatChart = echarts.init(hourStat.value)
+    const hourStatOption = ref({
+        // title: {
+        //     text: '销售额（元）'
+        // },
+        legend: {},
+        xAxis: {
+            data: []
+        },
+        yAxis: {},
+        tooltip: {
+            trigger: 'axis',
+            formatter: (params: any[]) => {
+                if (!params.length) return '';
+                const date = params[0].axisValue;
+                const data = params[0].data;
+                return `${date}<br/>销售额: ${data} 元`;
+            }
+        },
+        series: [
+            {
+                type: 'line',
+                data: []
+            }
+        ]
+    })
+    hourStatOption.value.xAxis.data = statCount.value.time
+    hourStatOption.value.series[0].data = valueTo
+    hourStatChart.setOption(hourStatOption.value)
+}
 const time = ref('')
 const nowTime = () => {
     const date = new Date()
@@ -366,6 +372,27 @@ const nowTime = () => {
     time.value = year + '-' + month + '-' + day + ' ' + hh + ':' + mm + ':' + ss
 }
 nowTime()
+
+/**
+ * 校验消息队列
+ */
+let notification = null
+const checkJob = () => {
+    checkJobStatus().then(res => {
+        if (!res.data) {
+            notification = ElNotification({
+                title: '温馨提示',
+                dangerouslyUseHTMLString: true,
+                duration: 0,
+                position: 'bottom-right',
+                message: '您的【队列】运行异常，会导致商城订单相关任务无法正常使用，请尽快启动队列<br><a class="text-[var(--el-color-primary)]" href="https://doc.press.niucloud.com/php/saas-framework/use/other/scheduled-task-config.html" target="_blank">>>> 点击查看处理方法 <<<</a>',
+                type: 'warning'
+            })
+        }
+    }).catch(() => {
+    })
+}
+checkJob()
 </script>
 
 <style lang="scss" scoped></style>

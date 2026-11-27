@@ -3,20 +3,22 @@
 return [
     'grant' => [
         'shop_buy_goods' => [
-            'key' => 'phone_shop_buy_goods',
+            'key' => 'shop_buy_goods',
             'name' => '购买商品',
             'desc' => '订单交易成功后按订单交易金额发放积分',
             'component' => '/src/addon/phone_shop/views/member/components/point-rule-buygoods.vue',
-            'calculate' => function(array $config, array $data) {
-                $order_money = $data[ 'order_money' ] ?? 0;
+            'calculate' => function (array $config, array $data) {
+                $order_money = (float)($data['order_money'] ?? 0);
                 if ($order_money <= 0) return 0;
+                $point = ((float)$config['money'] * (float)$config['point']);
+                if ($point <= 0) return 0;
                 return (int) round($order_money / $config[ 'money' ] * $config[ 'point' ]);
             },
             'content' => [
-                'admin' => function($site_id, $config) {
+                'admin' => function ($site_id, $config) {
                     return "购买商品可获得{$config['point']}积分/{$config['money']}元";
                 },
-                'task' => function($site_id, $config) {
+                'task' => function ($site_id, $config) {
                     return [
                         'icon' => '/addon/phone_shop/rule/growth-rule-cart.png',
                         'title' => '购买商品',
@@ -35,7 +37,7 @@ return [
 //            'key' => 'shop_order_deduction',
 //            'name' => '积分抵现',
 //            'desc' => '订单交易时积分可抵部分现金',
-//            'component' => '/src/addon/shop/views/member/components/point-rule-orderdeduction.vue',
+//            'component' => '/src/addon/phone_shop/views/member/components/point-rule-orderdeduction.vue',
 //            'content' => [
 //                'admin' => function($site_id, $config) {
 //                    return "订单交易时{$config['point']}积分可抵{$config['money']}元";

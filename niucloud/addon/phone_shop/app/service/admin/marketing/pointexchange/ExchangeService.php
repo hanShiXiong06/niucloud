@@ -14,6 +14,7 @@ namespace addon\phone_shop\app\service\admin\marketing\pointexchange;
 
 use addon\phone_shop\app\dict\active\ActiveDict;
 use addon\phone_shop\app\dict\active\ExchangeDict;
+use addon\phone_shop\app\model\active\Active;
 use addon\phone_shop\app\model\exchange\Exchange;
 use addon\phone_shop\app\model\goods\GoodsSku;
 use addon\phone_shop\app\model\goods\Goods;
@@ -48,8 +49,35 @@ class ExchangeService extends BaseAdminService
     {
         $field = 'total_exchange_num,stock,id,site_id,type,names,title,image,status,product_detail,point,price,limit_num,content,sort,total_point_num,total_price_num,total_order_num,total_member_num,update_time,create_time';
         $order = 'id desc';
-        $search_model = $this->model->where([ [ 'site_id', '=', $this->site_id ] ])->withSearch([ 'names', 'status', 'create_time' ], $where)->append([ 'type_name', 'status_name', 'goods_cover_thumb_big', 'goods_cover_thumb_small' ])->field($field)->order($order);
+        $search_model = $this->model->where([ [ 'site_id', '=', $this->site_id ] ])->withSearch([ 'names', 'status', 'create_time', 'active_id' ], $where)->append([ 'type_name', 'status_name', 'goods_cover_thumb_small' ])->field($field)->order($order);
         $list = $this->pageQuery($search_model);
+        return $list;
+    }
+
+    /**
+     * 获取积分商城分页列表（用于弹框选择）
+     * @param array $where
+     * @return array
+     */
+    public function getSelectPage(array $where = [])
+    {
+        $verify_ids=[];
+        // 检测id集合是否存在，移除不存在的id，纠正数据准确性
+        if (!empty($where[ 'verify_ids' ])) {
+            $verify_ids = $this->model->where([
+                [ 'id', 'in', $where[ 'verify_ids' ] ]
+            ])->field('id')->select()->toArray();
+
+            if (!empty($verify_ids)) {
+                $verify_ids = array_column($verify_ids, 'id');
+            }
+        }
+
+        $field = 'total_exchange_num,stock,id,site_id,type,names,title,image,status,product_detail,point,price,limit_num,content,sort,total_point_num,total_price_num,total_order_num,total_member_num,update_time,create_time';
+        $order = 'id desc';
+        $search_model = $this->model->where([ [ 'site_id', '=', $this->site_id ], [ 'status', '=', ExchangeDict::UP ] ])->withSearch([ 'names', 'status', 'create_time' ], $where)->append([ 'type_name', 'status_name', 'goods_cover_thumb_small' ])->field($field)->order($order);
+        $list = $this->pageQuery($search_model);
+        $list[ 'verify_ids' ] = $verify_ids;
         return $list;
     }
 
@@ -64,8 +92,14 @@ class ExchangeService extends BaseAdminService
         $info = $this->model->where([ [ 'id', '=', $id ], [ 'site_id', '=', $this->site_id ] ])->append([ 'type_name' ])->field($field)->findOrEmpty()->toArray();
         switch ($info[ 'type' ]) {
             case ExchangeDict::GOODS:
-                $info[ 'goods_list' ] = ( new GoodsSku() )->where([ [ 'site_id', '=', $this->site_id ], [ 'goods_id', '=', $info[ 'product_detail' ][ 0 ][ 'goods_id' ] ] ])->field('sku_spec_format,sku_id,site_id,sku_name,sku_image,sku_no,price as goods_price,stock as goods_stock')->select()->toArray();
-                $info[ 'goods_info' ] = ( new Goods() )->where([ [ 'site_id', '=', $this->site_id ], [ 'goods_id', '=', $info[ 'product_detail' ][ 0 ][ 'goods_id' ] ] ])->field('goods_id,goods_name,goods_image,goods_cover')->findOrEmpty()->toArray();;
+                $goods_id = 0;
+                foreach ($info[ 'product_detail' ] as $k => $v) {
+                    if (!empty($v[ 'goods_id' ])) {
+                        $goods_id = $v[ 'goods_id' ];
+                    }
+                }
+                $info[ 'goods_list' ] = ( new GoodsSku() )->where([ [ 'site_id', '=', $this->site_id ], [ 'goods_id', '=', $goods_id ] ])->field('sku_spec_format,sku_id,site_id,sku_name,sku_image,sku_no,price as goods_price,stock as goods_stock')->select()->toArray();
+                $info[ 'goods_info' ] = ( new Goods() )->where([ [ 'site_id', '=', $this->site_id ], [ 'goods_id', '=', $goods_id ] ])->field('goods_id,goods_name,goods_image,goods_cover')->findOrEmpty()->toArray();
                 $info[ 'goods_info' ][ 'spec_type' ] = empty($info[ 'goods_list' ][ 0 ][ 'sku_spec_format' ]) ? 'single' : 'multi';
                 $info[ 'goods_info' ][ 'goods_price' ] = $info[ 'goods_list' ][ 0 ][ 'goods_price' ];
                 foreach ($info[ 'goods_list' ] as &$item) {
@@ -78,7 +112,6 @@ class ExchangeService extends BaseAdminService
                     }
                 }
                 break;
-            default:
         }
         return $info;
     }
@@ -112,8 +145,8 @@ class ExchangeService extends BaseAdminService
         $goods_where = [
             [ 'active.site_id', '=', $this->site_id ],
         ];
-        $active_gooods_model = new ActiveGoods();
-        $count = $active_gooods_model->where($check_condition)
+        $active_goods_model = new ActiveGoods();
+        $count = $active_goods_model->where($check_condition)
             ->withJoin([
                 'active' => function(Query $query) use ($goods_where) {
                     $query->where($goods_where);
@@ -207,7 +240,7 @@ class ExchangeService extends BaseAdminService
     public function edit(int $id, array $data)
     {
         $info = $this->model->where([ [ 'site_id', '=', $this->site_id ], [ 'id', '=', $id ] ])->findOrEmpty();
-        if ($info->isEmpty()) throw new AdminException('EXCHANGE_DETA_NOT_FOUND');
+        if ($info->isEmpty()) throw new AdminException('EXCHANGE_DATA_NOT_FOUND');
 //        $product_detail = json_decode($data[ 'product_detail' ], true);
         $this->verifyData($data);
         Db::startTrans();
@@ -245,7 +278,7 @@ class ExchangeService extends BaseAdminService
         if ($data[ 'status' ] == 1) {
             $data_info = $this->getInfo([ 'ids' => $id ]);
             if (!empty($data_info))
-                $goods_info = ( new Goods() )->where([ [ 'goods_id', '=', $data_info[ 'product_detail' ][ 0 ][ 'goods_id' ] ] ])->field('status')->findOrEmpty()->toArray();;
+                $goods_info = ( new Goods() )->where([ [ 'goods_id', '=', $data_info[ 'product_detail' ][ 0 ][ 'goods_id' ] ] ])->field('status')->findOrEmpty()->toArray();
             if ($goods_info[ 'status' ] == 0) throw new AdminException('SHOP_GOODS_DELISTED');
         }
         return $this->model->where([ [ 'id', '=', $id ], [ 'site_id', '=', $this->site_id ] ])->update([ 'status' => $data[ 'status' ] ]);
@@ -271,14 +304,20 @@ class ExchangeService extends BaseAdminService
     public function del(int $id)
     {
         $info = $this->model->where([ [ 'site_id', '=', $this->site_id ], [ 'id', '=', $id ] ])->findOrEmpty();
-        if ($info->isEmpty()) throw new AdminException('EXCHANGE_DETA_NOT_FOUND');
+        if ($info->isEmpty()) throw new AdminException('EXCHANGE_DATA_NOT_FOUND');
         Db::startTrans();
         try {
+            $goods_id = 0;
+            foreach ($info[ 'product_detail' ] as $k => $v) {
+                if (!empty($v[ 'goods_id' ])) {
+                    $goods_id = $v[ 'goods_id' ];
+                }
+            }
             $active_info = ( new ActiveGoods() )->where([
                 [ 'site_id', '=', $this->site_id ],
-                [ 'goods_id', 'in', $info[ 'product_detail' ][ 0 ][ 'goods_id' ] ],
+                [ 'goods_id', 'in', $goods_id ],
                 [ 'active_class', '=', ActiveDict::EXCHANGE ],
-            ])->field('active_id')->findOrEmpty()->toArray();;
+            ])->field('active_id')->findOrEmpty()->toArray();
             if (!empty($active_info)) ( new CoreActiveService() )->del($active_info[ 'active_id' ], $this->site_id, 1);
             $this->model->where([ [ 'id', '=', $id ], [ 'site_id', '=', $this->site_id ] ])->delete();
             Db::commit();
@@ -287,8 +326,72 @@ class ExchangeService extends BaseAdminService
             Db::rollback();
             throw new CommonException($e->getMessage());
         }
-
     }
+
+    /**
+     * 批量删除积分商城
+     * @param array $ids
+     * @return bool
+     */
+    public function batchDelete($ids)
+    {
+        $point_exchange_list = $this->model->where([ [ 'site_id', '=', $this->site_id ], [ 'id', 'in', $ids ] ])->select()->toArray();
+        foreach ($point_exchange_list as $value){
+            if ($value[ 'status' ] == ExchangeDict::UP) throw new AdminException('EXIST_NOT_DOWN_ACTIVE');
+        }
+
+        $goods_ids = [];
+        foreach ($point_exchange_list as $value){
+            foreach ($value[ 'product_detail' ] as $v) {
+                if (!empty($v[ 'goods_id' ])) {
+                    $goods_ids[] = $v[ 'goods_id' ];
+                }
+            }
+        }
+        $goods_ids = array_unique($goods_ids);
+
+        $active_ids = ( new ActiveGoods() )->where([
+            [ 'site_id', '=', $this->site_id ],
+            [ 'goods_id', 'in', $goods_ids ],
+            [ 'active_class', '=', ActiveDict::EXCHANGE ],
+        ])->column('active_id');
+        Db::startTrans();
+        try {
+            $this->model->where([ [ 'id', 'in', $ids ], [ 'site_id', '=', $this->site_id ] ])->delete();
+            (new Active())->where([ [ 'active_id', 'in', $active_ids ], ['site_id', '=', $this->site_id], [ 'active_class', '=', ActiveDict::EXCHANGE ] ])->delete();
+            (new ActiveGoods())->where([ [ 'active_id', 'in', $active_ids ], ['site_id', '=', $this->site_id], [ 'active_class', '=', ActiveDict::EXCHANGE ] ])->delete();
+            Db::commit();
+            return true;
+        } catch (\Exception $e) {
+            Db::rollback();
+            throw new CommonException($e->getMessage());
+        }
+    }
+
+    /**
+     * 批量下架积分商城
+     * @param array $ids
+     * @return bool
+     */
+    public function batchDown($ids)
+    {
+        $this->model->where([ [ 'site_id', '=', $this->site_id ], [ 'id', 'in', $ids ], [ 'status', '=', ExchangeDict::UP] ])->update( [ 'status' => ExchangeDict::DOWN] );
+
+        return true;
+    }
+
+    /**
+     * 批量上架积分商城
+     * @param array $ids
+     * @return bool
+     */
+    public function batchUp($ids)
+    {
+        $this->model->where([ [ 'site_id', '=', $this->site_id ], [ 'id', 'in', $ids ], [ 'status', '=', ExchangeDict::DOWN] ])->update( [ 'status' => ExchangeDict::UP] );
+
+        return true;
+    }
+
 
     /**
      * 商品编辑业务

@@ -13,7 +13,6 @@ namespace addon\phone_shop\app\service\admin\goods;
 
 use addon\phone_shop\app\model\goods\Label;
 use addon\phone_shop\app\model\goods\LabelGroup;
-use addon\phone_shop\app\model\site\Site;
 use core\base\BaseAdminService;
 use core\exception\AdminException;
 
@@ -21,7 +20,7 @@ use core\exception\AdminException;
 /**
  * 商品标签分组服务层
  * Class LabelGroupService
- * @package addon\shop\app\service\admin\goods
+ * @package addon\phone_shop\app\service\admin\goods
  */
 class LabelGroupService extends BaseAdminService
 {
@@ -38,18 +37,13 @@ class LabelGroupService extends BaseAdminService
      */
     public function getPage(array $where = [])
     {
-        $field = 'group_id, group_name, sort, create_time, site_id, update_time';
+        $field = 'group_id, group_name, sort, create_time, update_time';
         $order = 'group_id desc';
         if (!empty($where[ 'order' ])) {
             $order = $where[ 'order' ] . ' ' . $where[ 'sort' ];
         }
-        if($this->site_id !== 0 ){
-            $sites =  (new Site())-> field('label_group_status')->where([['site_id','=', $this->site_id]]) ->findOrEmpty()->toArray();
-            
-        }
-        
-        $site_id = empty($sites['label_group_status'] ) ? $this->site_id : $this->site_id.",0";
-        $search_model = $this->model->where([ [ 'site_id', 'in', $site_id ] ])->withSearch([ "group_name" ], $where)->field($field)->order($order);
+
+        $search_model = $this->model->where([ [ 'site_id', '=', $this->site_id ] ])->withSearch([ "group_name" ], $where)->field($field)->order($order);
         $list = $this->pageQuery($search_model);
         return $list;
     }
@@ -60,16 +54,10 @@ class LabelGroupService extends BaseAdminService
      * @param string $field
      * @return array
      */
-    public function getList(array $where = [], $field = 'group_id,  site_id,group_name, sort, create_time, update_time')
+    public function getList(array $where = [], $field = 'group_id, group_name, sort, create_time, update_time')
     {
         $order = 'sort desc,group_id desc';
-        if($this->site_id !== 0 ){
-            $sites =  (new Site())-> field('label_group_status')->where([['site_id','=', $this->site_id]]) ->findOrEmpty()->toArray();
-            
-        }
-        
-        $site_id = empty($sites['label_group_status'] ) ? $this->site_id : $this->site_id.",0";
-        return $this->model->where([ [ 'site_id',  'in', $site_id] ])->withSearch([ "group_name" ], $where)->field($field)->order($order)->select()->toArray();
+        return $this->model->where([ [ 'site_id', '=', $this->site_id ] ])->withSearch([ "group_name" ], $where)->field($field)->order($order)->select()->toArray();
     }
 
     /**
@@ -79,14 +67,9 @@ class LabelGroupService extends BaseAdminService
      */
     public function getInfo(int $id)
     {
-        $field = 'group_id, group_name, sort, site_id, create_time, update_time';
-        if($this->site_id !== 0 ){
-            $sites =  (new Site())-> field('label_group_status')->where([['site_id','=', $this->site_id]]) ->findOrEmpty()->toArray();
-            
-        }
-        
-        $site_id = empty($sites['label_group_status'] ) ? $this->site_id : $this->site_id.",0";
-        $info = $this->model->field($field)->where([ [ 'group_id', '=', $id ], [ 'site_id',  'in', $site_id ] ])->findOrEmpty()->toArray();
+        $field = 'group_id, group_name, sort, create_time, update_time';
+
+        $info = $this->model->field($field)->where([ [ 'group_id', '=', $id ], [ 'site_id', '=', $this->site_id ] ])->findOrEmpty()->toArray();
         return $info;
     }
 
@@ -154,8 +137,6 @@ class LabelGroupService extends BaseAdminService
      */
     public function modifySort($data)
     {
-        
-
         return $this->model->where([
             [ 'group_id', '=', $data[ 'group_id' ] ],
             [ 'site_id', '=', $this->site_id ]

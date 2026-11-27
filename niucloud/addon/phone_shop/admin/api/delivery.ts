@@ -58,7 +58,6 @@ export function deleteCompany(company_id: number) {
     return request.delete(`phone_shop/delivery/company/${ company_id }`, { showErrorMessage: true, showSuccessMessage: true })
 }
 
-
 /*********************************  运费模版  ***************************************/
 /**
  * 获取运费模版分页列表
@@ -120,7 +119,6 @@ export function deleteShippingTemplate(template_id: number) {
     })
 }
 
-
 /*********************************  自提门店  ***************************************/
 /**
  * 获取自提门店列表
@@ -142,13 +140,11 @@ export function getStoreInfo(store_id: number) {
 
 /**
  * 获取初始化页面信息
- * @param params
  * @returns
  */
 export function getStoreInit() {
     return request.get(`phone_shop/delivery/store/init`)
 }
-
 
 /**
  * 添加自提门店
@@ -212,7 +208,17 @@ export function getShopDeliveryList() {
  * @returns
  */
 export function setShopDeliveryConfig(params: Record<string, any>) {
-    return request.put(`phone_shop/delivery/setConfig`, params)
+    return request.put(`phone_shop/delivery/setConfig`, params, { showSuccessMessage: true })
+}
+
+/*********************************  配送员  ***************************************/
+/**
+ * 获取 配送员列表
+ * @param params
+ * @returns
+ */
+export function getShopDelivery(params: Record<string, any>) {
+    return request.get('phone_shop/shop_delivery/staff', { params })
 }
 
 /**
@@ -220,8 +226,8 @@ export function setShopDeliveryConfig(params: Record<string, any>) {
  * @param params
  * @returns
  */
-export function getShopDelivery(params: Record<string, any>) {
-    return request.get('phone_shop/delivery/staff', { params })
+export function getShopDeliverList(params: Record<string, any>) {
+    return request.get('phone_shop/shop_delivery/staff/list', { params })
 }
 
 /**
@@ -230,7 +236,7 @@ export function getShopDelivery(params: Record<string, any>) {
  * @returns
  */
 export function getShopDeliverInfo(staff_id: number) {
-    return request.get(`phone_shop/delivery/staff/${ staff_id }`);
+    return request.get(`phone_shop/shop_delivery/staff/${ staff_id }`);
 }
 
 /**
@@ -239,7 +245,7 @@ export function getShopDeliverInfo(staff_id: number) {
  * @returns
  */
 export function addShopDeliver(params: Record<string, any>) {
-    return request.post('phone_shop/delivery/staff', params, { showSuccessMessage: true })
+    return request.post('phone_shop/shop_delivery/staff', params, { showSuccessMessage: true })
 }
 
 /**
@@ -248,7 +254,7 @@ export function addShopDeliver(params: Record<string, any>) {
  * @returns
  */
 export function editShopDeliver(params: Record<string, any>) {
-    return request.put(`phone_shop/delivery/staff/${ params.deliver_id }`, params, { showSuccessMessage: true })
+    return request.put(`phone_shop/shop_delivery/staff/${ params.deliver_id }`, params, { showSuccessMessage: true })
 }
 
 /**
@@ -257,15 +263,48 @@ export function editShopDeliver(params: Record<string, any>) {
  * @returns
  */
 export function deleteShopDeliver(staff_id: number) {
-    return request.delete(`phone_shop/delivery/staff/${ staff_id }`)
+    return request.delete(`phone_shop/shop_delivery/staff/${ staff_id }`)
 }
+
+
+/*********************************  配送服务商  ***************************************/
+
+/**
+ * 获取配送服务商列表
+ * @param params
+ * @returns
+ */
+export function getDeliveryServiceList(id: number) {
+    return request.get(`phone_shop/delivery_store/delivery_service_list/${id}`)
+}
+
+/**
+ * 服务商开通门店
+ * @param params
+ * @returns
+ */
+export function deliveryShopOpen(params: Record<string, any>) {
+    return request.put(`phone_shop/delivery_store/delivery_shop_open/${params.id}`, params, { showErrorMessage: true, showSuccessMessage: true })
+}
+
+/**
+ * 服务商门店品类修改
+ * @param params
+ * @returns
+ */
+export function deliveryShopEdit(params: Record<string, any>) {
+    return request.put(`phone_shop/delivery_store/delivery_shop_edit/${params.id}`, params, { showErrorMessage: true, showSuccessMessage: true })
+}
+
+
+/*********************************  同城配送设置  ***************************************/
 
 /**
  * 获取同城配送设置
  * @returns
  */
 export function getLocal() {
-    return request.get('phone_shop/local');
+    return request.get('phone_shop/local_delivery/config');
 }
 
 /**
@@ -274,5 +313,263 @@ export function getLocal() {
  * @returns
  */
 export function setLocal(params: Record<string, any>) {
-    return request.put('phone_shop/local', params, { showSuccessMessage: true })
+    return request.put('phone_shop/local_delivery/config', params, { showSuccessMessage: true })
 }
+
+/**
+ * 获取三方配送列表
+ * @param params
+ * @returns
+ */
+export function getInUseLocalDeliveryList(params: Record<string, any>) {
+    return request.get('phone_shop/local_delivery/list', {params})
+}
+
+/**
+ * 获取同城配送平台列表
+ */
+export function getLocalDeliveryServiceList() {
+    return request.get(`phone_shop/local_delivery/service`)
+}
+
+
+/**
+ * 同城配送平台设置
+ * @param params
+ * @returns
+ */
+export function setLocalDeliveryService(params: Record<string, any>) {
+    return request.put(`phone_shop/local_delivery/service/${params.delivery_type}`, params, {showSuccessMessage: true})
+}
+
+/**
+ * 同城配送平台详情
+ * @param delivery_type
+ * @returns
+ */
+export function getLocalDeliveryServiceInfo(delivery_type: string) {
+    return request.get(`phone_shop/local_delivery/service/${delivery_type}`,)
+}
+
+/**
+ * 三方配送
+ * @returns
+ */
+export function getThird() {
+    return request.get('phone_shop/third/init')
+}
+
+
+
+
+/*********************************  同城配送记录  ***************************************/
+
+/**
+ * 获取配送记录状态
+ * @param params
+ * @returns
+ */
+export function getLocalDeliveryStatus() {
+    return request.get('phone_shop/local_delivery/order/status')
+}
+
+/**
+ * 获取配送记录分页列表
+ * @param params
+ * @returns
+ */
+export function getLocalDeliveryList(params: Record<string, any>) {
+    return request.get(`phone_shop/local_delivery/order`, {params})
+}
+
+/**
+ * 获取同城配送订单详情
+ * @param id
+ * @returns
+ */
+export function getLocalDeliveryInfo(id: number) {
+    return request.get(`phone_shop/local_delivery/order/${ id }`);
+}
+
+/**
+ * 获取同城配送订单取消原因
+ * @param params
+ * @returns
+ */
+export function getLocalDeliveryCancelReason(params: Record<string, any>) {
+    return request.get('phone_shop/local_delivery/order/cancel_reason', {params})
+}
+
+/**
+ * 获取同城配送订单同步
+ * @param staff_id
+ * @returns
+ */
+export function getLocalDeliverySync(id: number) {
+    return request.put(`phone_shop/local_delivery/order/sync/${ id }`);
+}
+
+/**
+ * 同城配送订单取消
+ * @param params
+ * @returns
+ */
+export function setLocalDeliveryCancel(params: Record<string, any>) {
+   return request.put(`phone_shop/local_delivery/order/cancel/${ params.id }`, params, { showSuccessMessage: true })
+}
+
+
+/*********************************  商家配送记录  ***************************************/
+/**
+ * 获取配送记录状态
+ * @param params
+ * @returns
+ */
+export function getShopDeliveryStatus() {
+    return request.get('phone_shop/shop_delivery/order/status')
+}
+
+/**
+ * 获取商家配送记录分页列表
+ * @param params
+ * @returns
+ */
+export function getShopDeliveryOrderList(params: Record<string, any>) {
+    return request.get(`phone_shop/shop_delivery/order`, {params})
+}
+
+/**
+ * 获取同城配送订单详情
+ * @param id
+ * @returns
+ */
+export function getShopDeliveryInfo(id: number) {
+    return request.get(`phone_shop/shop_delivery/order/${ id }`);
+}
+
+/**
+ * 获取商家配送记录订单完成
+ * @param staff_id
+ * @returns
+ */
+export function getShopDeliveryFinish(id: number) {
+    return request.put(`phone_shop/shop_delivery/order/finish/${ id }`);
+}
+
+/**
+ * 获取商家配送记录订单完成
+ * @param staff_id
+ * @returns
+ */
+export function getDeliveryFinish(id: number) {
+    return request.put(`phone_shop/local_delivery/order/finish/${ id }`);
+}
+
+/**
+ * 商家配送记录订单取消
+ * @param params
+ * @returns
+ */
+export function setShopDeliveryCancel(params: Record<string, any>) {
+   return request.put(`phone_shop/shop_delivery/order/cancel/${ params.id }`, params, { showSuccessMessage: true })
+}
+
+/**
+ * 获取配送方式
+ * @param id
+ * @returns
+ */
+export function getShopDeliveryType() {
+    return request.get(`phone_shop/delivery/type`);
+}
+
+
+/*********************************  门店自提  ***************************************/
+
+/**
+ * 获取门店自提分页列表
+ * @param params
+ * @returns
+ */
+export function getDeliveryStoreList(params: Record<string, any>) {
+    return request.get(`phone_shop/delivery/store`, {params})
+}
+
+/**
+ * 获取门店选择列表
+ * @param params
+ * @returns
+ */
+export function getDeliveryStoreListAll(params: Record<string, any>) {
+    return request.get(`phone_shop/delivery/store/list`, {params})
+}
+
+/**
+ * 获取提货方式
+ * @returns
+ */
+export function getStorePickUpType() {
+    return request.get(`phone_shop/delivery/store/pick_up_type`);
+}
+
+/**
+ * 获取配送门店详情
+ * @returns
+ */
+export function getDeliveryStoreDetail(id: number) {
+    return request.get(`phone_shop/delivery/store/${ id }`);
+}
+
+/**
+ * 添加配送门店
+ * @param params
+ * @returns
+ */
+export function addDeliveryStore(params: Record<string, any>) {
+    return request.post('phone_shop/delivery/store', params, {showErrorMessage: true, showSuccessMessage: true})
+}
+
+/**
+ * 编辑配送门店
+ * @param params
+ * @returns
+ */
+export function editDeliveryStore(params: Record<string, any>) {
+    return request.put(`phone_shop/delivery/store/${params.store_id}`, params, { showErrorMessage: true, showSuccessMessage: true })
+}
+/**
+ * 删除运费模版
+ * @param template_id
+ * @returns
+ */
+export function deleteDeliveryStore(store_id: number) {
+    return request.delete(`phone_shop/delivery/store/${store_id}`, {showErrorMessage: true, showSuccessMessage: true})
+}
+
+/**
+ * 编辑配送门店状态
+ * @param params
+ * @returns
+ */
+export function editDeliveryStoreStatus(params: Record<string, any>) {
+    return request.put(`phone_shop/delivery/store/modify_status`, params, { showErrorMessage: true, showSuccessMessage: true })
+}
+
+/**
+ * 获取距离配置
+ * @returns
+ */
+export function getDeliveryConfig() {
+    return request.get('phone_shop/local_delivery/base_config')
+}
+
+
+/**
+ * 编辑距离配置
+ * @param params
+ * @returns
+ */
+export function setDeliveryConfig(params: Record<string, any>) {
+    return request.put('phone_shop/local_delivery/base_config', params, {showSuccessMessage: true})
+}
+

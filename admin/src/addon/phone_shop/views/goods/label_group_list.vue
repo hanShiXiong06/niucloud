@@ -3,7 +3,7 @@
         <el-card class="box-card !border-none" shadow="never">
 
             <div class="flex justify-between items-center">
-                <span class="text-page-title">{{ pageName }}</span>
+                <span class="text-page-title">{{pageName}}</span>
                 <el-button type="primary" @click="addEvent">
                     {{ t('addLabelGroup') }}
                 </el-button>
@@ -17,8 +17,7 @@
             <el-card class="box-card !border-none my-[10px] table-search-wrap" shadow="never">
                 <el-form :inline="true" :model="labelTable.searchParam" ref="searchFormRef">
                     <el-form-item :label="t('groupName')" prop="group_name">
-                        <el-input v-model.trim="labelTable.searchParam.group_name"
-                            :placeholder="t('groupNamePlaceholder')" />
+                        <el-input v-model.trim="labelTable.searchParam.group_name" :placeholder="t('groupNamePlaceholder')"  />
                     </el-form-item>
 
                     <el-form-item>
@@ -36,19 +35,15 @@
                     <el-table-column prop="group_name" :label="t('groupName')" min-width="120" />
                     <el-table-column prop="sort" :label="t('sort')" min-width="120" sortable="custom">
                         <template #default="{ row }">
-                            <el-input v-model.trim="row.sort" :disabled="userStore().siteInfo.site_id !== row.site_id"
-                                class="!w-[100px]" maxlength="8" @blur="sortInputListener(row.sort, row)" />
+                            <el-input v-model.trim="row.sort" class="!w-[100px]" maxlength="8" @blur="sortInputListener(row.sort, row)" />
                         </template>
                     </el-table-column>
 
                     <el-table-column :label="t('operation')" fixed="right" align="right" min-width="120">
-                        <template #default="{ row }">
-                            <el-button type="primary" v-if="userStore().siteInfo.site_id == row.site_id" link
-                                @click="editEvent(row)">{{ t('edit') }}</el-button>
-                            <el-button type="primary" v-if="userStore().siteInfo.site_id == row.site_id" link
-                                @click="deleteEvent(row.group_id)">{{ t('delete')
-                                }}</el-button>
-                        </template>
+                       <template #default="{ row }">
+                           <el-button type="primary" link @click="editEvent(row)">{{ t('edit') }}</el-button>
+                           <el-button type="primary" link @click="deleteEvent(row.group_id)">{{ t('delete') }}</el-button>
+                       </template>
                     </el-table-column>
 
                 </el-table>
@@ -59,7 +54,7 @@
                 </div>
             </div>
 
-            <label-group-edit ref="editLabelGroupDialog" @complete="loadLabelGroupList" />
+            <label-group-edit ref="editLabelGroupDialog" @complete="loadLabelGroupList(getTablePageStorage(labelTable.searchParam).page)" />
         </el-card>
     </div>
 </template>
@@ -71,8 +66,8 @@ import { getLabelGroupPageList, deleteLabelGroup, modifyLabelGroupSort } from '@
 import { ElMessageBox, FormInstance, ElMessage } from 'element-plus'
 import LabelGroupEdit from '@/addon/phone_shop/views/goods/components/label-group-edit.vue'
 import { useRoute, useRouter } from 'vue-router'
-import { debounce } from '@/utils/common'
-import userStore from '@/stores/modules/user'
+import { debounce, setTablePageStorage, getTablePageStorage } from '@/utils/common'
+
 const route = useRoute()
 const router = useRouter()
 const pageName = route.meta.title
@@ -126,11 +121,12 @@ const loadLabelGroupList = (page: number = 1) => {
         labelTable.loading = false
         labelTable.data = res.data.data
         labelTable.total = res.data.total
+        setTablePageStorage(labelTable.page, labelTable.limit, labelTable.searchParam)
     }).catch(() => {
         labelTable.loading = false
     })
 }
-loadLabelGroupList()
+loadLabelGroupList(getTablePageStorage(labelTable.searchParam).page)
 
 const editLabelGroupDialog: Record<string, any> | null = ref(null)
 
@@ -163,7 +159,7 @@ const deleteEvent = (id: number) => {
         }
     ).then(() => {
         deleteLabelGroup(id).then(() => {
-            loadLabelGroupList()
+            loadLabelGroupList(getTablePageStorage(labelTable.searchParam).page)
         }).catch(() => {
         })
     })
@@ -195,4 +191,5 @@ const resetForm = (formEl: FormInstance | undefined) => {
 }
 </script>
 
-<style lang="scss" scoped></style>
+<style lang="scss" scoped>
+</style>

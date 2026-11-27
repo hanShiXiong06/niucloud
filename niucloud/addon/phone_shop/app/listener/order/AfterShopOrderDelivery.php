@@ -10,6 +10,8 @@ use addon\phone_shop\app\model\order\OrderGoods;
 use addon\phone_shop\app\service\core\order\CoreOrderConfigService;
 use addon\phone_shop\app\service\core\order\CoreOrderDeliveryService;
 use addon\phone_shop\app\service\core\order\CoreOrderLogService;
+use addon\phone_shop\app\model\order\OrderOfflineRecord;
+use addon\phone_shop\app\service\core\order\OfflineOrderSchemaService;
 use app\service\core\notice\NoticeService;
 use think\facade\Log;
 
@@ -36,7 +38,13 @@ class AfterShopOrderDelivery
 
             //消息发送
             if ($order_data[ 'status' ] == OrderDict::WAIT_TAKE) {
-                ( new NoticeService() )->send($order_data[ 'site_id' ], 'shop_order_delivery', [ 'order_id' => $order_data[ 'order_id' ] ]);
+                ( new NoticeService() )->send($order_data[ 'site_id' ], 'phone_shop_order_delivery', $order_data);
+            }
+            if (in_array((string)($order_data['payment_mode'] ?? ''), ['offline_cash', 'offline_credit'], true)) {
+                OfflineOrderSchemaService::ensure();
+                OrderOfflineRecord::where([
+                    ['site_id', '=', (int)$order_data['site_id']], ['order_id', '=', (int)$order_data['order_id']],
+                ])->update(['status' => 'delivered', 'update_time' => time()]);
             }
 
             //写入定时收货任务

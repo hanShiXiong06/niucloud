@@ -21,6 +21,7 @@ use addon\phone_shop\app\model\order\OrderRefund;
 use app\service\core\pay\CorePayService;
 use core\base\BaseCoreService;
 use core\exception\CommonException;
+use think\facade\Db;
 
 /**
  * 订单关闭服务层
@@ -41,26 +42,55 @@ class CoreOrderCloseService extends BaseCoreService
      */
     public function close(array $data)
     {
-      
+        Db::startTrans();
         try {
             $order_data = $this->model->where([
                 ['order_id', '=', $data['order_id']],
                 ['site_id', '=', $data['site_id']]
-            ])->findOrEmpty()->toArray();
-             
+            ])->lock(true)->findOrEmpty()->toArray();
             if (empty($order_data)) throw new CommonException('SHOP_ORDER_NOT_FOUND');//订单不存在
+            if (($data['close_type'] ?? '') === OrderDict::AUTO_CLOSE && (
+                (int)$order_data['status'] !== OrderDict::WAIT_PAY
+                || (int)($order_data['timeout'] ?? 0) <= 0
+                || (int)$order_data['timeout'] > time()
+                || !empty($order_data['relate_source'])
+                || (int)($order_data['is_credit'] ?? 0) === 1
+                || (float)($order_data['pay_money'] ?? 0) > 0
+                || !in_array((string)($order_data['payment_mode'] ?? ''), ['', 'online', 'offline_pending'], true)
+            )) {
+                // 扫描后可能已付款、延长时限或暂停锁单；持锁重读后决定，不能用旧快照关单。
+                Db::commit();
+                return false;
+            }
+            // 架构:ERP 驱动的订单(代下单/出库卖出,有 relate_source)以 ERP 为唯一事实源,商城侧只读留痕。
+            // 禁止从商城手动关闭(SHOP_CLOSE),请到 ERP 操作;关闭/退回由 ERP→商城 单向同步(直接 update,不经本方法)完成。
+            if (!empty($order_data['relate_source']) && ($data['close_type'] ?? '') == OrderDict::SHOP_CLOSE) {
+                throw new CommonException('此订单由 ERP 统一管理,请到 ERP 进行关闭 / 退回 / 收款操作');
+            }
             if ($order_data['status'] == OrderDict::CLOSE) throw new CommonException('SHOP_ORDER_IS_CLOSED');
-            
+            if (($data['close_type'] ?? '') !== OrderDict::REFUND_CLOSE && (
+                (int)$order_data['status'] !== OrderDict::WAIT_PAY
+                || (int)($order_data['is_credit'] ?? 0) === 1
+                || (float)($order_data['pay_money'] ?? 0) > 0
+                || in_array((string)($order_data['payment_mode'] ?? ''), ['offline_cash', 'offline_credit'], true)
+            )) {
+                throw new CommonException('已收款或已挂账的订单不能直接关闭，请办理原单退货：未收款冲减应收，已收款办理退款');
+            }
+            if ($data['close_type'] == OrderDict::SHOP_CLOSE && !in_array($order_data['status'], [ OrderDict::WAIT_PAY, OrderDict::CLOSE ])) {
+                throw new CommonException('SHOP_ORDER_IS_PAY_FINISH');//订单已支付
+            }
             if ($data['close_type'] != OrderDict::REFUND_CLOSE) {
-                //   return OrderDict::TYPE; 
-                //关闭相关的支付  todo  封装订单专用的关闭支付相关 OrderDict::TYPE
+                //关闭相关的支付  todo  封装订单专用的关闭支付相关
                 try {
-                    (new CorePayService())->closeByTrade((int)$order_data['site_id'], 'shop', $order_data['order_id']);
+                    (new CorePayService())->closeByTrade($data['site_id'], OrderDict::TYPE, $order_data['order_id']);
                 } catch ( \Exception $e ) {
-
+                    // 只有支付单已撤销可视为幂等；支付中/已支付等错误必须停止关单。
+                    $pay = (new CorePayService())->findPayInfoByTrade((int)$data['site_id'], OrderDict::TYPE, (int)$order_data['order_id']);
+                    if (!$pay->isEmpty() && $pay['status'] !== \app\dict\pay\PayDict::STATUS_CANCEL) {
+                        throw new CommonException('支付状态尚未确认，未关闭订单或释放库存。请核对支付结果后重试：' . $e->getMessage());
+                    }
                 }
             }
-           
 
             //关闭订单
             $this->model->where([
@@ -72,22 +102,29 @@ class CoreOrderCloseService extends BaseCoreService
                     'status' => OrderDict::CLOSE,
                     'close_type' => $data['close_type'],
                     'close_remark' => $data['close_remark'] ?? '',
+                    'close_time' => time(),
                     'is_enable_refund' => 0,
                     'timeout' => 0
                 ]
             );
+            (new CoreOrderInventoryService())->releaseCancelled((int)$data['site_id'], (int)$order_data['order_id'], $data['close_type'] === OrderDict::REFUND_CLOSE);
             $data['order_data'] = $order_data;
-//        //订单关闭后操作
-//        event('AfterShopOrderClose', $data);
+
 
             //订单关闭操作
             CoreOrderEventService::orderClose($data);
-            //订单关闭后操作
-            CoreOrderEventService::orderCloseAfter($data);
-            return true;
-        } catch ( \Exception $e ) {
-            return false;
+            Db::commit();
+        } catch ( \Throwable $e ) {
+            Db::rollback();
+            throw new CommonException($e->getMessage());
         }
+        // 已提交的关单/库存不能因后置通知异常再回滚到外层事务。
+        try {
+            CoreOrderEventService::orderCloseAfter($data);
+        } catch (\Throwable $e) {
+            \think\facade\Log::error('[phone_shop] 订单已关闭，后置通知失败：' . (int)$data['order_id'] . '；' . $e->getMessage());
+        }
+        return true;
     }
 
     /**
@@ -130,8 +167,10 @@ class CoreOrderCloseService extends BaseCoreService
                 $data['main_id'] = 0;
                 $data['order_id'] = $order_id;
                 $data['site_id'] = $site_id;
-                (new CoreOrderFinishService())->finish($data);
+                // 挂账退款事实保留并继续发事件，不以普通完成掩盖未结账款，也不抛错要求重做退款。
+                if (($order['payment_mode'] ?? '') !== 'offline_credit') (new CoreOrderFinishService())->finish($data);
             }
+            event('AfterPhoneShopOrderAllRefundFinish', $data);
         }
         return true;
     }

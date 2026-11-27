@@ -12,7 +12,7 @@
 namespace addon\phone_shop\app\service\api\order;
 
 use addon\phone_shop\app\service\core\order\CoreOrderConfigService;
-use core\base\BaseAdminService;
+use core\base\BaseApiService;
 
 
 /**
@@ -20,7 +20,7 @@ use core\base\BaseAdminService;
  * Class ConfigService
  * @package adaddon\phone_shop\app\service\admin\order
  */
-class ConfigService extends BaseAdminService
+class ConfigService extends BaseApiService
 {
 
     public $order_config_service;

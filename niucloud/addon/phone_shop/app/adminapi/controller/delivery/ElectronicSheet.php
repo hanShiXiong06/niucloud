@@ -23,7 +23,7 @@ use core\base\BaseAdminController;
 class ElectronicSheet extends BaseAdminController
 {
     /**
-     * 获取电子面单分页列表
+     * @description 查看电子面单分页列表
      * @return \think\Response
      */
     public function pages()
@@ -39,7 +39,7 @@ class ElectronicSheet extends BaseAdminController
     }
 
     /**
-     * 获取电子面单列表
+     * @description 查看电子面单列表
      * @return \think\Response
      */
     public function lists()
@@ -55,7 +55,7 @@ class ElectronicSheet extends BaseAdminController
     }
 
     /**
-     * 电子面单详情
+     * @description 电子面单详情
      * @param int $id
      * @return \think\Response
      */
@@ -66,6 +66,7 @@ class ElectronicSheet extends BaseAdminController
 
     /**
      * 添加电子面单
+     * @description 添加电子面单
      * @return \think\Response
      */
     public function add()
@@ -84,6 +85,12 @@ class ElectronicSheet extends BaseAdminController
             [ 'exp_type', 0 ],
             [ "print_style", "" ],
             [ "is_default", 0 ],
+//            [ "kd100_customer_name", "" ],
+//            [ "kd100_customer_pwd", "" ],
+//            [ "kd100_send_site", "" ],
+//            [ "kd100_send_staff", "" ],
+//            [ "kd100_month_code", "" ],
+//            [ "kd100_pay_type", 0 ],
         ]);
         $this->validate($data, 'addon\phone_shop\app\validate\delivery\ElectronicSheet.add');
         $id = ( new ElectronicSheetService() )->add($data);
@@ -92,6 +99,7 @@ class ElectronicSheet extends BaseAdminController
 
     /**
      * 电子面单编辑
+     * @description 编辑电子面单
      * @param $id  电子面单id
      * @return \think\Response
      */
@@ -111,6 +119,12 @@ class ElectronicSheet extends BaseAdminController
             [ 'exp_type', 0 ],
             [ "print_style", "" ],
             [ "is_default", 0 ],
+//            [ "kd100_customer_name", "" ],
+//            [ "kd100_customer_pwd", "" ],
+//            [ "kd100_send_site", "" ],
+//            [ "kd100_send_staff", "" ],
+//            [ "kd100_month_code", "" ],
+//            [ "kd100_pay_type", 0 ],
         ]);
         $this->validate($data, 'addon\phone_shop\app\validate\delivery\ElectronicSheet.edit');
         ( new ElectronicSheetService() )->edit($id, $data);
@@ -119,6 +133,7 @@ class ElectronicSheet extends BaseAdminController
 
     /**
      * 电子面单删除
+     * @description 删除电子面单
      * @param $id  电子面单id
      * @return \think\Response
      */
@@ -130,6 +145,7 @@ class ElectronicSheet extends BaseAdminController
 
     /**
      * 电子面单设置默认模板
+     * @description 电子面单设置默认模板
      * @param int $id
      * @return array|\think\Response
      */
@@ -141,6 +157,7 @@ class ElectronicSheet extends BaseAdminController
 
     /**
      * 设置 电子面单配置
+     * @description 设置电子面单配置
      * @return array|\think\Response
      */
     public function setConfig()
@@ -151,7 +168,9 @@ class ElectronicSheet extends BaseAdminController
             [ "kdniao_api_key", "" ],
             [ 'server_port1', '8000' ],
             [ 'server_port2', '18000' ],
-            [ 'https_port', '8443' ]
+            [ 'https_port', '8443' ],
+            [ "kd100_key", "" ],
+            [ "kd100_secret", "" ],
         ]);
         ( new ElectronicSheetService() )->setConfig($data);
         return success();
@@ -159,6 +178,7 @@ class ElectronicSheet extends BaseAdminController
 
     /**
      * 获取 电子面单设置
+     * @description 查看电子面单设置
      * @return array|\think\Response
      */
     public function getConfig()
@@ -166,8 +186,18 @@ class ElectronicSheet extends BaseAdminController
         return success(( new ElectronicSheetService() )->getConfig());
     }
 
+    /** @description 外部服务商面单任务（取号不等于发货） */
+    public function providerTask()
+    {
+        $data = $this->request->params([
+            ['operation', 'query'], ['provider_key', ''], ['order_id', 0],
+            ['order_goods_ids', []], ['weight', 1], ['reason', ''], ['confirm', 0], ['freight_payment', 'receiver'],
+        ]);
+        return success((new ElectronicSheetService())->providerTask($data));
+    }
+
     /**
-     * 获取邮费支付方式类型
+     * @description 查看邮费支付方式类型
      * @return array|\think\Response
      */
     public function getPayType()
@@ -177,6 +207,7 @@ class ElectronicSheet extends BaseAdminController
 
     /**
      * 打印电子面单
+     * @description 打印电子面单
      * @return array|\think\Response
      */
     public function printElectronicSheet()
@@ -185,6 +216,7 @@ class ElectronicSheet extends BaseAdminController
             [ 'print_type', 'single' ], // 打印方式，single：单订单，multiple：多订单
             [ 'order_id', '' ], // 订单id
             [ 'electronic_sheet_id', 0 ], // 电子面单id
+            [ 'order_goods_ids', '' ],
             [ 'list', [] ] // 多个包裹，格式：[{ delivery_id : 0, electronic_sheet_id : 0 }]
 //            [ 'is_delivery', 0 ], // 是否发货 todo 后续扩展
         ]);

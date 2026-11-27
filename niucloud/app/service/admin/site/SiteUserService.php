@@ -50,8 +50,10 @@ class SiteUserService extends BaseAdminService
             ->with('userinfo')->append(['status_name'])
             ->hasWhere('userinfo', function ($query) use ($where) {
                 $condition = [];
-                if (isset($where['username']) && $where['username'] !== '') $condition[] = ['username', 'like', "%{$this->model->handelSpecialCharacter($where['username'])}%"];
-                $query->where($condition);
+                if (isset($where['username']) && $where['username'] !== '') {
+                    $keyword = $this->model->handelSpecialCharacter($where['username']);
+                    $query->whereLike('username|real_name', "%{$keyword}%");
+                }
             })->where([['SysUserRole.site_id', '=', $this->site_id]]);
         return $this->pageQuery($search_model, function ($item) {
             if (!empty($item['role_ids'])) {

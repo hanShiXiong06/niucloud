@@ -1,4 +1,9 @@
-import request from "@/utils/request";
+import request from '@/utils/request'
+
+// 会员等级"站内序号"映射(来自 hsx_erp;用于会员价 JSON 统一按 level_no 存取)
+export function getMemberLevelNoList() {
+    return request.get('phone_shop/member_level/no_lists')
+}
 
 /**
  * 获取商品列表
@@ -6,7 +11,67 @@ import request from "@/utils/request";
  * @returns
  */
 export function getGoodsPageList(params: Record<string, any>) {
-  return request.get(`phone_shop/goods`, { params });
+    return request.get(`phone_shop/goods`, { params })
+}
+
+/** 查看本站商品实际修改记录，权限与商品列表一致。 */
+export function getGoodsChangeLogs(goodsId: number, params: Record<string, any>) {
+    return request.get(`phone_shop/goods/${goodsId}/change_logs`, { params })
+}
+
+/** 商品批量导入模板 */
+export function downloadGoodsImportTemplate() {
+    return request.get(`phone_shop/goods/transfer/template`, { responseType: 'blob' })
+}
+
+/** 创建商品异步导入任务 */
+export function createGoodsImportTask(file: File, imageMode: 'direct' | 'store' = 'direct', defaultStatus = 0, imagesToDesc = true) {
+    const data = new FormData()
+    data.append('file', file)
+    data.append('image_mode', imageMode)
+    data.append('default_status', String(defaultStatus))
+    data.append('images_to_desc', imagesToDesc ? '1' : '0')
+    return request.post(`phone_shop/goods/transfer/import`, data, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+    })
+}
+
+/** 创建商品异步导出任务 */
+export function createGoodsExportTask(params: Record<string, any>) {
+    return request.post(`phone_shop/goods/transfer/export`, params)
+}
+
+/** 商品导入导出任务 */
+export function getGoodsTransferTasks(params: Record<string, any>) {
+    return request.get(`phone_shop/goods/transfer/tasks`, { params })
+}
+
+export function retryGoodsTransferTask(id: number) {
+    return request.post(`phone_shop/goods/transfer/tasks/${id}/retry`)
+}
+
+export function downloadGoodsTransferResult(id: number) {
+    return request.get(`phone_shop/goods/transfer/tasks/${id}/download`, { responseType: 'blob' })
+}
+
+export function getGoodsArrivalPreview(id: number) {
+    return request.get(`phone_shop/goods/transfer/tasks/${id}/notice`)
+}
+
+export function sendGoodsArrivalNotice(id: number) {
+    return request.post(`phone_shop/goods/transfer/tasks/${id}/notice`)
+}
+
+export function retryGoodsArrivalNotice(id: number) {
+    return request.post(`phone_shop/goods/transfer/notices/${id}/retry`)
+}
+
+export function supplementGoodsArrivalNotice(id: number, audienceToken: string) {
+    return request.post(`phone_shop/goods/transfer/notices/${id}/retry`, { mode: 'supplement', audience_token: audienceToken })
+}
+
+export function getGoodsArrivalResults(id: number, page = 1) {
+    return request.get(`phone_shop/goods/transfer/notices/${id}/results`, { params: { page, limit: 15 } })
 }
 
 /**
@@ -15,7 +80,17 @@ export function getGoodsPageList(params: Record<string, any>) {
  * @returns
  */
 export function getGoodsInfo(goods_id: number) {
-  return request.get(`phone_shop/goods/${goods_id}`);
+    return request.get(`phone_shop/goods/${ goods_id }`);
+}
+
+
+/**
+ * 获取商品详情模板
+ * @param goods_id 商品goods_id
+ * @returns
+ */
+export function getGoodsInfoTemplate(params: any) {
+    return request.get(`diy/list`, { params });
 }
 
 /**
@@ -24,10 +99,7 @@ export function getGoodsInfo(goods_id: number) {
  * @returns
  */
 export function addGoods(params: Record<string, any>) {
-  return request.post("phone_shop/goods", params, {
-    showErrorMessage: true,
-    showSuccessMessage: true,
-  });
+    return request.post('phone_shop/goods', params, { showErrorMessage: true, showSuccessMessage: true })
 }
 
 /**
@@ -35,10 +107,7 @@ export function addGoods(params: Record<string, any>) {
  * @param params
  */
 export function editGoods(params: Record<string, any>) {
-  return request.put(`phone_shop/goods/${params.goods_id}`, params, {
-    showErrorMessage: true,
-    showSuccessMessage: true,
-  });
+    return request.put(`phone_shop/goods/${ params.goods_id }`, params, { showErrorMessage: true, showSuccessMessage: true })
 }
 
 /**
@@ -46,7 +115,7 @@ export function editGoods(params: Record<string, any>) {
  * @param params
  */
 export function getGoodsInit(params: Record<string, any>) {
-  return request.get(`phone_shop/goods/init`, { params });
+    return request.get(`phone_shop/goods/init`, { params });
 }
 
 /**
@@ -55,10 +124,7 @@ export function getGoodsInit(params: Record<string, any>) {
  * @returns
  */
 export function addVirtualGoods(params: Record<string, any>) {
-  return request.post("phone_shop/goods/virtual", params, {
-    showErrorMessage: true,
-    showSuccessMessage: true,
-  });
+    return request.post('phone_shop/goods/virtual', params, { showErrorMessage: true, showSuccessMessage: true })
 }
 
 /**
@@ -66,10 +132,10 @@ export function addVirtualGoods(params: Record<string, any>) {
  * @param params
  */
 export function editVirtualGoods(params: Record<string, any>) {
-  return request.put(`phone_shop/goods/virtual/${params.goods_id}`, params, {
-    showErrorMessage: true,
-    showSuccessMessage: true,
-  });
+    return request.put(`phone_shop/goods/virtual/${ params.goods_id }`, params, {
+        showErrorMessage: true,
+        showSuccessMessage: true
+    })
 }
 
 /**
@@ -77,7 +143,7 @@ export function editVirtualGoods(params: Record<string, any>) {
  * @param params
  */
 export function getVirtualGoodsInit(params: Record<string, any>) {
-  return request.get(`phone_shop/goods/virtual/init`, { params });
+    return request.get(`phone_shop/goods/virtual/init`, { params });
 }
 
 /**
@@ -86,10 +152,7 @@ export function getVirtualGoodsInit(params: Record<string, any>) {
  * @returns
  */
 export function deleteGoods(params: Record<string, any>) {
-  return request.put(`phone_shop/goods/delete`, params, {
-    showErrorMessage: true,
-    showSuccessMessage: true,
-  });
+    return request.put(`phone_shop/goods/delete`, params, { showErrorMessage: true, showSuccessMessage: true })
 }
 
 /**
@@ -98,7 +161,7 @@ export function deleteGoods(params: Record<string, any>) {
  * @returns
  */
 export function getRecycleGoodsPageList(params: Record<string, any>) {
-  return request.get(`phone_shop/goods/recycle`, { params });
+    return request.get(`phone_shop/goods/recycle`, { params })
 }
 
 /**
@@ -107,10 +170,7 @@ export function getRecycleGoodsPageList(params: Record<string, any>) {
  * @returns
  */
 export function recycleGoods(params: Record<string, any>) {
-  return request.put(`phone_shop/goods/recycle`, params, {
-    showErrorMessage: true,
-    showSuccessMessage: true,
-  });
+    return request.put(`phone_shop/goods/recycle`, params, { showErrorMessage: true, showSuccessMessage: true })
 }
 
 /**
@@ -118,9 +178,7 @@ export function recycleGoods(params: Record<string, any>) {
  * @param params
  */
 export function editGoodsSort(params: Record<string, any>) {
-  return request.put(`phone_shop/goods/sort`, params, {
-    showSuccessMessage: true,
-  });
+    return request.put(`phone_shop/goods/sort`, params, { showSuccessMessage: true })
 }
 
 /**
@@ -128,9 +186,7 @@ export function editGoodsSort(params: Record<string, any>) {
  * @param params
  */
 export function editGoodsStatus(params: Record<string, any>) {
-  return request.put(`phone_shop/goods/status`, params, {
-    showSuccessMessage: true,
-  });
+    return request.put(`phone_shop/goods/status`, params, { showSuccessMessage: true })
 }
 
 /**
@@ -138,9 +194,7 @@ export function editGoodsStatus(params: Record<string, any>) {
  * @param params
  */
 export function copyGoods(params: Record<string, any>) {
-  return request.put(`phone_shop/goods/copy/${params.goods_id}`, params, {
-    showSuccessMessage: true,
-  });
+    return request.put(`phone_shop/goods/copy/${ params.goods_id }`, params)
 }
 
 /**
@@ -149,7 +203,7 @@ export function copyGoods(params: Record<string, any>) {
  * @returns
  */
 export function getGoodsSelectPageList(params: Record<string, any>) {
-  return request.get(`phone_shop/goods/select`, { params });
+    return request.get(`phone_shop/goods/select`, { params })
 }
 
 /**
@@ -158,7 +212,7 @@ export function getGoodsSelectPageList(params: Record<string, any>) {
  * @returns
  */
 export function getGoodsSkuList(params: Record<string, any>) {
-  return request.get(`phone_shop/goods/sku`, { params });
+    return request.get(`phone_shop/goods/sku`, { params })
 }
 
 /**
@@ -167,7 +221,7 @@ export function getGoodsSkuList(params: Record<string, any>) {
  * @returns
  */
 export function getGoodsSkuNoPageList(params: Record<string, any>) {
-  return request.get(`phone_shop/goods/selectgoodssku`, { params });
+    return request.get(`phone_shop/goods/selectgoodssku`, { params })
 }
 
 /** 查询商品参与营销活动的数量
@@ -175,7 +229,7 @@ export function getGoodsSkuNoPageList(params: Record<string, any>) {
  * @returns
  */
 export function getActiveGoodsCount(params: Record<string, any>) {
-  return request.get(`phone_shop/goods/active/count`, { params });
+    return request.get(`phone_shop/goods/active/count`, { params })
 }
 
 /**
@@ -184,9 +238,7 @@ export function getActiveGoodsCount(params: Record<string, any>) {
  * @returns
  */
 export function editGoodsListStock(params: Record<string, any>) {
-  return request.put(`phone_shop/goods/sku/stock`, params, {
-    showSuccessMessage: true,
-  });
+    return request.put(`phone_shop/goods/sku/stock`, params, { showSuccessMessage: true })
 }
 
 /**
@@ -195,9 +247,7 @@ export function editGoodsListStock(params: Record<string, any>) {
  * @returns
  */
 export function editGoodsListPrice(params: Record<string, any>) {
-  return request.put(`phone_shop/goods/sku/price`, params, {
-    showSuccessMessage: true,
-  });
+    return request.put(`phone_shop/goods/sku/price`, params, { showSuccessMessage: true })
 }
 
 /**
@@ -206,9 +256,7 @@ export function editGoodsListPrice(params: Record<string, any>) {
  * @returns
  */
 export function editGoodsListMemberPrice(params: Record<string, any>) {
-  return request.put(`phone_shop/goods/sku/member_price`, params, {
-    showSuccessMessage: true,
-  });
+    return request.put(`phone_shop/goods/sku/member_price`, params, { showSuccessMessage: true })
 }
 
 /**
@@ -216,7 +264,7 @@ export function editGoodsListMemberPrice(params: Record<string, any>) {
  * @returns
  */
 export function getGoodsType() {
-  return request.get(`phone_shop/goods/type`);
+    return request.get(`phone_shop/goods/type`);
 }
 
 /**
@@ -225,7 +273,7 @@ export function getGoodsType() {
  * @returns
  */
 export function getLabelPageList(params: Record<string, any>) {
-  return request.get(`phone_shop/goods/label`, { params });
+    return request.get(`phone_shop/goods/label`, { params })
 }
 
 /**
@@ -234,7 +282,7 @@ export function getLabelPageList(params: Record<string, any>) {
  * @returns
  */
 export function getLabelList(params: Record<string, any>) {
-  return request.get(`phone_shop/goods/label/list`, { params });
+    return request.get(`phone_shop/goods/label/list`, { params })
 }
 
 /**
@@ -243,7 +291,7 @@ export function getLabelList(params: Record<string, any>) {
  * @returns
  */
 export function getLabelInfo(label_id: number) {
-  return request.get(`phone_shop/goods/label/${label_id}`);
+    return request.get(`phone_shop/goods/label/${ label_id }`);
 }
 
 /**
@@ -252,10 +300,7 @@ export function getLabelInfo(label_id: number) {
  * @returns
  */
 export function addLabel(params: Record<string, any>) {
-  return request.post("phone_shop/goods/label", params, {
-    showErrorMessage: true,
-    showSuccessMessage: true,
-  });
+    return request.post('phone_shop/goods/label', params, { showErrorMessage: true, showSuccessMessage: true })
 }
 
 /**
@@ -264,10 +309,18 @@ export function addLabel(params: Record<string, any>) {
  * @returns
  */
 export function editLabel(params: Record<string, any>) {
-  return request.put(`phone_shop/goods/label/${params.label_id}`, params, {
-    showErrorMessage: true,
-    showSuccessMessage: true,
-  });
+    return request.put(`phone_shop/goods/label/${ params.label_id }`, params, {
+        showErrorMessage: true,
+        showSuccessMessage: true
+    })
+}
+
+/**
+ * 修改商品标签状态
+ * @param params
+ */
+export function modifyLabelStatus(params: Record<string, any>, options: { showSuccessMessage?: boolean } = {}) {
+    return request.put(`phone_shop/goods/label/status`, params, { showSuccessMessage: true, ...options })
 }
 
 /**
@@ -276,78 +329,7 @@ export function editLabel(params: Record<string, any>) {
  * @returns
  */
 export function deleteLabel(label_id: number) {
-  return request.delete(`phone_shop/goods/label/${label_id}`, {
-    showErrorMessage: true,
-    showSuccessMessage: true,
-  });
-}
-
-/**
- * 获取商品标签分组列表
- * @param params
- * @returns
- */
-export function getLabelGroupList(params: Record<string, any>) {
-  return request.get(`phone_shop/goods/label/group/list`, { params });
-}
-
-/**
- * 获取商品标签分组详情
- * @param label_id 商品标签分组label_id
- * @returns
- */
-export function getLabelGroupInfo(label_id: number) {
-  return request.get(`phone_shop/goods/label/group/${label_id}`);
-}
-
-/**
- * 添加商品标签分组
- * @param params
- * @returns
- */
-export function addLabelGroup(params: Record<string, any>) {
-  return request.post("phone_shop/goods/label/group", params, {
-    showErrorMessage: true,
-    showSuccessMessage: true,
-  });
-}
-
-/**
- * 编辑商品标签分组
- * @param params
- * @returns
- */
-export function editLabelGroup(params: Record<string, any>) {
-  return request.put(
-    `phone_shop/goods/label/group/${params.group_id}`,
-    params,
-    {
-      showErrorMessage: true,
-      showSuccessMessage: true,
-    }
-  );
-}
-
-/**
- * 修改商品标签状态
- * @param params
- */
-export function modifyLabelStatus(params: Record<string, any>) {
-  return request.put(`phone_shop/goods/label/status`, params, {
-    showSuccessMessage: true,
-  });
-}
-
-/**
- * 删除商品标签分组
- * @param group_id
- * @returns
- */
-export function deleteLabelGroup(group_id: number) {
-  return request.delete(`phone_shop/goods/label/group/${group_id}`, {
-    showErrorMessage: true,
-    showSuccessMessage: true,
-  });
+    return request.delete(`phone_shop/goods/label/${ label_id }`, { showErrorMessage: true, showSuccessMessage: true })
 }
 
 /**
@@ -355,18 +337,7 @@ export function deleteLabelGroup(group_id: number) {
  * @param params
  */
 export function modifyLabelSort(params: Record<string, any>) {
-  return request.put(`phone_shop/goods/label/sort`, params, {
-    showSuccessMessage: true,
-  });
-}
-
-/**
- * 获取商品品牌分页列表
- * @param params
- * @returns
- */
-export function getBrandPageList(params: Record<string, any>) {
-  return request.get(`phone_shop/goods/brand`, { params });
+    return request.put(`phone_shop/goods/label/sort`, params, { showSuccessMessage: true })
 }
 
 /**
@@ -375,7 +346,55 @@ export function getBrandPageList(params: Record<string, any>) {
  * @returns
  */
 export function getLabelGroupPageList(params: Record<string, any>) {
-  return request.get(`phone_shop/goods/label/group`, { params });
+    return request.get(`phone_shop/goods/label/group`, { params })
+}
+
+/**
+ * 获取商品标签分组列表
+ * @param params
+ * @returns
+ */
+export function getLabelGroupList(params: Record<string, any>) {
+    return request.get(`phone_shop/goods/label/group/list`, { params })
+}
+
+/**
+ * 获取商品标签分组详情
+ * @param label_id 商品标签分组label_id
+ * @returns
+ */
+export function getLabelGroupInfo(label_id: number) {
+    return request.get(`phone_shop/goods/label/group/${ label_id }`);
+}
+
+/**
+ * 添加商品标签分组
+ * @param params
+ * @returns
+ */
+export function addLabelGroup(params: Record<string, any>) {
+    return request.post('phone_shop/goods/label/group', params, { showErrorMessage: true, showSuccessMessage: true })
+}
+
+/**
+ * 编辑商品标签分组
+ * @param params
+ * @returns
+ */
+export function editLabelGroup(params: Record<string, any>) {
+    return request.put(`phone_shop/goods/label/group/${ params.group_id }`, params, {
+        showErrorMessage: true,
+        showSuccessMessage: true
+    })
+}
+
+/**
+ * 删除商品标签分组
+ * @param group_id
+ * @returns
+ */
+export function deleteLabelGroup(group_id: number) {
+    return request.delete(`phone_shop/goods/label/group/${ group_id }`, { showErrorMessage: true, showSuccessMessage: true })
 }
 
 /**
@@ -383,9 +402,24 @@ export function getLabelGroupPageList(params: Record<string, any>) {
  * @param params
  */
 export function modifyLabelGroupSort(params: Record<string, any>) {
-  return request.put(`phone_shop/goods/label/group/sort`, params, {
-    showSuccessMessage: true,
-  });
+    return request.put(`phone_shop/goods/label/group/sort`, params, { showSuccessMessage: true })
+}
+
+/**
+ * 复制标签
+ * @param params
+ */
+export function copyLabel(params: Record<string, any>) {
+    return request.post(`phone_shop/goods/label/copy/${ params.label_id }`, params, { showSuccessMessage: true })
+}
+
+/**
+ * 获取商品品牌分页列表
+ * @param params
+ * @returns
+ */
+export function getBrandPageList(params: Record<string, any>) {
+    return request.get(`phone_shop/goods/brand`, { params })
 }
 
 /**
@@ -394,7 +428,7 @@ export function modifyLabelGroupSort(params: Record<string, any>) {
  * @returns
  */
 export function getBrandList(params: Record<string, any>) {
-  return request.get(`phone_shop/goods/brand/list`, { params });
+    return request.get(`phone_shop/goods/brand/list`, { params })
 }
 
 /**
@@ -403,7 +437,7 @@ export function getBrandList(params: Record<string, any>) {
  * @returns
  */
 export function getBrandInfo(brand_id: number) {
-  return request.get(`phone_shop/goods/brand/${brand_id}`);
+    return request.get(`phone_shop/goods/brand/${ brand_id }`);
 }
 
 /**
@@ -412,10 +446,7 @@ export function getBrandInfo(brand_id: number) {
  * @returns
  */
 export function addBrand(params: Record<string, any>) {
-  return request.post("phone_shop/goods/brand", params, {
-    showErrorMessage: true,
-    showSuccessMessage: true,
-  });
+    return request.post('phone_shop/goods/brand', params, { showErrorMessage: true, showSuccessMessage: true })
 }
 
 /**
@@ -424,10 +455,10 @@ export function addBrand(params: Record<string, any>) {
  * @returns
  */
 export function editBrand(params: Record<string, any>) {
-  return request.put(`phone_shop/goods/brand/${params.brand_id}`, params, {
-    showErrorMessage: true,
-    showSuccessMessage: true,
-  });
+    return request.put(`phone_shop/goods/brand/${ params.brand_id }`, params, {
+        showErrorMessage: true,
+        showSuccessMessage: true
+    })
 }
 
 /**
@@ -435,9 +466,7 @@ export function editBrand(params: Record<string, any>) {
  * @param params
  */
 export function modifyBrandSort(params: Record<string, any>) {
-  return request.put(`phone_shop/goods/brand/sort`, params, {
-    showSuccessMessage: true,
-  });
+    return request.put(`phone_shop/goods/brand/sort`, params, { showSuccessMessage: true })
 }
 
 /**
@@ -446,10 +475,7 @@ export function modifyBrandSort(params: Record<string, any>) {
  * @returns
  */
 export function deleteBrand(brand_id: number) {
-  return request.delete(`phone_shop/goods/brand/${brand_id}`, {
-    showErrorMessage: true,
-    showSuccessMessage: true,
-  });
+    return request.delete(`phone_shop/goods/brand/${ brand_id }`, { showErrorMessage: true, showSuccessMessage: true })
 }
 
 /**
@@ -458,7 +484,7 @@ export function deleteBrand(brand_id: number) {
  * @returns
  */
 export function getServePageList(params: Record<string, any>) {
-  return request.get(`phone_shop/goods/service`, { params });
+    return request.get(`phone_shop/goods/service`, { params })
 }
 
 /**
@@ -467,7 +493,7 @@ export function getServePageList(params: Record<string, any>) {
  * @returns
  */
 export function getServeList(params: Record<string, any>) {
-  return request.get(`phone_shop/goods/service/list`, { params });
+    return request.get(`phone_shop/goods/service/list`, { params })
 }
 
 /**
@@ -476,7 +502,7 @@ export function getServeList(params: Record<string, any>) {
  * @returns
  */
 export function getServeInfo(service_id: number) {
-  return request.get(`phone_shop/goods/service/${service_id}`);
+    return request.get(`phone_shop/goods/service/${ service_id }`);
 }
 
 /**
@@ -485,10 +511,7 @@ export function getServeInfo(service_id: number) {
  * @returns
  */
 export function addServe(params: Record<string, any>) {
-  return request.post("phone_shop/goods/service", params, {
-    showErrorMessage: true,
-    showSuccessMessage: true,
-  });
+    return request.post('phone_shop/goods/service', params, { showErrorMessage: true, showSuccessMessage: true })
 }
 
 /**
@@ -497,10 +520,10 @@ export function addServe(params: Record<string, any>) {
  * @returns
  */
 export function editServe(params: Record<string, any>) {
-  return request.put(`phone_shop/goods/service/${params.service_id}`, params, {
-    showErrorMessage: true,
-    showSuccessMessage: true,
-  });
+    return request.put(`phone_shop/goods/service/${ params.service_id }`, params, {
+        showErrorMessage: true,
+        showSuccessMessage: true
+    })
 }
 
 /**
@@ -509,18 +532,15 @@ export function editServe(params: Record<string, any>) {
  * @returns
  */
 export function deleteServe(service_id: number) {
-  return request.delete(`phone_shop/goods/service/${service_id}`, {
-    showErrorMessage: true,
-    showSuccessMessage: true,
-  });
+    return request.delete(`phone_shop/goods/service/${ service_id }`, { showErrorMessage: true, showSuccessMessage: true })
 }
 
 /**
  * 获取商品分类树结构
  * @returns
  */
-export function getCategoryTree(params: any) {
-  return request.get(`phone_shop/goods/tree`, { params });
+export function getCategoryTree() {
+    return request.get(`phone_shop/goods/tree`)
 }
 
 /**
@@ -529,7 +549,7 @@ export function getCategoryTree(params: any) {
  * @returns
  */
 export function getCategoryList(params: Record<string, any>) {
-  return request.get(`phone_shop/goods/category`, { params });
+    return request.get(`phone_shop/goods/category`, { params })
 }
 
 /**
@@ -538,7 +558,7 @@ export function getCategoryList(params: Record<string, any>) {
  * @returns
  */
 export function getCategoryInfo(category_id: number) {
-  return request.get(`phone_shop/goods/category/${category_id}`);
+    return request.get(`phone_shop/goods/category/${ category_id }`);
 }
 
 /**
@@ -547,10 +567,7 @@ export function getCategoryInfo(category_id: number) {
  * @returns
  */
 export function addCategory(params: Record<string, any>) {
-  return request.post("phone_shop/goods/category", params, {
-    showErrorMessage: true,
-    showSuccessMessage: true,
-  });
+    return request.post('phone_shop/goods/category', params, { showErrorMessage: true, showSuccessMessage: true })
 }
 
 /**
@@ -559,14 +576,10 @@ export function addCategory(params: Record<string, any>) {
  * @returns
  */
 export function editCategory(params: Record<string, any>) {
-  return request.put(
-    `phone_shop/goods/category/${params.category_id}`,
-    params,
-    {
-      showErrorMessage: true,
-      showSuccessMessage: true,
-    }
-  );
+    return request.put(`phone_shop/goods/category/${ params.category_id }`, params, {
+        showErrorMessage: true,
+        showSuccessMessage: true
+    })
 }
 
 /**
@@ -575,10 +588,7 @@ export function editCategory(params: Record<string, any>) {
  * @returns
  */
 export function deleteCategory(category_id: number) {
-  return request.delete(`phone_shop/goods/category/${category_id}`, {
-    showErrorMessage: true,
-    showSuccessMessage: true,
-  });
+    return request.delete(`phone_shop/goods/category/${ category_id }`, { showErrorMessage: true, showSuccessMessage: true })
 }
 
 /**
@@ -587,10 +597,7 @@ export function deleteCategory(category_id: number) {
  * @returns
  */
 export function updateCategory(params: Record<string, any>) {
-  return request.post(`phone_shop/goods/category/update`, params, {
-    showErrorMessage: true,
-    showSuccessMessage: true,
-  });
+    return request.post(`phone_shop/goods/category/update`, params, { showErrorMessage: true, showSuccessMessage: true })
 }
 
 /**
@@ -599,10 +606,7 @@ export function updateCategory(params: Record<string, any>) {
  * @returns
  */
 export function setCategoryConfig(params: Record<string, any>) {
-  return request.post(`phone_shop/goods/category/config`, params, {
-    showErrorMessage: true,
-    showSuccessMessage: true,
-  });
+    return request.post(`phone_shop/goods/category/config`, params, { showErrorMessage: true, showSuccessMessage: true })
 }
 
 /**
@@ -610,7 +614,7 @@ export function setCategoryConfig(params: Record<string, any>) {
  * @returns
  */
 export function getCategoryConfig() {
-  return request.get(`phone_shop/goods/category/config`);
+    return request.get(`phone_shop/goods/category/config`);
 }
 
 /**
@@ -618,7 +622,7 @@ export function getCategoryConfig() {
  * @returns
  */
 export function getCategoryTreeComponents() {
-  return request.get(`phone_shop/goods/category/components`);
+    return request.get(`phone_shop/goods/category/components`)
 }
 
 /**
@@ -627,7 +631,7 @@ export function getCategoryTreeComponents() {
  * @returns
  */
 export function getSupplierList(params: Record<string, any>) {
-  return request.get(`shop_supplier/supplier/list`, { params });
+    return request.get(`shop_supplier/supplier/list`, { params })
 }
 
 /**
@@ -636,7 +640,7 @@ export function getSupplierList(params: Record<string, any>) {
  * @returns
  */
 export function getEvaluateList(params: Record<string, any>) {
-  return request.get(`phone_shop/goods/evaluate`, { params });
+    return request.get(`phone_shop/goods/evaluate`, { params })
 }
 
 /**
@@ -645,10 +649,7 @@ export function getEvaluateList(params: Record<string, any>) {
  * @returns
  */
 export function addEvaluate(params: Record<string, any>) {
-  return request.post("phone_shop/goods/evaluate", params, {
-    showErrorMessage: true,
-    showSuccessMessage: true,
-  });
+    return request.post('phone_shop/goods/evaluate', params, { showErrorMessage: true, showSuccessMessage: true })
 }
 
 /**
@@ -657,10 +658,7 @@ export function addEvaluate(params: Record<string, any>) {
  * @returns
  */
 export function deleteEvaluate(evaluate_id: number) {
-  return request.delete(`phone_shop/goods/evaluate/${evaluate_id}`, {
-    showErrorMessage: true,
-    showSuccessMessage: true,
-  });
+    return request.delete(`phone_shop/goods/evaluate/${ evaluate_id }`, { showErrorMessage: true, showSuccessMessage: true })
 }
 
 /**
@@ -669,10 +667,10 @@ export function deleteEvaluate(evaluate_id: number) {
  * @returns
  */
 export function adoptEvaluate(evaluate_id: number) {
-  return request.put(`phone_shop/goods/evaluate/adopt/${evaluate_id}`, {
-    showErrorMessage: true,
-    showSuccessMessage: true,
-  });
+    return request.put(`phone_shop/goods/evaluate/adopt/${ evaluate_id }`, {
+        showErrorMessage: true,
+        showSuccessMessage: true
+    })
 }
 
 /**
@@ -681,10 +679,10 @@ export function adoptEvaluate(evaluate_id: number) {
  * @returns
  */
 export function refuseEvaluate(evaluate_id: number) {
-  return request.put(`phone_shop/goods/evaluate/refuse/${evaluate_id}`, {
-    showErrorMessage: true,
-    showSuccessMessage: true,
-  });
+    return request.put(`phone_shop/goods/evaluate/refuse/${ evaluate_id }`, {
+        showErrorMessage: true,
+        showSuccessMessage: true
+    })
 }
 
 /**
@@ -693,14 +691,10 @@ export function refuseEvaluate(evaluate_id: number) {
  * @returns
  */
 export function replyEvaluate(params: Record<string, any>) {
-  return request.put(
-    `phone_shop/goods/evaluate/reply/${params.evaluate_id}`,
-    params,
-    {
-      showErrorMessage: true,
-      showSuccessMessage: true,
-    }
-  );
+    return request.put(`phone_shop/goods/evaluate/reply/${ params.evaluate_id }`, params, {
+        showErrorMessage: true,
+        showSuccessMessage: true
+    })
 }
 
 /**
@@ -709,10 +703,10 @@ export function replyEvaluate(params: Record<string, any>) {
  * @returns
  */
 export function toppingEvaluate(evaluate_id: number) {
-  return request.put(`phone_shop/goods/evaluate/topping/${evaluate_id}`, {
-    showErrorMessage: true,
-    showSuccessMessage: true,
-  });
+    return request.put(`phone_shop/goods/evaluate/topping/${ evaluate_id }`, {
+        showErrorMessage: true,
+        showSuccessMessage: true
+    })
 }
 
 /**
@@ -721,13 +715,55 @@ export function toppingEvaluate(evaluate_id: number) {
  * @returns
  */
 export function cancelToppingEvaluate(evaluate_id: number) {
-  return request.put(
-    `phone_shop/goods/evaluate/cancel_topping/${evaluate_id}`,
-    {
-      showErrorMessage: true,
-      showSuccessMessage: true,
-    }
-  );
+    return request.put(`phone_shop/goods/evaluate/cancel_topping/${ evaluate_id }`, {
+        showErrorMessage: true,
+        showSuccessMessage: true
+    })
+}
+
+/**
+ * 获取商品评价状态
+ * @param params
+ * @returns
+ */
+export function getEvaluateStatus() {
+    return request.get(`phone_shop/goods/evaluate/status`)
+}
+
+/**
+ * 批量删除商品评价
+ * @param params
+ * @returns
+ */
+export function batchDelEvaluate(params: Record<string, any>) {
+    return request.post(`phone_shop/goods/evaluate/batch/del`,params, {
+        showErrorMessage: true,
+        showSuccessMessage: true
+    })
+}
+
+/**
+ * 商品评价 批量通过
+ * @param params
+ * @returns
+ */
+export function batchAdoptEvaluate(params: Record<string, any>) {
+    return request.post(`phone_shop/goods/evaluate/batch/adopt`,params, {
+        showErrorMessage: true,
+        showSuccessMessage: true
+    })
+}
+
+/**
+ * 商品评价 批量拒绝
+ * @param params
+ * @returns
+ */
+export function batchRefuseEvaluate(params: Record<string, any>) {
+    return request.post(`phone_shop/goods/evaluate/batch/refuse`,params, {
+        showErrorMessage: true,
+        showSuccessMessage: true
+    })
 }
 
 /**
@@ -736,7 +772,7 @@ export function cancelToppingEvaluate(evaluate_id: number) {
  * @returns
  */
 export function getAttrPageList(params: Record<string, any>) {
-  return request.get(`phone_shop/goods/attr`, { params });
+    return request.get(`phone_shop/goods/attr`, { params })
 }
 
 /**
@@ -745,7 +781,7 @@ export function getAttrPageList(params: Record<string, any>) {
  * @returns
  */
 export function getAttrList(params: Record<string, any>) {
-  return request.get(`phone_shop/goods/attr/list`, { params });
+    return request.get(`phone_shop/goods/attr/list`, { params })
 }
 
 /**
@@ -754,7 +790,7 @@ export function getAttrList(params: Record<string, any>) {
  * @returns
  */
 export function getAttrInfo(attr_id: number) {
-  return request.get(`phone_shop/goods/attr/${attr_id}`);
+    return request.get(`phone_shop/goods/attr/${ attr_id }`);
 }
 
 /**
@@ -763,10 +799,7 @@ export function getAttrInfo(attr_id: number) {
  * @returns
  */
 export function addAttr(params: Record<string, any>) {
-  return request.post("phone_shop/goods/attr", params, {
-    showErrorMessage: true,
-    showSuccessMessage: true,
-  });
+    return request.post('phone_shop/goods/attr', params, { showErrorMessage: true, showSuccessMessage: true })
 }
 
 /**
@@ -775,10 +808,10 @@ export function addAttr(params: Record<string, any>) {
  * @returns
  */
 export function editAttr(params: Record<string, any>) {
-  return request.put(`phone_shop/goods/attr/${params.attr_id}`, params, {
-    showErrorMessage: true,
-    showSuccessMessage: true,
-  });
+    return request.put(`phone_shop/goods/attr/${ params.attr_id }`, params, {
+        showErrorMessage: true,
+        showSuccessMessage: true
+    })
 }
 
 /**
@@ -787,10 +820,7 @@ export function editAttr(params: Record<string, any>) {
  * @returns
  */
 export function deleteAttr(attr_id: number) {
-  return request.delete(`phone_shop/goods/attr/${attr_id}`, {
-    showErrorMessage: true,
-    showSuccessMessage: true,
-  });
+    return request.delete(`phone_shop/goods/attr/${ attr_id }`, { showErrorMessage: true, showSuccessMessage: true })
 }
 
 /**
@@ -798,9 +828,7 @@ export function deleteAttr(attr_id: number) {
  * @param params
  */
 export function modifyAttrSort(params: Record<string, any>) {
-  return request.put(`phone_shop/goods/attr/sort`, params, {
-    showSuccessMessage: true,
-  });
+    return request.put(`phone_shop/goods/attr/sort`, params, { showSuccessMessage: true })
 }
 
 /**
@@ -808,9 +836,7 @@ export function modifyAttrSort(params: Record<string, any>) {
  * @param params
  */
 export function modifyAttrName(params: Record<string, any>) {
-  return request.put(`phone_shop/goods/attr/attr_name`, params, {
-    showSuccessMessage: true,
-  });
+    return request.put(`phone_shop/goods/attr/attr_name`, params, { showSuccessMessage: true })
 }
 
 /**
@@ -818,79 +844,84 @@ export function modifyAttrName(params: Record<string, any>) {
  * @param params
  */
 export function modifyAttrValue(params: Record<string, any>) {
-  return request.put(`phone_shop/goods/attr/attr_value`, params, {
-    showSuccessMessage: true,
-  });
+    return request.put(`phone_shop/goods/attr/attr_value`, params, { showSuccessMessage: true })
 }
 
 /**
- * syncGoodsList
- * 一键同步商品
- * */
-export function syncGoodsList() {
-  return request.get(`phone_shop/goods/sync_goods_list`, {
-    showErrorMessage: true,
-    showSuccessMessage: true,
-  });
-}
-
-/**
- * 内存规格分组相关接口
+ * 获取批量设置字典列表
+ * @returns
  */
-export function getMemoryGroupList(params?: Record<string, any>) {
-  return request.get("/phone_shop/goods/memory_group", { params });
-}
-
-export function getMemoryGroupDetail(id: number) {
-  return request.get(`/phone_shop/goods/memory_group/${id}`);
-}
-
-export function addMemoryGroup(data: Record<string, any>) {
-  return request.post("/phone_shop/goods/memory_group", data);
-}
-
-export function editMemoryGroup(id: number, data: Record<string, any>) {
-  return request.put(`/phone_shop/goods/memory_group/${id}`, data);
-}
-
-export function deleteMemoryGroup(id: number) {
-  return request.delete(`/phone_shop/goods/memory_group/${id}`);
+export function getGoodsBatchSetDict() {
+    return request.get(`phone_shop/goods/batchSet/dict`)
 }
 
 /**
- * 内存规格相关接口
+ * 商品批量设置
+ * @param params
  */
-export function getMemoryList(params?: Record<string, any>) {
-  return request.get("/phone_shop/goods/memory", { params });
+export function goodsBatchSet(params: Record<string, any>) {
+    return request.put(`phone_shop/goods/batchSet`, params, { showSuccessMessage: true })
 }
 
-export function getMemoryLists(id?: string | number | Array<string | number>) {
-  // 如果是数组，转换为逗号分隔的字符串
-  let params = Array.isArray(id) ? id.join(",") : id;
-
-  return request.get("/phone_shop/goods/memorys", {
-    params: {
-      id: params,
-    },
-  });
+/**
+ * 获取商品搜索配置
+ * @returns
+ */
+export function getGoodsConfigSearch() {
+    return request.get(`phone_shop/goods/config/search`)
 }
 
-export function getMemoryDetail(id: number) {
-  return request.get(`/phone_shop/goods/memory/${id}`);
+/**
+ * 编辑商品搜索配置
+ * @returns
+ */
+export function setGoodsConfigSearch(param: any) {
+    return request.post('phone_shop/goods/config/search', param, { showSuccessMessage: true })
 }
 
-export function addMemory(data: Record<string, any>) {
-  return request.post("/phone_shop/goods/memory", data);
+
+/**
+ * 获取商品唯一编码配置
+ * @returns
+ */
+export function getGoodsConfigUnique() {
+    return request.get(`phone_shop/goods/config/unique`)
 }
 
-export function editMemory(id: number, data: Record<string, any>) {
-  return request.put(`/phone_shop/goods/memory/${id}`, data);
+/**
+ * 编辑商品唯一编码配置
+ * @returns
+ */
+export function setGoodsConfigUnique(param: any) {
+    return request.post('phone_shop/goods/config/unique', param, { showSuccessMessage: true })
 }
 
-export function deleteMemory(id: number) {
-  return request.delete(`/phone_shop/goods/memory/${id}`);
+/**
+ * 校验商品唯一编码
+
+ * @returns
+ */
+export function goodsVerify(param: any) {
+    return request.post('phone_shop/goods/verify/skuno', param)
 }
 
-export function getMemoryListByGroupId(groupId: number) {
-  return request.get(`/phone_shop/goods/memory_group/${groupId}`);
+/**
+ * 获取商品排序配置
+ * @returns
+ */
+export function getGoodsConfigSort() {
+    return request.get(`phone_shop/goods/config/sort`)
+}
+
+/**
+ * 设置商品排序配置
+ * @returns
+ */
+export function setGoodsConfigSort(param: any) {
+    return request.post('phone_shop/goods/config/sort', param, { showSuccessMessage: true })
+}
+// 上下架
+
+export function editGoodssingleStatus(params: Record<string, any>) {
+    return request.put(`phone_shop/goods/single/status`, params, { showSuccessMessage: true })
 }

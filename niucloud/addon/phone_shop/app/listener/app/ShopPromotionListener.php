@@ -37,7 +37,7 @@ class ShopPromotionListener
                     "desc" => get_lang('dict_shop_app_manage.message_manage'),
                     "icon" => "addon/phone_shop/coupon.png",
                     "cover" => "addon/phone_shop/coupon.png",
-                    "url" => "/shphone_shopop/marketing/coupon/list"
+                    "url" => "/phone_shop/marketing/coupon/list"
                 ],
             ];
         }

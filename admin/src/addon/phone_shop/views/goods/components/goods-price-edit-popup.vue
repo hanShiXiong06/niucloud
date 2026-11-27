@@ -1,6 +1,6 @@
 <template>
     <div>
-        <el-dialog v-model="showDialog" :title="t('editPricePopupTitle')" width="800px" :close-on-press-escape="false" :destroy-on-close="true" :close-on-click-modal="false">
+        <el-dialog v-model="showDialog" :title="t('editPricePopupTitle')" width="800px" :destroy-on-close="true" :close-on-click-modal="false">
 
             <div class="flex items-center mb-[10px]">
                 <div class="min-w-[70px] h-[70px] flex items-center justify-center">
@@ -24,12 +24,12 @@
                 <label>{{ t('batchOperationSku') }}</label>
 
                 <div v-if="batchOperation.field">
-                    <el-input v-model="batchOperation.value" clearable :placeholder="t(batchOperation.field)" class="set-input" maxlength="10" :autofocus="true" />
+                    <el-input v-model.trim="batchOperation.value" clearable :placeholder="t(batchOperation.field)" class="set-input" maxlength="8" :autofocus="true" />
                     <el-button type="primary" @click="saveBatch">{{ t('confirm') }}</el-button>
                     <el-button @click="clearBatch">{{ t('cancel') }}</el-button>
                 </div>
                 <div v-else>
-                    <el-button type="primary" link @click="setBatchField('price')" v-if="activeGoodsCount == 0">{{ t('price') }}</el-button>
+                    <el-button type="primary" link @click="setBatchField('price')" v-if="activeGoodsCount == 0">{{ autoPricing ? '基准售价' : t('price') }}</el-button>
                     <el-button type="primary" link @click="setBatchField('market_price')">{{ t('marketPrice') }}</el-button>
                     <el-button type="primary" link @click="setBatchField('cost_price')">{{ t('costPrice') }}</el-button>
                 </div>
@@ -41,28 +41,28 @@
                 </template>
 
                 <el-table-column prop="sku_name" :label="t('skuName')" min-width="120" v-if="goodsTable.data.length > 1" />
-                    <el-table-column prop="market_price" :label="t('marketPrice')" min-width="120">
-                        <template #default="{ row }">
-                            <el-input 
-                                v-model="row.market_price" 
-                                clearable 
-                                placeholder="0.00" 
-                                maxlength="8"
-                                @input="calculatePrice(row)"
-                            />
-                        </template>
-                    </el-table-column>
-    
-                <el-table-column prop="price" :label="t('price')" min-width="120">
+                <el-table-column prop="price" :label="autoPricing ? '基准售价与自动售价' : t('price')" min-width="220">
                     <template #default="{ row }">
-                        <el-input v-model="row.price" clearable placeholder="0.00" maxlength="8" :disabled="activeGoodsCount > 0" />
+                        <TierPriceInput v-model="row.price" v-model:base-price="row.pricing_base_price" :disabled="activeGoodsCount > 0" @policy="value => autoPricing = Number(value.enabled) === 1" />
                     </template>
                 </el-table-column>
 
-              
+                <el-table-column prop="market_price" :label="t('marketPrice')" min-width="120">
+                    <template #default="{ row }">
+                        <el-input v-model.trim="row.market_price" clearable placeholder="0.00" maxlength="8" />
+                    </template>
+                </el-table-column>
+
                 <el-table-column prop="cost_price" :label="t('costPrice')" min-width="120">
                     <template #default="{ row }">
-                        <el-input v-model="row.cost_price" clearable placeholder="0.00" maxlength="8" />
+                        <el-input v-model.trim="row.cost_price" clearable placeholder="0.00" maxlength="8" />
+                    </template>
+                </el-table-column>
+
+                <!-- 会员价(仅当商品启用了"指定会员价"时渲染,各等级一列) -->
+                <el-table-column v-for="(lv, li) in (hasMemberPrice ? memberLevels : [])" :key="'mp' + li" :label="lv.level_name + '会员价'" min-width="130">
+                    <template #default="{ row }">
+                        <el-input v-model.trim="row[lkey(lv)]" clearable placeholder="0.00" maxlength="8" />
                     </template>
                 </el-table-column>
 
@@ -79,8 +79,9 @@
 </template>
 
 <script lang="ts" setup>
+import TierPriceInput from '@/addon/phone_shop/views/goods/components/TierPriceInput.vue'
 import { t } from '@/lang'
-import { ref, reactive, onMounted, watch } from 'vue'
+import { ref, reactive, computed } from 'vue'
 import { img } from '@/utils/common'
 import { ElMessage } from 'element-plus'
 
@@ -90,13 +91,17 @@ import {
     editGoodsListPrice
 } from '@/addon/phone_shop/api/goods'
 
-// 获取价格配置
-import { getRecyclerPriceConfigBySiteId } from '@/addon/phone_shop/api/site'
-
 const goods: any = reactive({})
 const activeGoodsCount: any = ref(0)
 
 const showDialog = ref(false)
+
+// 会员等级 + 会员价 JSON 键(统一 level_no,回退 level_id)
+const memberLevels: any = ref([])
+const lkey = (lv: any): string => 'level_' + (lv.level_no || lv.level_id)
+// 仅"指定会员价"(fixed_price)且有等级时,才在表格里渲染会员价列
+const autoPricing = ref(false)
+const hasMemberPrice = computed(() => !autoPricing.value && goods.member_discount === 'fixed_price' && memberLevels.value.length > 0)
 
 const emit = defineEmits(['load'])
 
@@ -146,7 +151,7 @@ const saveBatch = () => {
     }
 
     goodsTable.data.forEach((item: any) => {
-        item[batchOperation.field] = batchOperation.value
+        item[autoPricing.value && batchOperation.field === 'price' ? 'pricing_base_price' : batchOperation.field] = batchOperation.value
     })
 
     clearBatch()
@@ -162,14 +167,25 @@ const loadGoodsList = () => {
         goods_id: goods.goods_id
     }).then(res => {
         goodsTable.loading = false
-        goodsTable.data = res.data
+        const data = res.data || []
+        // 预填会员价:按 level_no 取,兼容老 level_id;无则用零售价兜底
+        data.forEach((item: any) => {
+            let mp: any = {}
+            try { mp = item.member_price ? JSON.parse(item.member_price) : {} } catch (e) { mp = {} }
+            memberLevels.value.forEach((lv: any) => {
+                const v = mp[lkey(lv)] ?? mp[`level_${lv.level_id}`] ?? null
+                item[lkey(lv)] = parseFloat(v != null && v !== '' ? v : item.price).toFixed(2)
+            })
+        })
+        goodsTable.data = data
     }).catch(() => {
         goodsTable.loading = false
     })
 }
 
-const show = (data: any) => {
+const show = (data: any, levels: any = []) => {
     Object.assign(goods, data)
+    memberLevels.value = levels || []
     getActiveGoodsCountFn();
     loadGoodsList()
     showDialog.value = true
@@ -245,108 +261,51 @@ const verify = () => {
     return result
 }
 
-const save = () => {
-    if (verify()) {
-        let sku_list = <any>[]
-        goodsTable.data.forEach((item: any) => {
-            sku_list.push({
-                sku_id: item.sku_id,
-                price: item.price,
-                market_price: item.market_price,
-                cost_price: item.cost_price
-            })
-        })
-        editGoodsListPrice({
-            goods_id: goods.goods_id,
-            sku_list
-        }).then(res => {
-            emit('load');
-            showDialog.value = false
-        })
-    }
-}
-
-// 定义接口
-interface PriceRange {
-    id: number;
-    config_id: number;
-    min_price: string;
-    max_price: string;
-    member_markup: string;
-    create_time: string;
-    update_time: string;
-}
-
-interface RecyclerPriceConfig {
-    id: number;
-    site_id: number;
-    recycler_id: number;
-    price_type: number;
-    member_markup: string;
-    non_member_markup: string;
-    create_time: string;
-    update_time: string;
-    price_ranges: PriceRange[];
-}
-
-interface TableRow {
-    market_price: string;
-    price: string;
-    sku_id: number;
-    cost_price: string;
-}
-
-// 价格配置
-const recyclerPriceConfig = ref<RecyclerPriceConfig | null>(null)
-
-// 获取价格配置
-const getRecyclerPriceConfigFn = async () => {
-    try {
-        const res = await getRecyclerPriceConfigBySiteId({})
-        recyclerPriceConfig.value = res.data
-    } catch (error) {
-        console.error('获取价格配置失败:', error)
-    }
-}
-
-onMounted(() => {
-    getRecyclerPriceConfigFn()
-})
-
-// 监听同行价变化，自动计算零售价
-const calculatePrice = (row: TableRow) => {
-    if (!row.market_price || !recyclerPriceConfig.value) return
-    
-    const price = parseFloat(row.market_price)
-    // 判断加价类型
-    const priceType = recyclerPriceConfig.value.price_type
-    
-    if (priceType === 1) {
-        // 通用型：直接使用 member_markup
-        const markup = parseFloat(recyclerPriceConfig.value.member_markup)
-        if (!markup) {
-            row.price = price.toFixed(2)
-        } else {
-            row.price = (price + markup).toFixed(2)
+// 校验会员价:>0 且不大于零售价
+const verifyMember = (): boolean => {
+    for (const item of goodsTable.data as any[]) {
+        for (const lv of memberLevels.value) {
+            const val = parseFloat(item[lkey(lv)])
+            if (isNaN(val) || val <= 0) {
+                ElMessage.warning(`[${lv.level_name}]会员价必须大于 0`)
+                return false
+            }
+            if (val > parseFloat(item.price)) {
+                ElMessage.warning(`[${lv.level_name}]会员价不能大于零售价`)
+                return false
+            }
         }
-        return
     }
-    
-    // 区间型：根据价格区间计算
-    const ranges = recyclerPriceConfig.value.price_ranges
-    const matchedRange = ranges.find((range: PriceRange) => {
-        const minPrice = parseFloat(range.min_price)
-        const maxPrice = parseFloat(range.max_price)
-        return price >= minPrice && price <= maxPrice
+    return true
+}
+
+const save = () => {
+    if (!verify()) return
+    if (hasMemberPrice.value && !verifyMember()) return
+
+    const sku_list = <any>[]
+    goodsTable.data.forEach((item: any) => {
+        sku_list.push({
+            sku_id: item.sku_id,
+            pricing_base_price: item.pricing_base_price,
+            price: item.price,
+            market_price: item.market_price,
+            cost_price: item.cost_price
+        })
     })
-    
-    if (matchedRange) {
-        const markup = parseFloat(matchedRange.member_markup)
-        row.price = (price + markup).toFixed(2)
-    } else {
-        // 如果找不到匹配区间，零售价等于同行价
-        row.price = price.toFixed(2)
+
+    // 普通价和手动会员价也放在同一保存事务，避免两个请求部分成功。
+    if (hasMemberPrice.value) {
+        goodsTable.data.forEach((item: any, index: number) => {
+            sku_list[index].member_price = {}
+            memberLevels.value.forEach((lv: any) => { sku_list[index].member_price[lkey(lv)] = item[lkey(lv)] })
+        })
     }
+
+    editGoodsListPrice({goods_id: goods.goods_id, sku_list, member_discount: hasMemberPrice.value ? 'fixed_price' : null}).then(() => {
+        emit('load')
+        showDialog.value = false
+    })
 }
 
 defineExpose({

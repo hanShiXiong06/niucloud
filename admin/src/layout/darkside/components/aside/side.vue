@@ -77,7 +77,7 @@ routers.forEach((item, index) => {
             }
             menuData.value.push(item)
         }
-    } else if (item.meta.addon != '' && siteInfo?.apps.length == 1 && siteInfo?.apps[0].key == item.meta.addon && item.meta.show) {
+    } else if (item.meta.addon != '' && siteInfo?.apps?.length === 1 && siteInfo.apps[0]?.key == item.meta.addon && item.meta.show) {
         if (item.children) {
             item.children.forEach((citem: Record<string, any>) => {
                 citem.original_name = citem.name
@@ -94,23 +94,23 @@ routers.forEach((item, index) => {
     }
 
     // 排序, 功能正确，改了排序后需要把菜单排序的默认值重新调整一下【多应用一级菜单，单应用二级菜单】
-    // menuData.value.sort((a, b) => {
-    //     if (a.meta.sort && b.meta.sort) {
-    //         return b.meta.sort - a.meta.sort
-    //     } else if (a.meta.sort) {
-    //         return -1
-    //     } else if (b.meta.sort) {
-    //         return 1
-    //     } else {
-    //         return 0
-    //     }
-    // })
+    menuData.value.sort((a, b) => {
+        if (a.meta.sort && b.meta.sort) {
+            return b.meta.sort - a.meta.sort
+        } else if (a.meta.sort) {
+            return -1
+        } else if (b.meta.sort) {
+            return 1
+        } else {
+            return 0
+        }
+    })
 })
 
 // 多应用时将应用插入菜单
-if (siteInfo?.apps.length > 1) {
+if ((siteInfo?.apps?.length ?? 0) > 1) {
     const routers:Record<string, any>[] = []
-    siteInfo?.apps.forEach((item: Record<string, any>) => {
+    siteInfo?.apps?.forEach((item: Record<string, any>) => {
         if (addonRouters[item.key]) {
             addonRouters[item.key].name = addonIndexRoute[item.key]
             routers.push(addonRouters[item.key])
@@ -119,17 +119,17 @@ if (siteInfo?.apps.length > 1) {
     menuData.value.unshift(...routers)
 
     // 排序, 功能正确，改了排序后需要把菜单排序的默认值重新调整一下【多应用一级菜单，单应用二级菜单】
-    // menuData.value.sort((a, b) => {
-    //     if (a.meta.sort && b.meta.sort) {
-    //         return b.meta.sort - a.meta.sort
-    //     } else if (a.meta.sort) {
-    //         return -1
-    //     } else if (b.meta.sort) {
-    //         return 1
-    //     } else {
-    //         return 0
-    //     }
-    // })
+    menuData.value.sort((a, b) => {
+        if (a.meta.sort && b.meta.sort) {
+            return b.meta.sort - a.meta.sort
+        } else if (a.meta.sort) {
+            return -1
+        } else if (b.meta.sort) {
+            return 1
+        } else {
+            return 0
+        }
+    })
 }
 </script>
 

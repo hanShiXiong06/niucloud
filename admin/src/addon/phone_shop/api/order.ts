@@ -1,11 +1,16 @@
-import request from "@/utils/request";
+import request from '@/utils/request'
+
+/** 有明确确认步骤的退回/批量动作：保留抽屉内错误，不误报整批成功。 */
+export function processOfflineOrderAction(params: Record<string, any>) {
+    return request.post('phone_shop/order/offline/process', params, { showSuccessMessage: false, showErrorMessage: false })
+}
 
 /**
  * 获取交易配置
  * @returns
  */
 export function getConfig() {
-  return request.get("phone_shop/order/config");
+    return request.get('phone_shop/order/config')
 }
 
 /**
@@ -13,9 +18,7 @@ export function getConfig() {
  * @returns
  */
 export function setConfig(param: any) {
-  return request.post("phone_shop/order/config", param, {
-    showSuccessMessage: true,
-  });
+    return request.post('phone_shop/order/config', param, { showSuccessMessage: true })
 }
 
 /**
@@ -23,7 +26,7 @@ export function setConfig(param: any) {
  * @returns
  */
 export function getOrderList(params: Record<string, any>) {
-  return request.get("phone_shop/order/list", { params });
+    return request.get('phone_shop/order/list', { params })
 }
 
 /**
@@ -31,7 +34,25 @@ export function getOrderList(params: Record<string, any>) {
  * @returns
  */
 export function getOrderDetail(order_id: number) {
-  return request.get(`phone_shop/order/detail/${order_id}`);
+    return request.get(`phone_shop/order/detail/${ order_id }`)
+}
+
+export function confirmOrderDeviceReceived(orderGoodsId: number) {
+    return request.post(`phone_shop/order/device_received/${orderGoodsId}`, { received: true }, { showSuccessMessage: true, showErrorMessage: false })
+}
+
+/**
+ * 获取线下订单可选的 ERP 资金账户
+ */
+export function getOfflineCapitalAccounts() {
+    return request.get('phone_shop/order/offline/capital_accounts')
+}
+
+/**
+ * 线下订单确认收款或确认挂账
+ */
+export function processOfflineOrder(params: Record<string, any>) {
+    return request.post('phone_shop/order/offline/process', params, { showSuccessMessage: true })
 }
 
 /**
@@ -39,7 +60,7 @@ export function getOrderDetail(order_id: number) {
  * @return
  */
 export function getOrderStatus() {
-  return request.get(`phone_shop/order/status`);
+    return request.get(`phone_shop/order/status`)
 }
 
 /**
@@ -47,7 +68,7 @@ export function getOrderStatus() {
  * @return
  */
 export function getOrderType() {
-  return request.get(`phone_shop/order/type`);
+    return request.get(`phone_shop/order/type`)
 }
 
 /**
@@ -55,15 +76,24 @@ export function getOrderType() {
  * @return
  */
 export function orderClose(order_id: number) {
-  return request.put(`phone_shop/order/close/${order_id}`);
+    return request.put(`phone_shop/order/close/${ order_id }`)
 }
+
+/**
+ * 订单删除
+ * @return
+ */
+export function orderDelete(params: Record<string, any>) {
+    return request.post(`phone_shop/order/delete`,params, { showSuccessMessage: true })
+}
+
 
 /**
  * 获取订单配送方式
  * @return
  */
 export function getOrderDeliveryType(params: Record<string, any>) {
-  return request.get(`phone_shop/order/delivery_type`, { params });
+    return request.get(`phone_shop/order/delivery_type`, { params })
 }
 
 /**
@@ -71,7 +101,7 @@ export function getOrderDeliveryType(params: Record<string, any>) {
  * @return
  */
 export function orderDelivery(params: Record<string, any>) {
-  return request.put(`phone_shop/order/delivery`, params);
+    return request.put(`phone_shop/order/delivery`, params)
 }
 
 /**
@@ -79,7 +109,7 @@ export function orderDelivery(params: Record<string, any>) {
  * @return
  */
 export function setShopRemark(params: Record<string, any>) {
-  return request.put(`phone_shop/order/shop_remark`, params);
+    return request.put(`phone_shop/order/shop_remark`, params)
 }
 
 /**
@@ -87,7 +117,7 @@ export function setShopRemark(params: Record<string, any>) {
  * @return
  */
 export function orderFinish(order_id: number) {
-  return request.put(`phone_shop/order/finish/${order_id}`);
+    return request.put(`phone_shop/order/finish/${ order_id }`)
 }
 
 /**
@@ -95,7 +125,7 @@ export function orderFinish(order_id: number) {
  * @return
  */
 export function deliveryPackage(params: Record<string, any>) {
-  return request.get(`phone_shop/order/delivery/package`, { params });
+    return request.get(`phone_shop/order/delivery/package`, { params })
 }
 
 /**
@@ -103,23 +133,23 @@ export function deliveryPackage(params: Record<string, any>) {
  * @return
  */
 export function deliveryPackageList(params: Record<string, any>) {
-  return request.get(`phone_shop/order/delivery/package/list`, { params });
+    return request.get(`phone_shop/order/delivery/package/list`, { params })
 }
 
 /**
- * 退款维权列表
+ * 退款售后列表
  * @param {Record<string, any>} params
  * @return
  */
 export function orderRefund(params: Record<string, any>) {
-  return request.get(`phone_shop/order/refund`, { params });
+    return request.get(`phone_shop/order/refund`, { params })
 }
 
 /**
- * 退款维权详情
+ * 退款售后详情
  */
 export function orderRefundDetail(refund_id: number) {
-  return request.get(`phone_shop/order/refund/${refund_id}`);
+    return request.get(`phone_shop/order/refund/${ refund_id }`)
 }
 
 /**
@@ -127,10 +157,7 @@ export function orderRefundDetail(refund_id: number) {
  * @return
  */
 export function auditRefund(params: Record<string, any>) {
-  return request.put(
-    `phone_shop/order/refund/audit/${params.order_refund_no}`,
-    params
-  );
+    return request.put(`phone_shop/order/refund/audit/${ params.order_refund_no }`, params)
 }
 
 /**
@@ -138,61 +165,70 @@ export function auditRefund(params: Record<string, any>) {
  * @return
  */
 export function refundDelivery(params: Record<string, any>) {
-  return request.put(
-    `phone_shop/order/refund/delivery/${params.order_refund_no}`,
-    params
-  );
+    return request.put(`phone_shop/order/refund/delivery/${ params.order_refund_no }`, params)
 }
+
 /**
  * 获取可退款金额
  */
 export function getRefundMoney(params: Record<string, any>) {
-  return request.get(`phone_shop/order/refund/refund_money`, { params });
+    return request.get(`phone_shop/order/refund/refund_money`, { params })
 }
 
 /**
  * 商家主动退款
  */
 export function shopActiveRefund(params: Record<string, any>) {
-  return request.post(`phone_shop/order/refund/active`, params, {
-    showSuccessMessage: true,
-  });
+    return request.post(`phone_shop/order/refund/active`, params, { showSuccessMessage: true })
 }
+
 /**
  * 获取发票列表
  */
 export function getInvoiceList(params: Record<string, any>) {
-  return request.get(`phone_shop/invoice`, { params });
+    return request.get(`phone_shop/invoice`, { params })
 }
 
 /**
  * 获取发票列表
  */
 export function getInvoiceDetail(id: number) {
-  return request.get(`phone_shop/invoice/${id}`);
+    return request.get(`phone_shop/invoice/${ id }`)
 }
 
 /**
  * 开具发票
  */
 export function setInvoice(id: number, params: Record<string, any>) {
-  return request.put(`phone_shop/invoice/${id}`, params, {
-    showSuccessMessage: true,
-  });
+    return request.put(`phone_shop/invoice/${ id }`, params, { showSuccessMessage: true })
+}
+
+/**
+ * 开发票
+ */
+export function createInvoice(params: Record<string, any>) {
+    return request.post(`phone_shop/invoice/add`, params, { showSuccessMessage: true })
+}
+
+/**
+ * 发票审核
+ */
+export function auditInvoice(params: Record<string, any>) {
+    return request.post(`phone_shop/invoice/audit`, params, { showSuccessMessage: true })
 }
 
 /**
  * 获取支付类型
  */
 export function getOrderPayType() {
-  return request.get(`phone_shop/order/pay/type`);
+    return request.get(`phone_shop/order/pay/type`)
 }
 
 /**
  * 获取订单来源
  */
 export function getOrderFrom() {
-  return request.get(`phone_shop/order/from`);
+    return request.get(`phone_shop/order/from`)
 }
 
 /**
@@ -200,9 +236,7 @@ export function getOrderFrom() {
  * @return
  */
 export function orderEditPrice(params: Record<string, any>) {
-  return request.put(`phone_shop/order/edit_price`, params, {
-    showSuccessMessage: true,
-  });
+    return request.put(`phone_shop/order/edit_price`, params, { showSuccessMessage: true })
 }
 
 /**
@@ -210,7 +244,7 @@ export function orderEditPrice(params: Record<string, any>) {
  * @return
  */
 export function getOrderEditAddress(params: Record<string, any>) {
-  return request.get(`phone_shop/order/edit_delivery`, { params });
+    return request.get(`phone_shop/order/edit_delivery`, { params })
 }
 
 /**
@@ -218,7 +252,7 @@ export function getOrderEditAddress(params: Record<string, any>) {
  * @return
  */
 export function getDeliveryList() {
-  return request.get(`phone_shop/delivery/store/list`);
+    return request.get(`phone_shop/delivery/store/list`)
 }
 
 /**
@@ -226,7 +260,7 @@ export function getDeliveryList() {
  * @return
  */
 export function orderEditAddress(params: Record<string, any>) {
-  return request.put(`phone_shop/order/edit_delivery`, params);
+    return request.put(`phone_shop/order/edit_delivery`, params)
 }
 
 /**
@@ -234,7 +268,7 @@ export function orderEditAddress(params: Record<string, any>) {
  * @return
  */
 export function getOrderBatchDeliveryList(params: Record<string, any>) {
-  return request.get(`phone_shop/order_batch_delivery`, { params });
+    return request.get(`phone_shop/order_batch_delivery`, { params })
 }
 
 /**
@@ -242,10 +276,7 @@ export function getOrderBatchDeliveryList(params: Record<string, any>) {
  * @return
  */
 export function addBatchOrderDelivery(params: Record<string, any>) {
-  return request.put(
-    `phone_shop/order_batch_delivery/add_batch_order_delivery`,
-    params
-  );
+    return request.put(`phone_shop/order_batch_delivery/add_batch_order_delivery`, params)
 }
 
 /**
@@ -253,7 +284,7 @@ export function addBatchOrderDelivery(params: Record<string, any>) {
  * @return
  */
 export function getOrderBatchDeliveryState() {
-  return request.get(`phone_shop/order_batch_delivery/get_status`);
+    return request.get(`phone_shop/order_batch_delivery/get_status`)
 }
 
 /**
@@ -261,5 +292,29 @@ export function getOrderBatchDeliveryState() {
  * @return
  */
 export function getOrderBatchDeliveryType() {
-  return request.get(`phone_shop/order_batch_delivery/get_type`);
+    return request.get(`phone_shop/order_batch_delivery/get_type`)
+}
+
+/**
+ * 关闭售后
+ * @return
+ */
+export function closeRefund(order_refund_no: number) {
+    return request.put(`phone_shop/order/refund/close/${order_refund_no}`)
+}
+
+/**
+ * 获取已选订单项总重量
+ * @return
+ */
+export function getSelectOrderGoodsWeight(params: Record<string, any>) {
+    return request.get(`phone_shop/order/select/weight`, {params})
+}
+
+/**
+ * 获取已选订单项配送费用
+ * @return
+ */
+export function getDeliveryFee(params: Record<string, any>) {
+    return request.get(`phone_shop/order/delivery/fee`, {params})
 }

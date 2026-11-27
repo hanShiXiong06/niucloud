@@ -71,7 +71,7 @@ const formData = ref({
 const ruleRefs = ref(null)
 const loading = ref(true)
 
-const modules: any = import.meta.glob('@/**/*.vue')
+import { dynamicComponentModules as modules } from '@/utils/dynamic-components'
 getPointRuleDict().then(({ data }) => {
     Object.keys(data.grant).forEach((key : string) => {
         data.grant[key].component && (data.grant[key].component = defineAsyncComponent(modules[data.grant[key].component]))

@@ -1,0 +1,36 @@
+<?php
+return [
+    [
+        'menu_name' => '图片上传',
+        'menu_key' => 'hsx_clipboard_upload',
+        'menu_short_name' => '图片上传',
+        'parent_select_key' => '',
+        'parent_key' => '',
+        'menu_type' => '0',
+        'icon' => '',
+        'api_url' => '',
+        'router_path' => '',
+        'view_path' => '',
+        'methods' => '',
+        'sort' => '100',
+        'status' => '1',
+        'is_show' => '1',
+        'children' => [
+            [
+                'menu_name' => '图片上传',
+                'menu_key' => 'hsx_clipboard_upload_index',
+                'menu_short_name' => '图片上传',
+                'parent_select_key' => '',
+                'menu_type' => '1',
+                'icon' => '',
+                'api_url' => '',
+                'router_path' => 'clipboard',
+                'view_path' => 'hello_world/index',
+                'methods' => 'get',
+                'sort' => '100',
+                'status' => '1',
+                'is_show' => '1',
+            ],
+        ],
+    ],
+];

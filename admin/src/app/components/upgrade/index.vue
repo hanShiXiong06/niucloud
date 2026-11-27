@@ -34,37 +34,14 @@
                     </div>
                 </template>
             </template>
-            <div v-if="step == 2">
-                <el-steps :active="numberOfSteps" align-center class="number-of-steps" process-status="process" v-if="!errorDialog && active != 'complete'">
+            <div v-show="step == 2">
+                <el-steps :active="numberOfSteps" align-center class="number-of-steps" process-status="process">
                     <el-step :title="t('testDirectoryPermissions')" />
                     <el-step :title="t('upgrade.option')" />
                     <el-step :title="t('startUpgrade')" />
                     <el-step :title="t('upgradeEnd')" />
                 </el-steps>
                 <div class="h-[400px]" style="overflow: auto">
-<!--                    <div class="time-dialog-wrap mt-[30px]" v-show="active == 'content'">-->
-<!--                        <el-timeline style="width: 100%">-->
-<!--                            <el-timeline-item v-for="(item, index) in upgradeContent.version_list" :key="index" placement="left">-->
-<!--                                <div class="relative">-->
-<!--                                    <span class="text-[#333333] text-[16px] absolute">{{ timeSplit(item.release_time)[0] }}</span>-->
-<!--                                    <br />-->
-<!--                                    <span class="text-[#999999] text-[14px] w-[78px] block mt-[10px] absolute" style="text-align: right"> {{ timeSplit(item.release_time)[1] }}</span>-->
-<!--                                </div>-->
-<!--                                <el-collapse v-model="activeName" accordion>-->
-<!--                                    <el-collapse-item :name="index">-->
-<!--                                        <template #title>-->
-<!--                                            <span class="text-[#333] text-[16px]"> v{{ item.version_no }} </span>-->
-<!--                                        </template>-->
-
-<!--                                        <div class="px-[20px] py-[20px] bg-overlay timeline-log-wrap whitespace-pre-wrap rounded-[4px]" style="background: rgba(25, 103, 249, 0.03);" v-if="item['upgrade_log']">-->
-<!--                                            <div v-html="item['upgrade_log']"></div>-->
-<!--                                        </div>-->
-<!--                                    </el-collapse-item>-->
-<!--                                </el-collapse>-->
-<!--                            </el-timeline-item>-->
-<!--                        </el-timeline>-->
-<!--                    </div>-->
-
                     <!-- 判断文件权限 -->
                     <div v-show="active == 'upgrade'">
                         <div class="flex flex-col" v-if="upgradeCheck && !upgradeTask">
@@ -132,7 +109,6 @@
                         <div class="h-[370px] mt-[30px]" v-show="showTerminal && upgradeTask && !errorDialog">
                             <terminal ref="terminalRef" :name="`upgrade-${terminalId}`"  :context="upgradeTask ? upgradeTask.upgrade.app_key : ''" :init-log="null" :show-header="false" :show-log-time="true" @exec-cmd="onExecCmd" />
                         </div>
-
                     </div>
                     <!-- 是否备份选择 -->
                     <div class="flex flex-col" v-show="active == 'backup'">
@@ -156,36 +132,63 @@
                             </div>
                         </el-scrollbar>
                     </div>
-                    <div class="mt-[20px] h-[370px]" v-show="errorDialog">
-                        <el-result icon="error" :title="t('升级失败')">
-                            <template #icon>
-                                <img src="@/app/assets/images/error_icon.png" alt="" />
-                            </template>
-                            <template #extra>
-                                <el-scrollbar class="max-h-[120px] !overflow-auto text-[15px] text-[#4F516D] mb-[15px] mt-[-15px]">
-                                    {{errorMsg}}
-                                </el-scrollbar>
-                                <el-button @click="handleBack()" class="!w-[90px]">错误信息</el-button>
-                                <el-button @click="showDialog=false" type="primary" class="!w-[90px]">完成</el-button>
-                            </template>
-                        </el-result>
-                    </div>
-                    <div class="mt-[20px]" v-show="active == 'complete'">
-                        <el-result icon="success" :title="t('upgrade.upgradeSuccess')">
-                            <template #icon>
-                                <img src="@/app/assets/images/success_icon.png" alt="">
-                            </template>
-                            <template #extra>
-                                <div class="text-[16px] text-[#4F516D] mt-[-5px]" v-show="upgradeTask && upgradeTask.executed && !upgradeTask.executed.includes('cloudBuild')">{{ t('upgrade.upgradeCompleteTips') }}</div>
-                                <div class="text-[16px] text-[#9699B6] mt-[10px]">本次升级用时{{ formatUpgradeDuration }}</div>
-                                <div class="mt-[20px]">
-                                    <el-button @click="handleBack()" class="!w-[90px]">返回</el-button>
-                                    <el-button @click="showDialog=false" type="primary" class="!w-[90px]">完成</el-button>
+
+                </div>
+            </div>
+            <div v-if="step == 3">
+                <div class="mt-[10px]" v-show="active == 'complete'">
+                    <el-result icon="success" :title="t('upgrade.upgradeSuccess')">
+                        <template #icon>
+                            <img src="@/app/assets/images/success_icon.png" alt="">
+                        </template>
+                        <template #extra>
+                            <div class="text-[16px] text-[#4F516D] mt-[-5px]" v-show="upgradeTask && upgradeTask.executed && !upgradeTask.executed.includes('cloudBuild')">{{ t('upgrade.upgradeCompleteTips') }}</div>
+                            <!-- <div class="text-[16px] text-[#9699B6] mt-[10px]">本次升级用时{{ formatUpgradeDuration }}</div> -->
+                            <div class="w-[750px]" v-if="upgradeTask.cloud_build_error">
+                                <el-alert class="!w-[750px] border-warning !border-[1px] !rounded-[0px] border-solid" type="warning" :closable="false">
+                                    <template #title>
+                                        <span class="text-error">警告：</span>
+                                        <span class="text-black">升级过程中发生云编译错误</span>
+                                    </template>
+                                </el-alert>
+                                <div class="text-left mt-[10px] leading-8">
+                                    <div class="font-bold">为了保证系统稳定，建议您做以下处理:</div>
+                                    <div><span class="w-[6px] h-[6px] rounded-[6px] bg-black inline-block mr-[10px]"></span>如果您是开发者，安装的框架或者插件二开过或者正在开发中，可能是因为您的本地代码不完整导致的云编译失败，需要自己调试并重新进行编译才算升级完成(云编译会把本地插件前端代码上传编译)。</div>
+                                    <div><span class="w-[6px] h-[6px] rounded-[6px] bg-black inline-block mr-[10px]"></span>如果您没有二开过任何代码，可能是本地插件存在兼容性问题，请联系插件开发者或者官方客服解决。</div>
+                                    <div><span class="w-[6px] h-[6px] rounded-[6px] bg-black inline-block mr-[10px]"></span>如果您的项目已经投入正式运营中，请立即回滚。</div>
                                 </div>
-                            </template>
-                        </el-result>
-                        <!-- <el-alert :title="t('upgrade.upgradeCompleteTips')" type="error" :closable="false" v-show="upgradeTask && upgradeTask.executed && !upgradeTask.executed.includes('cloudBuild')"/> -->
-                    </div>
+                                <div class="text-left mt-[10px]">
+                                    <div class="font-bold">编译信息错误</div>
+                                    <div class="mt-[10px] text-secondary overflow-hidden line-clamp-4">
+                                        {{  upgradeTask.cloud_build_error }}
+                                    </div>
+                                </div>
+                                <div class="mt-[20px]">
+                                    <el-button @click="handleBack()" class="!w-[90px]">更多信息</el-button>
+                                    <el-button @click="showDialog=false" type="primary" plain class="!w-[90px]">我已知晓</el-button>
+                                    <el-button @click="cloudBuildError('cloud_build_error_rollback')" type="primary" class="!w-[90px]">回滚</el-button>
+                                </div>
+                            </div>
+                            <div class="mt-[20px]" v-else>
+                                <el-button @click="handleBack()" class="!w-[90px]">返回</el-button>
+                                <el-button @click="showDialog=false" type="primary" class="!w-[90px]">完成</el-button>
+                            </div>
+                        </template>
+                    </el-result>
+                </div>
+                <div class="mt-[20px] h-[370px]" v-show="active == 'fail'">
+                    <el-result icon="error" :title="t('升级失败')">
+                        <template #icon>
+                            <img src="@/app/assets/images/error_icon.png" alt="" />
+                        </template>
+                        <template #extra>
+                            <el-scrollbar class="max-h-[120px] !overflow-auto text-[15px] text-[#4F516D] mb-[15px] mt-[-15px]">
+                                {{errorMsg}}
+                            </el-scrollbar>
+                            <el-button @click="handleBack()" class="!w-[90px]">错误信息</el-button>
+                            <el-button @click="showDialog=false" type="primary" class="!w-[90px]">完成</el-button>
+                        </template>
+                    </el-result>
                 </div>
             </div>
         </template>
@@ -223,6 +226,18 @@
                 <el-button @click="cloudBuildError('local')" type="primary">{{ t("upgrade.localBuild") }}</el-button>
                 <el-button @click="cloudBuildError('retry')" type="primary">{{ t("upgrade.cloudBuild") }}（{{ retrySecond }}S）</el-button>
                 <el-button @click="cloudBuildError('rollback')" type="primary">{{ t("upgrade.rollback") }}</el-button>
+            </div>
+        </template>
+    </el-dialog>
+    <el-dialog v-model="dialogUpgradePrompt" title="升级提示" width="500" :before-close="handleClose">
+        <p>您当前使用的{{applicationType == 'app' ? '应用' : '插件'}}版本是 {{applicationVersion}}，若想升级到 {{newApplicationVersion}} 版本，需要先把框架从 v{{frameworkVersion}} 升级到 v{{ newFrameworkVersion }} 。</p>
+        <div class="flex items-center">
+            <span>如需升级框架，请点击升级框架操作。</span>
+        </div>
+        <template #footer>
+            <div class="dialog-footer">
+                <el-button type="primary" @click="upgradePromptConfirm">升级框架</el-button>
+                <el-button @click="dialogUpgradePrompt = false">取消</el-button>
             </div>
         </template>
     </el-dialog>
@@ -354,8 +369,6 @@ const getUpgradeTaskFn = () => {
                     errorMsg.value = item
                 }
             })
-            errorDialog.value = true
-            showTerminal.value = false
             if (upgradeTimer) {
                 clearInterval(upgradeTimer)
                 upgradeTimer = null
@@ -365,12 +378,17 @@ const getUpgradeTaskFn = () => {
         // 恢复完毕
         if (data.step == 'restoreComplete') {
             flashInterval && clearInterval(flashInterval)
+            step.value = 3
+            active.value = 'fail'
             return
         }
         // 升级完成
         if (data.step == 'upgradeComplete') {
+            if (data.cloud_build_error) {
+                terminalRef.value.pushMessage({ content: data.cloud_build_error, class: 'error' })
+            }
+            step.value = 3
             active.value = 'complete'
-            showTerminal.value = false
             numberOfSteps.value = 4
             notificationEl && notificationEl.close()
             emits('complete')
@@ -379,22 +397,29 @@ const getUpgradeTaskFn = () => {
                 upgradeTimer = null
             }
             timeloading.value = false
-            clearUpgradeTask()
             return
         }
         numberOfSteps.value = 2
         active.value = 'upgrade'
         executeUpgradeFn()
+    }).catch((err) => {
+        console.log(err)
     })
 }
-
 getUpgradeTaskFn()
+
+const upgradePromptConfirm = ()=>{
+    dialogUpgradePrompt.value = false
+    open('niucloud-admin')
+}
+
 const isBack = ref(false)
 const handleBack = () => {
     active.value = 'upgrade'
     isBack.value = true
     showTerminal.value = true
     errorDialog.value = false // 隐藏错误弹窗
+    step.value = 2
 }
 
 const formatUpgradeDuration = computed(() => {
@@ -413,7 +438,7 @@ const executeUpgradeFn = () => {
     executeUpgrade().then(() => {
         getUpgradeTaskFn()
     }).catch((err) => {
-        if (err.message.indexOf('队列') != -1) {
+        if (err.msg.indexOf('队列') != -1) {
             retrySecond.value = 30
             retrySecondInterval = setInterval(() => {
                 retrySecond.value--
@@ -422,6 +447,26 @@ const executeUpgradeFn = () => {
                 }
             }, 1000)
             cloudBuildErrorTipsShowDialog.value = true
+        } else if (err.code && err.code == 601) {
+            ElMessageBox.confirm(
+                '云编译服务未启动，必须在启动后进行云编译！',
+                '提示',
+                {
+                    distinguishCancelAndClose: true,
+                    confirmButtonText: '重新检测',
+                    cancelButtonText: '查看操作手册',
+                    type: 'warning'
+                }
+            ).then(() => {
+                open()
+            }).catch((action) => {
+                action == 'cancel' && window.open('https://doc.press.niucloud.com/php/saas-framework/use/other/third-party-cloud-compilation.html', '_blank')
+            })
+        } else if (err.response && err.response.status && err.response.status == 502) {
+            ElMessage({ dangerouslyUseHTMLString: true, duration: 5000, message: '程序执行超时请先调整超时限制, 具体操作方法<a style="text-decoration: underline;" href="https://doc.press.niucloud.com/php/v6-shop/use/chang-jian-wen-ti-chu-li/er-shi-ba-3001-an-88c5-sheng-ji-guo-cheng-zhong-ti-shi-201c-502-bad-gateway-201d-wen-ti-jie-jue.html#%E5%AE%89%E8%A3%85-%E5%8D%87%E7%BA%A7%E5%AE%8C%E6%88%90%E5%90%8E-%E4%BA%91%E7%BC%96%E8%AF%91%E8%BF%87%E7%A8%8B%E4%B8%AD%E6%8F%90%E7%A4%BA-502-bad-gateway-%E9%97%AE%E9%A2%98%E8%A7%A3%E5%86%B3" target="blank">点击查看相关手册</a>', type: 'error' })
+            setTimeout(() => {
+                executeUpgradeFn()
+            }, 5000)
         } else {
             ElMessage({ message: err.message, type: 'error' })
         }
@@ -501,12 +546,33 @@ const upgradeAddonFn = () => {
 
     upgradeAddon(appKey, upgradeOption.value).then(() => {
         getUpgradeTaskFn()
-    }).catch(() => {
+    }).catch((res) => {
         loading.value = false
+        if (res.code && res.code == 601) {
+            ElMessageBox.confirm(
+                '云编译服务未启动，必须在启动后进行云编译！',
+                '提示',
+                {
+                    distinguishCancelAndClose: true,
+                    confirmButtonText: '重新检测',
+                    cancelButtonText: '查看操作手册',
+                    type: 'warning'
+                }
+            ).then(() => {
+                upgradeAddonFn()
+            }).catch((action) => {
+                action == 'cancel' && window.open('https://doc.press.niucloud.com/php/saas-framework/use/other/third-party-cloud-compilation.html', '_blank')
+            })
+        } else {
+            ElMessage({ message: res.msg, type: 'error' })
+        }
     })
 }
-
-const open = (addonKey: string = '', callback = null) => {
+const dialogUpgradePrompt = ref(false)
+const applicationVersion = ref('')
+const newApplicationVersion = ref('')
+const applicationType = ref('app')
+const open = (addonKey: string = '', callback = null, otherData: any = {}) => {
     errorDialog.value = false // 隐藏错误弹窗
     if (upgradeTask.value) {
         ElMessage({ message: '已有正在执行中的升级任务', type: 'error' })
@@ -516,8 +582,11 @@ const open = (addonKey: string = '', callback = null) => {
         active.value = 'upgrade'
         if (callback) callback()
     } else {
-        if (addonKey && frameworkVersion.value != newFrameworkVersion.value) {
-            ElMessage({ message: '存在新版本框架，请先升级框架', type: 'error' })
+        if (addonKey && addonKey.indexOf('niucloud-admin') == -1 && frameworkVersion.value != newFrameworkVersion.value) {
+            applicationVersion.value = otherData.install_info.version
+            newApplicationVersion.value = otherData.version
+            applicationType.value = otherData.type
+            dialogUpgradePrompt.value = true
             if (callback) callback()
             return
         }
@@ -594,6 +663,14 @@ const dialogClose = (done: () => {}) => {
     }
 }
 
+window.addEventListener('beforeunload', function (event) {
+    if (showDialog.value && active.value == 'upgrade' && upgradeTask.value && ['upgradeComplete', 'restoreComplete'].includes(upgradeTask.value.step) === false && !isBack.value) {
+        event.preventDefault()
+        event.returnValue = ''
+        return t('upgrade.showDialogCloseTips')
+    }
+})
+
 watch(
     () => showDialog.value,
     () => {
@@ -644,6 +721,12 @@ const cloudBuildError = (event: string) => {
         case 'rollback':
             upgradeUserOperate(event).then(() => {
                 getUpgradeTaskFn()
+            })
+            break
+        case 'cloud_build_error_rollback':
+            upgradeUserOperate(event).then(() => {
+                handleBack()
+                executeUpgradeFn()
             })
             break
     }

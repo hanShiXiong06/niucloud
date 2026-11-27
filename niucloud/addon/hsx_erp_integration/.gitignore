@@ -1,0 +1,6 @@
+!tests/
+tests/*
+!tests/*.php
+!tests/*.mjs
+!docs/
+!docs/MANUAL-BRIDGE.md

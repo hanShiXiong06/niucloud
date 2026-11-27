@@ -1,0 +1,137 @@
+name: Build Device Bridge Installers
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Optional version check (defaults to source version)
+        required: false
+        default: ""
+      allowed_origins:
+        description: Comma-separated production origins
+        required: false
+        default: "https://gl.hsxbk.top"
+  push:
+    branches:
+      - "feature/hsx_erp-pc-mobile-alignment"
+    tags:
+      - "device-bridge-v*"
+    paths:
+      - "device_bridge/**"
+      - ".github/workflows/build-device-bridge-windows.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            package: windows-x64
+          - os: macos-15
+            package: macos-arm64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: device_bridge
+        shell: bash
+    env:
+      PYTHONPATH: src
+      REQUESTED_VERSION: ${{ inputs.version }}
+      ALLOWED_ORIGINS: ${{ inputs.allowed_origins || 'https://gl.hsxbk.top' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: device_bridge/pyproject.toml
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install . pyinstaller
+      - name: Validate source version
+        id: version
+        run: |
+          VERSION="$(python scripts/verify_version.py)"
+          if [[ -n "$REQUESTED_VERSION" && "$REQUESTED_VERSION" != "$VERSION" ]]; then
+            echo "Requested version differs from source $VERSION" >&2
+            exit 1
+          fi
+          if [[ "$GITHUB_REF_TYPE" == "tag" && "$GITHUB_REF_NAME" != "device-bridge-v$VERSION" ]]; then
+            echo "Release tag differs from source $VERSION" >&2
+            exit 1
+          fi
+          echo "value=$VERSION" >> "$GITHUB_OUTPUT"
+      - name: Run tests
+        run: python -m unittest discover -s tests -v
+      - name: Install macOS native dependencies
+        if: runner.os == 'macOS'
+        run: |
+          test "$(uname -m)" = arm64
+          brew install libmtp libusb
+      - name: Test portable WPD identity and JSON helpers
+        if: runner.os == 'macOS'
+        run: |
+          c++ -std=c++17 -Wall -Wextra -Werror native/windows/test_wpd_contract.cpp -o "$RUNNER_TEMP/wpd-contract-test"
+          "$RUNNER_TEMP/wpd-contract-test"
+      - name: Build macOS installer
+        if: runner.os == 'macOS'
+        env:
+          PYTHON: python
+        run: |
+          export HSX_DEVICE_BRIDGE_LIBMTP="$(brew --prefix libmtp)/lib/libmtp.9.dylib"
+          export HSX_DEVICE_BRIDGE_LIBUSB="$(brew --prefix libusb)/lib/libusb-1.0.0.dylib"
+          bash scripts/build_macos.sh
+          bash scripts/package_macos.sh "" "$ALLOWED_ORIGINS"
+      - name: Build Windows installer
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/build_windows.ps1 -AllowedOrigins $env:ALLOWED_ORIGINS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hsx-device-bridge-${{ matrix.package }}-${{ steps.version.outputs.value }}
+          path: |
+            device_bridge/dist/*.pkg
+            device_bridge/dist/installer/*.exe
+          if-no-files-found: error
+          retention-days: 30
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/device-bridge-v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: hsx-device-bridge-*
+          path: release-packages
+          merge-multiple: true
+      - name: Publish installers and checksums
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          NOTES="device_bridge/docs/release-${RELEASE_TAG#device-bridge-v}.md"
+          test -f "$NOTES"
+          mkdir -p release-assets
+          find release-packages -type f \( -name '*.pkg' -o -name '*.exe' \) -exec cp {} release-assets/ \;
+          test "$(find release-assets -name '*.pkg' | wc -l)" -eq 1
+          test "$(find release-assets -name '*.exe' | wc -l)" -eq 1
+          (cd release-assets && sha256sum *.pkg *.exe > SHA256SUMS.txt)
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" release-assets/* --clobber
+          else
+            gh release create "$RELEASE_TAG" release-assets/* --verify-tag \
+              --title "HSX Device Bridge ${RELEASE_TAG#device-bridge-v}" \
+              --notes-file "$NOTES"
+          fi

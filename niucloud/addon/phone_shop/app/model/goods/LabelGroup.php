@@ -16,7 +16,7 @@ use core\base\BaseModel;
 /**
  * 商品标签分组模型
  * Class LabelGroup
- * @package addon\shop\app\model\goods
+ * @package addon\phone_shop\app\model\goods
  */
 class LabelGroup extends BaseModel
 {

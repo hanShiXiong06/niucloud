@@ -1,0 +1,564 @@
+<template>
+  <el-table
+    class="recycle-order-table"
+    :class="{ 'recycle-order-table--compact': props.compact }"
+    v-loading="props.loading"
+    :data="props.list"
+    :expand-row-keys="props.expandRowKeys"
+    row-key="id"
+    style="width: 100%"
+    @expand-change="(row, expandedRows) => props.handleExpandChange(row, expandedRows)"
+  >
+    <el-table-column type="expand" width="36">
+      <template #default="{ row }">
+        <RecycleOrderDeviceList
+          :compact="props.compact"
+          :order="row"
+          :selected-devices="props.selectedDevices[row.id] || []"
+          :format-price="props.formatPrice"
+          :get-device-primary-action="getDevicePrimaryAction"
+          :get-device-more-actions="getDeviceMoreActions"
+          :view-consignment="props.viewConsignment"
+          :view-detail="props.viewDetail"
+          @selection-change="devices => props.handleDeviceSelectionChange(devices, row.id)"
+          @batch-confirm="props.batchRecycleDevices(row.id)"
+        />
+      </template>
+    </el-table-column>
+
+    <el-table-column label="订单信息" :min-width="props.compact ? 210 : 250">
+      <template #default="{ row }">
+        <div class="order-info">
+          <div class="order-info__number">{{ row.order_no }}</div>
+          <div class="order-info__meta">
+            <el-tag size="small" :type="deliveryTagType(row.delivery_type)">
+              {{ deliveryLabel(row) }}
+            </el-tag>
+            <el-tag size="small" :type="row.order_source === 'agent' ? 'primary' : 'info'" effect="plain">
+              {{ row.order_source === 'agent' ? '代下单' : '客户下单' }}
+            </el-tag>
+            <span v-if="row.order_source === 'agent' && row.agent_name" class="text-xs text-gray-500">
+              {{ row.agent_name }}
+            </span>
+          </div>
+          <div v-if="props.compact" class="order-info__time">
+            <span class="order-time-value">{{ props.formatDateTime(row.create_at) }}</span>
+            <el-popover placement="bottom-start" trigger="click" :width="260">
+              <div v-for="item in getOrderTimes(row)" :key="item.label" class="order-time-cell">
+                <span class="order-time-cell__label">{{ item.label }}</span>{{ item.value }}
+              </div>
+              <template #reference><el-button link type="primary" size="small">时间</el-button></template>
+            </el-popover>
+          </div>
+          <div v-if="String(row.delivery_type) === '1'" class="flex items-start text-xs">
+            <span class="text-gray-400 min-w-[60px]">快递单号：</span>
+            <span
+              class="flex-1 cursor-pointer rounded px-1 py-0.5 text-gray-800 transition hover:bg-blue-50 hover:text-blue-600 break-all"
+              @click="props.handleExpressHover(row)"
+              @mouseleave="props.handleExpressLeave"
+            >
+              <span v-if="!props.expressLoading[row.id]" class="font-mono font-medium">
+                {{ row.express_no || "暂无" }}
+              </span>
+              <el-icon v-else class="animate-spin text-blue-500">
+                <Loading />
+              </el-icon>
+              <el-icon v-if="row.express_no && !props.expressLoading[row.id]" class="ml-1 text-xs text-gray-400">
+                <Search />
+              </el-icon>
+            </span>
+          </div>
+          <template v-if="String(row.delivery_type) === '3'">
+            <div class="flex items-start text-sm">
+              <span class="text-gray-400 min-w-[60px]">物流车辆：</span>
+              <span class="text-gray-800">{{ [row.logistics_name, row.logistics_vehicle_no].filter(Boolean).join(' · ') || '暂无' }}</span>
+            </div>
+            <div class="flex items-start text-sm">
+              <span class="text-gray-400 min-w-[60px]">取货地点：</span>
+              <span class="text-gray-800 line-clamp-2">{{ row.logistics_pickup_address || '暂无' }}</span>
+            </div>
+            <div v-if="row.logistics_eta_at" class="flex items-start text-sm">
+              <span class="text-gray-400 min-w-[60px]">预计到达：</span>
+              <span class="text-amber-700">{{ props.formatDateTime(row.logistics_eta_at) }}</span>
+            </div>
+          </template>
+        </div>
+      </template>
+    </el-table-column>
+
+    <el-table-column label="客户" :min-width="props.compact ? 128 : 160">
+      <template #default="{ row }">
+        <div class="flex items-center">
+          <el-tooltip v-if="!props.compact" :content="row.member?.member_id ? '查看会员详情' : '未关联会员'" placement="top">
+            <el-avatar
+              :size="32"
+              :src="row.member?.headimg ? props.img(row.member.headimg) : ''"
+              class="mr-2"
+              :class="row.member?.member_id ? 'cursor-pointer hover:ring-2 hover:ring-[var(--el-color-primary-light-5)]' : ''"
+              @click="row.member?.member_id && props.openMemberDetail(row.member)"
+            >
+              <el-icon><User /></el-icon>
+            </el-avatar>
+          </el-tooltip>
+          <div class="flex-1 min-w-0">
+            <div class="text-sm font-medium text-gray-800 flex items-center group">
+              <button v-if="props.compact && row.member?.member_id" type="button" class="order-customer-link" @click="props.openMemberDetail(row.member)">{{ getUserDisplayName(row) }}</button>
+              <span v-else class="order-customer-name">{{ getUserDisplayName(row) }}</span>
+              <el-icon
+                v-if="row.member?.member_id"
+                class="order-customer-edit ml-1 text-xs text-gray-400 cursor-pointer"
+                @click="handleEditUsername(row)"
+                title="点击编辑昵称"
+              >
+                <Edit />
+              </el-icon>
+            </div>
+            <div class="text-xs text-gray-400">
+              {{ row.member?.mobile || row.recycleUserAddress?.mobile || "暂无联系方式" }}
+            </div>
+          </div>
+        </div>
+      </template>
+    </el-table-column>
+
+    <el-table-column :label="props.compact ? '状态 / 设备进度' : '状态'" :width="props.compact ? 166 : 130" :align="props.compact ? 'left' : 'center'">
+      <template #default="{ row }">
+        <span class="soft-pill" :class="`is-${props.getStatusType(row.status)}`">
+          <span class="soft-pill__dot"></span>{{ row.status_name }}
+        </span>
+        <template v-if="props.compact">
+          <div class="order-progress-count" :class="{ 'order-progress-count--mismatch': !isDeviceCountMatched(row) }">签收 {{ getSignedDeviceCount(row) }} / {{ getSubmittedDeviceCount(row) }} 台<span> · {{ row.flow_mode_name || '整单流转' }}</span></div>
+          <div class="order-progress-summary">
+            <span v-for="item in getDeviceProgress(row).filter(item => item.key !== 'total')" :key="item.key" :class="`order-progress-summary--${item.color}`">{{ item.label }} {{ item.value }}</span>
+          </div>
+        </template>
+        <div v-else class="mt-1 text-[11px] text-gray-400">{{ row.flow_mode_name || '整单流转' }}</div>
+      </template>
+    </el-table-column>
+
+    <el-table-column v-if="!props.compact" label="设备进度" min-width="240">
+      <template #default="{ row }">
+        <div class="flex flex-wrap gap-1 text-xs items-center">
+          <el-tag size="small" effect="plain" :type="isDeviceCountMatched(row) ? 'success' : 'danger'">
+            {{ getSubmittedDeviceCount(row) }}/{{ getSignedDeviceCount(row) }}台
+          </el-tag>
+            <el-tag
+              v-for="item in getDeviceProgress(row)"
+              :key="item.key"
+              size="small"
+              :type="item.color"
+              :effect="item.key === 'paid' ? 'dark' : 'plain'"
+            >{{ item.label }} {{ item.value }}</el-tag>
+        </div>
+      </template>
+    </el-table-column>
+
+    <el-table-column v-if="!props.compact" label="时间" width="220">
+      <template #default="{ row }">
+        <div class="order-time-cell">
+          <div v-for="item in getOrderTimes(row)" :key="item.label" class="order-time-cell__row">
+            <span class="order-time-cell__label">{{ item.label }}</span><span class="order-time-value">{{ item.value }}</span>
+          </div>
+        </div>
+      </template>
+    </el-table-column>
+
+    <el-table-column label="操作" :width="props.compact ? 80 : 96" fixed="right" align="center">
+      <template #default="{ row }">
+        <el-popover
+          placement="left-start"
+          trigger="click"
+          :width="184"
+          popper-class="recycle-order-action-popover"
+        >
+          <div class="recycle-order-action-list">
+            <button
+              v-for="item in getRowActions(row)"
+              :key="item.key"
+              type="button"
+              class="recycle-order-action-item"
+              :disabled="item.disabled"
+              :title="item.title || item.value"
+              @click="handleRowAction(row, item)"
+            >
+              <el-icon>
+                <component :is="item.icon" />
+              </el-icon>
+              <span>{{ item.value }}</span>
+            </button>
+          </div>
+          <template #reference>
+            <el-button type="primary" plain size="small" :icon="MoreFilled">更多</el-button>
+          </template>
+        </el-popover>
+      </template>
+    </el-table-column>
+  </el-table>
+</template>
+
+<script setup lang="ts">
+import { useFeedback } from '@/addon/hsx_components/core'
+import { ElMessageBox } from 'element-plus'
+import request from '@/utils/request'
+import useUserStore from '@/stores/modules/user'
+import RecycleOrderDeviceList from './RecycleOrderDeviceList.vue'
+import { useDeviceRowActions } from '@/addon/hsx_recycle/hooks/useDeviceRowActions'
+import {
+  Search,
+  Edit,
+  User,
+  Loading,
+  Share,
+  Bell,
+  MoreFilled,
+  Printer,
+  Refresh,
+} from "@element-plus/icons-vue";
+const hsxFeedback = useFeedback()
+
+
+interface Props {
+  compact?: boolean;
+  loading: boolean;
+  list: any[];
+  expandRowKeys: Array<number | string>;
+  orderStatusMap: Record<string, any>;
+  selectedDevices: Record<string | number, any[]>;
+  expressLoading: Record<string | number, boolean>;
+  formatPrice: (price: any) => string;
+  formatDateTime: (value: any) => string;
+  getDeviceCount: (devices: any[]) => number;
+  getStatusType: (status: any) => string;
+  getStatusEffect: (status: any) => string;
+  getStatusIcon: (status: any) => any;
+  getDeviceStatusType: (status: any) => string;
+  getActionButtonType: (key: string) => string;
+  getActionIcon: (key: string) => any;
+  findOrderStatus: (orderId: number) => number;
+  img: (path: string) => string;
+  handleExpandChange: (row: any, expandedRows: any[]) => void;
+  handleDeviceSelectionChange: (val: any[], orderId: string | number) => void;
+  checkDevice: (row: any) => void;
+  correctDeviceInfo?: (row: any) => void;
+  priceDevice: (row: any) => void;
+  batchRecycleDevice: (id: number | string) => void;
+  batchReturnDevice: (id: number | string) => void;
+  batchRecycleDevices: (orderId: number | string) => void;
+  manualPrintActions: any[];
+  getVisibleDevicePrintActions: (device: any) => any[];
+  printDeviceByScene: (device: any, action: any) => void;
+  transferConsignment: (device: any) => void;
+  viewConsignment: (device: any) => void;
+  viewDetail: (device: any) => void;
+  openMemberDetail: (member: any) => void;
+  handleAction: (row: any, action: any) => void;
+  handleExpressHover: (row: any) => void;
+  handleExpressLeave: () => void;
+  shareOrder: (row: any) => void;
+  viewNoticeLogs: (row: any) => void;
+  printOrder: (row: any) => void;
+  printingOrderId: number | null;
+  refreshOrderProgress: (row: any) => void;
+  refreshingOrderId: number | null;
+}
+
+const props = defineProps<Props>();
+
+// 高危订单动作 → 权限点（没权限则该动作不显示）
+const userStore = useUserStore()
+const ACTION_PERM: Record<string, string> = {
+  order_payment: 'recycle_order_payment_confirm',
+  order_payment_confirm: 'recycle_order_payment_confirm',
+  order_delete: 'recycle_order_delete',
+  order_refresh_progress: 'recycle_order_edit',
+  print_order: 'recycle_order_detail',
+}
+const hasActionPerm = (key: string) => {
+  const perm = ACTION_PERM[key]
+  return !perm || (userStore.rules || []).includes(perm)
+}
+const emit = defineEmits(['refresh'])
+
+// 设备操作主次：主行动 + 更多动作（单一真源，桌面/移动复用）
+const { getDevicePrimaryAction, getDeviceMoreActions } = useDeviceRowActions({
+  checkDevice: props.checkDevice,
+  correctDeviceInfo: props.correctDeviceInfo,
+  priceDevice: props.priceDevice,
+  batchRecycleDevice: props.batchRecycleDevice,
+  batchReturnDevice: props.batchReturnDevice,
+  transferConsignment: props.transferConsignment,
+  getVisibleDevicePrintActions: props.getVisibleDevicePrintActions,
+  printDeviceByScene: props.printDeviceByScene,
+  findOrderStatus: props.findOrderStatus,
+})
+
+const normalizeDeviceCount = (value: any) => {
+  const count = Number(value)
+  return Number.isFinite(count) && count > 0 ? count : 1
+}
+
+const getSubmittedDeviceCount = (row: any) => normalizeDeviceCount(row.count)
+
+const getSignedDeviceCount = (row: any) => props.getDeviceCount(row.devices)
+
+const isDeviceCountMatched = (row: any) => getSubmittedDeviceCount(row) === getSignedDeviceCount(row)
+const deliveryLabel = (row: any) => row.delivery_type_name || ({ '1': '快递到店', '2': '客户自送', '3': '物流车配送' }[String(row.delivery_type)] || '未知')
+const deliveryTagType = (value: any) => String(value) === '3' ? 'primary' : (String(value) === '1' ? 'warning' : 'success')
+
+type ProgressColor = 'info' | 'warning' | 'primary' | 'success' | 'danger'
+const getDeviceProgress = (row: any): Array<{ key: string; label: string; value: number; color: ProgressColor }> => {
+  const summary = row.flow_summary || {}
+  const items = summary.progress?.length ? summary.progress : [
+    { key: 'total', label: '共', value: summary.total || row.devices?.length || 0, color: 'info' },
+    { key: 'checking', label: '待处理', value: Number(summary.pending_check || 0) + Number(summary.checking || 0), color: 'warning' },
+    { key: 'pending_confirm', label: '待确认', value: summary.pending_confirm || 0, color: 'primary' },
+    { key: 'pending_pay', label: '待打款', value: summary.pending_pay || 0, color: 'success' },
+    { key: 'paid', label: '已打款', value: summary.paid || 0, color: 'success' },
+    { key: 'exception', label: '异常', value: Number(summary.returned || 0) + Number(summary.consigned || 0), color: 'danger' },
+  ]
+  return items.filter((item: any) => Number(item.value) > 0 || item.key === 'total').map((item: any) => ({
+    key: item.key,
+    label: item.label,
+    value: Number(item.value) || 0,
+    color: (['info', 'warning', 'primary', 'success', 'danger'].includes(item.color) ? item.color : 'info') as ProgressColor,
+  }))
+}
+
+const getOrderTimes = (row: any) => [
+  { label: '创建', value: row.create_at },
+  { label: '签收', value: row.sign_at },
+  { label: '完成', value: row.complete_at },
+  { label: '打款', value: row.pay_time },
+].filter(item => item.value).map(item => ({ ...item, value: props.formatDateTime(item.value) }))
+
+const getRowActions = (row: any) => {
+  const statusActions = props.orderStatusMap[row.status]?.action || []
+  const actions = statusActions.map((action: any) => ({
+    key: action.key,
+    value: action.key === 'order_payment' ? '办理回收款' : action.value,
+    type: 'order',
+    icon: props.getActionIcon(action.key),
+    raw: action,
+  }))
+
+  if (
+    row.available_actions?.can_pay_devices &&
+    !statusActions.some((action: any) => action.key === 'order_payment')
+  ) {
+    actions.push({
+      key: 'order_payment',
+      value: '办理回收款',
+      type: 'order',
+      icon: props.getActionIcon('order_payment'),
+      raw: { key: 'order_payment', value: '去打款' },
+    })
+  }
+
+  if (
+    row.available_actions?.can_push_confirm_notice &&
+    !statusActions.some((action: any) => action.key === 'order_push_notify')
+  ) {
+    actions.push({
+      key: 'order_push_notify',
+      value: '推送通知',
+      type: 'order',
+      icon: Bell,
+      raw: { key: 'order_push_notify', value: '推送通知' },
+    })
+  }
+
+  actions.push(
+    { key: 'print_order', value: props.printingOrderId === row.id ? '准备打印中…' : '打印回收单', type: 'print_order', icon: Printer, raw: null,
+      disabled: props.printingOrderId !== null, title: 'A4 回收单：订单信息和设备基础清单，不含质检明细' },
+    { key: 'share_order', value: '分享订单', type: 'share', icon: Share, raw: null },
+    { key: 'notice_logs', value: '通知记录', type: 'notice_logs', icon: Bell, raw: null },
+  )
+
+  if (row.flow_mode === 'device') {
+    actions.push({ key: 'order_refresh_progress', value: props.refreshingOrderId === row.id ? '核对中…' : '刷新订单状态',
+      type: 'refresh_progress', icon: Refresh, raw: null, disabled: props.refreshingOrderId !== null,
+      title: '按设备的确认、拒绝和打款结果核对订单，不执行打款或退货签收' })
+  }
+
+  // 按权限过滤高危动作（打款/删除等）
+  return actions.filter((a: any) => hasActionPerm(a.key))
+}
+
+const handleRowAction = (row: any, item: any) => {
+  if (item.disabled) return
+  if (item.type === 'print_order') return props.printOrder(row)
+  if (item.type === 'refresh_progress') return props.refreshOrderProgress(row)
+  if (item.type === 'share') {
+    props.shareOrder(row)
+    return
+  }
+  if (item.type === 'notice_logs') {
+    props.viewNoticeLogs(row)
+    return
+  }
+  props.handleAction(row, item.raw)
+}
+
+// 获取用户显示名称（优先级：nickname → recycleUserAddress.name → "未知用户"）
+const getUserDisplayName = (row: any) => {
+  return row.member?.nickname || row.recycleUserAddress?.name || "未知用户"
+}
+
+// 编辑用户昵称
+const handleEditUsername = async (row: any) => {
+  if (!row.member?.member_id) {
+    hsxFeedback.warning('该订单没有关联会员，无法编辑昵称')
+    return
+  }
+
+  const currentNickname = row.member?.nickname || ''
+
+  try {
+    const { value } = await ElMessageBox.prompt('请输入用户昵称', '编辑昵称', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      inputValue: currentNickname,
+      inputPlaceholder: '请输入昵称',
+      inputValidator: (value) => {
+        if (!value || value.trim() === '') {
+          return '昵称不能为空'
+        }
+        if (value.length > 50) {
+          return '昵称长度不能超过50个字符'
+        }
+        return true
+      }
+    })
+
+    if (value && value.trim()) {
+      // 调用 API 更新 nickname
+      await request.put(`member/member/modify/${row.member.member_id}/nickname`, {
+        value: value.trim(),
+        field: 'nickname'
+      }, { showSuccessMessage: true })
+
+      // 更新本地数据
+      if (row.member) {
+        row.member.nickname = value.trim()
+      }
+      // 触发刷新
+      emit('refresh')
+    }
+  } catch (error: any) {
+    if (error !== 'cancel') {
+      console.error('更新昵称失败:', error)
+    }
+  }
+}
+</script>
+
+<style scoped>
+:deep(td.el-table__expanded-cell) {
+  padding: 8px 10px !important;
+  background: var(--hsx-bg-muted);
+}
+:deep(.el-table__expand-icon) {
+  width: 28px;
+  height: 36px;
+  margin: auto;
+}
+:deep(.el-table__cell > .cell) { padding-left: 8px; padding-right: 8px; }
+:deep(.el-table__expand-column > .cell) { padding: 0; }
+.order-info { display: grid; gap: 3px; }
+.order-info__number { font-size: 13px; line-height: 20px; color: var(--el-text-color-primary); font-weight: 500; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.order-info__meta { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 6px; }
+.order-info__meta :deep(.el-tag) { font-size: 11px; height: 20px; padding: 0 5px; }
+.order-info__time { display: flex; flex-wrap: wrap; align-items: center; gap: 0 6px; color: var(--el-text-color-secondary); font-size: 11px; line-height: 20px; }
+.order-info__time :deep(.el-button) { padding: 0; font-size: 11px; min-height: 20px; }
+.order-customer-name, .order-customer-link { overflow-wrap: anywhere; }
+.order-customer-link { border: 0; padding: 0; background: transparent; text-align: left; color: inherit; cursor: pointer; line-height: 20px; }
+.order-customer-link:hover { color: var(--el-color-primary); }
+.order-customer-edit { flex-shrink: 0; }
+.order-progress-count { margin-top: 2px; color: var(--el-text-color-secondary); font-size: 11px; line-height: 18px; }
+.order-progress-count--mismatch { color: var(--el-color-danger); }
+.order-progress-count span { color: var(--el-text-color-placeholder); }
+.order-progress-summary { display: flex; flex-wrap: wrap; gap: 0 8px; font-size: 11px; line-height: 18px; }
+.order-progress-summary--info { color: var(--el-text-color-secondary); }
+.order-progress-summary--primary { color: var(--el-color-primary); }
+.order-progress-summary--warning { color: var(--el-color-warning); }
+.order-progress-summary--success { color: var(--el-color-success); }
+.order-progress-summary--danger { color: var(--el-color-danger); }
+.recycle-order-table--compact .soft-pill { padding: 0 7px; line-height: 21px; }
+:deep(.el-table__fixed-right .el-table__cell) {
+  overflow: visible;
+}
+/* 合并后的时间列：只显示有值的时间，标签灰、数值常规色 */
+.order-time-cell {
+  font-size: 12px;
+  line-height: 20px;
+  color: var(--el-text-color-regular);
+}
+.order-time-cell__row { display: flex; align-items: baseline; flex-wrap: nowrap; }
+.order-time-value { white-space: nowrap; word-break: normal; font-variant-numeric: tabular-nums; flex-shrink: 0; }
+.order-time-cell__label {
+  display: inline-block;
+  width: 30px;
+  color: var(--el-text-color-placeholder);
+  margin-right: 4px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+/* 柔和状态药丸（与设备状态徽章统一） */
+.soft-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 10px 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  line-height: 20px;
+  white-space: nowrap;
+}
+.soft-pill__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+.soft-pill.is-primary { color: var(--el-color-primary); background: var(--el-color-primary-light-9); }
+.soft-pill.is-success { color: var(--el-color-success); background: var(--el-color-success-light-9); }
+.soft-pill.is-warning { color: var(--el-color-warning); background: var(--el-color-warning-light-9); }
+.soft-pill.is-danger  { color: var(--el-color-danger);  background: var(--el-color-danger-light-9); }
+.soft-pill.is-info    { color: var(--el-color-info);     background: var(--el-color-info-light-9); }
+</style>
+
+<style>
+.recycle-order-action-popover {
+  padding: 8px !important;
+}
+
+.recycle-order-action-list {
+  display: grid;
+  gap: 4px;
+}
+
+.recycle-order-action-item {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  padding: 8px 10px;
+  color: #334155;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 18px;
+  text-align: left;
+  transition: background-color 0.16s ease, color 0.16s ease, transform 0.16s ease;
+}
+
+.recycle-order-action-item:hover {
+  background: #eff6ff;
+  color: #1d4ed8;
+  transform: translateX(-2px);
+}
+.recycle-order-action-item:disabled { opacity: .55; cursor: wait; transform: none; }
+</style>

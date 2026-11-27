@@ -1,0 +1,207 @@
+hsx_lead 二级推广、通知与待办交付说明
+日期：2026-11-25
+
+一、本次范围与完成状态
+
+本地代码已完成，未部署、未操作线上财务或发送真实消息。
+本次打磨范围是推广中心、邀请关系管理、收益明细标识、通知和进入页面的待办；不是全站所有页面重新设计。
+
+1. 二级推广
+   A 邀请 B、B 邀请 C：C 的有效付款给 B 记一级、给 A 记二级。
+   两层分别使用同一笔实际计佣基数，独立计算，不逐层扣减。
+   会员只按服务费计佣；押金、经验费不参与。协作付款仅平台维护费参与，不减少发单方净收益。
+   普通用户无需购买会员也能邀请。普通用户、有效主体等级、审核服务商可分别配置两层比例；服务商与会员比例不叠加。
+   各层所有身份的最高比例合计不得超过100%，金额使用整数分、向下取整。
+   默认保留一级；二级比例全部为0，不会因更新自动开启。
+   新订单创建时冻结规则，付款时核实真实付款及邀请资格、冻结受益人。按订单+层级唯一，补偿只能补缺层，不能重复入账。
+   已有v1快照不重算；没有新policy的旧单保留原一级处理，不补二级。没有历史返佣回填。
+   退款核对原受益人及原账本，逐级冲回；任一受益人不足时阻止退款提交，不局部回收。未知渠道结果仅查单，不盲目再发退款。
+   店员加入、同店内部派单继续不计推广奖励、不收协作手续费。
+
+2. 后台关系与台账
+   邀请关系增加“关系树 / 明细列表”切换。树按父节点分页读取，默认每页30，不全站递归拉取。
+   支持编号、姓名、手机、门店检索；搜索结果展示邀请路径。搜索是全站搜索，不冒充某一节点的子树筛选。
+   节点分开显示直属/二级人数、当前门店权益、本人付费、原受益人佣金、最近访问、近7/30天本人发单/接单/成交。
+   最近访问不代表在线；共享门店权益不代表该账号付过会员费；已入账不代表已提现。
+   业务活跃来自实际operator_member_id审计，不把全店操作当成某个人的操作。
+   台账可筛选一级/二级，推广人汇总包含两级人数与实际佣金，收益仍沿用牛云会员佣金账户。
+
+3. 通知
+   默认即时发送，不默认因夜间停止。后台可选免打扰（默认关闭，北京时间，示例22:00–08:00）。
+   自动发送、明确失败重试、补偿、授权恢复和真正提交渠道前均核验规则。
+   免打扰延后不消耗失败预算；过期、已接单、已改派、接收人变化的旧提醒不补发。
+   渠道已受理不等于送达/已读；结果未知不能自动当失败重发。
+   新工单卡片直达task/index?task=detail&collaboration_id=...&from=notice。原工作台旧链接仍可用。
+   本次没有查验具体线上某次凌晨推送的日志，不能把“凌晨收到”本身认定为故障。
+
+4. 移动待办与UI
+   首页和普通找客户/找门店入口，在登录、身份与页面就绪后读取真实待接单，显示总数及最多3笔摘要。
+   客户从通知卡片进入时，具体工单优先；登录保留工单ID，失败可刷新重试，成功不重复跳转，不叠加通用待办。
+   “稍后处理”仅确认本次会话提示，不接单、不拒单、不转单；仍在找客户保留。重新派发按assignment_version再次提醒。
+   弹窗支持内容滚动、固定操作、安全区、高于框架底栏；关窗动画不闪出假“0笔待办”。
+   隐藏、卸载、换账号、切站和旧请求/旧导航回调不会串入其他身份的数据；摘要不显示客户电话和金额。
+   按用户后续确认调整：客户端仅展示本人推广权益、比例和直接邀请，不展示二级关系、人数、入口或层级身份。
+   二级产生的真实收益仍显示金额、比例、基数与到账状态，统一称“推广奖励”；直接邀请仍可标注“直接邀请奖励”。
+   后台二级比例、关系树、分层台账和实际结算/退款算法保持不变。
+   框架账户来源改为“商户推广奖励”，新流水备注不再写二级身份；不批量改写历史流水。本次展示调整不增加数据库升级或框架源码修改。
+   open-claude-ui用于局部语义色、状态层次、单主动作与异步交互；转转参考用于卡片分组、密度、底部操作。保留本站蓝色主题、NiuCloud/Element Plus/uview-plus，无React迁移或全局样式库覆盖。
+
+二、数据库与框架边界
+
+必须先备份数据库，在短维护窗口执行结构升级。DDL独立提交，失败不保证自动回滚；修正后重新--check，切勿卸载重装。
+脚本私有schema-before.json只是结构备份，不替代完整业务数据库备份。
+
+默认结构变更：
+   hsx_lead_promotion_reward.commission_level：tinyint unsigned NOT NULL DEFAULT 1。
+   唯一索引从(site_id,coop_order_id)改成(site_id,coop_order_id,commission_level)。
+   hsx_lead_audit新增idx_member_activity(site_id,operator_member_id,create_time,entity_type,action)。
+不增加独立邀请关系表，不复制钱包，不回填历史二级奖励。
+
+可选结构变更（默认不执行）：
+   框架member表增加(site_id,pid,member_id)查询索引，仅在缺少等效索引时增加。
+   需要时显式加--include-member-index，先看--check计划再决定。
+本轮没有修改框架源码；可选索引涉及框架表，不能把它称为“数据库零侵入”。
+
+三、替换文件
+
+以下路径均相对于 niucloud/addon/hsx_lead。建议按本轮清单替换，不覆盖其他插件或未完成修改。
+
+后端：
+ app/dict/member/account_change_type.php（后续展示调整：中性奖励来源名）
+ app/adminapi/controller/Promotion.php
+ app/service/FrameworkNoticeGateway.php
+ app/service/NoticePortalEntry.php
+ app/service/cooperation/CooperationNoticeOutbox.php
+ app/service/cooperation/CooperationNoticeReadService.php
+ app/service/cooperation/CooperationNoticeService.php
+ app/service/cooperation/EntityMembershipService.php
+ app/service/cooperation/InviterSummaryReadService.php
+ app/service/cooperation/OrderPricingService.php
+ app/service/cooperation/PaymentRefundService.php
+ app/service/cooperation/PaymentService.php
+ app/service/cooperation/PromotionRelationsReadService.php
+ app/service/cooperation/PromotionRules.php
+ app/service/cooperation/PromotionService.php
+ app/service/cooperation/PromotionTreeReadService.php（新增）
+ app/service/notice/AccountNoticePolicyService.php
+ app/service/notice/CooperationResponseNotices.php
+ app/service/notice/NoticeTaskRuntime.php
+ app/service/notice/NoticeDeliveryWindow.php（新增）
+ app/service/notice/NoticeDeliveryDeferredException.php（新增）
+
+结构与升级：
+ install.sql
+ sql/install.sql
+ scripts/upgrade.php
+ scripts/upgrade-promotion-levels.php（新增）
+
+管理端：
+ admin/api/promotion.ts
+ admin/composables/accountNotice.ts
+ admin/views/cooperation/NoticeDeliveryPanel.vue
+ admin/views/notice/index.vue
+ admin/views/promotion/index.vue
+ admin/views/promotion/PromotionRelations.vue
+ admin/views/promotion/PromotionRelationTree.vue（新增）
+
+移动端：
+   uni-app/components/cooperation/CoopIncomePanel.vue
+ uni-app/components/cooperation/CoopPromotionPanel.vue
+ uni-app/components/cooperation/CoopPendingEntry.vue（新增）
+ uni-app/components/cooperation/CooperationWorkbench.vue
+ uni-app/composables/usePromotion.ts
+ uni-app/composables/usePendingCooperationEntry.ts（新增）
+ uni-app/pages/index.vue
+ uni-app/utils/cooperation-navigation.ts
+ uni-app/utils/cooperation-notice.ts
+
+工作区对应admin/src/addon/hsx_lead、uni-app/src/addon/hsx_lead镜像已同步。
+服务器upgrade.php --apply会同步前端源码和框架生成的注册文件，但不会编译、上传或发布小程序。
+单独覆盖PHP不可能更新已安装小程序的界面和交互。
+
+四、更新命令
+
+在服务器PHP根目录执行，路径沿用你之前提供的部署目录：
+
+ cd /www/wwwroot/p.hsxbk.top/niucloud-master/niucloud
+ php addon/hsx_lead/scripts/upgrade-promotion-levels.php --check
+
+确认完整数据库备份完成且check计划符合预期后：
+
+ php addon/hsx_lead/scripts/upgrade-promotion-levels.php --apply
+ php addon/hsx_lead/scripts/upgrade-promotion-levels.php --check
+ php addon/hsx_lead/scripts/upgrade.php --check
+ php addon/hsx_lead/scripts/upgrade.php --apply
+
+如单独采纳框架member查询索引（非必选）：
+
+ php addon/hsx_lead/scripts/upgrade-promotion-levels.php --check --include-member-index
+ php addon/hsx_lead/scripts/upgrade-promotion-levels.php --apply --include-member-index
+
+随后：
+ 1. 用原打包流程重新构建管理端、H5和小程序；本轮没有替你上传/提交审核。
+ 2. 按现有守护方式平滑重载常驻任务/队列，不启动第二套消费者。原来用workerman统一管理时：
+      php think workerman status
+      php think workerman reload
+    如果用Supervisor/独立队列管理，重载原进程，不照搬另一套启动命令。
+ 3. 在推广规则里明确选择二级并填写两层比例，保存后重新读取核对；不自动帮你开启。
+ 4. 核对既有推广结算、通知补偿任务已启用且执行次数/时间实际增长。升级不擅自开启任务或通知渠道。
+
+五、回归证据
+
+财务、会员、团队的本地隔离回归：
+ entity-membership 58
+ membership-payment-recovery 45
+ payment-order-lifecycle 27
+ payment-timeout-two-minutes 42
+ payment-orders-refund 57
+ membership-deposit 60
+ membership-deposit-rejoin 55
+ entity-team 89
+ entity-team-concurrency 46
+ order-pricing 44
+
+二级专项与原推广回归：
+ promotion-two-levels 33（含冷CLI升级、结构前置、规则冻结、租户/环/每层幂等、树，以及客户/管理员标签隔离和框架流水备注）
+ promotion-rules 64；promotion-finance 47；promotion-member-levels 36
+ promotion-inviter-summary 24；manual-balance-refund 43；promotion-relations 42
+ promotion-applications 51；promotion-config-read 19；promotion-contract 41
+ promotion-level-admin-ui 52；promotion-config-contract-ui 50；promotion-admin-upgrade-ui 60
+
+通知：
+ cooperation-notice 499；outbox 65；response 43；financial 75；runtime-boundaries 7
+ notice-delivery-window 42；旧投递闭环57；短信回执70；官方驱动假回执201；SDK假传输168
+ 通知规则UI66；投递UI61；接收日志UI61
+
+移动与关系树：
+ cooperation-pending-entry-ui 44；cooperation-role-navigation-ui 51
+ cooperation-mobile-ui 148；promotion-two-level-ui 45
+ promotion-ui 64；promotion-application-ui 61（新增真实模板渲染：已开二级仍只展示本人权益/直接邀请）；promotion-income-mobile-ui 37
+ merchant-relations-admin-ui 39
+
+这些是多轮实际执行的检查数，部分测试覆盖重叠，不将相加值冒充独立场景数。
+数据库测试只使用随机owned localhost库，禁外网函数，结束清理；没有真实扣款、退款、发消息。
+本次独立走查抓出并修复：树分支raw/Proxy导致首次请求丢失；冷CLI PDO导致apply误拒；卡片ready恢复丢意图/重复跳转；锁结束/刷新不重试；弹层被底栏挡；关窗假0笔闪烁。
+
+构建与实界面：
+ 管理端Vite隔离构建通过，无发布。
+ H5/微信小程序隔离构建通过；微信实际WXSS解析67文件通过，无上传。
+ 16份修改的前端源码镜像一致，26个当前修改PHP文件语法通过，插件范围diff --check通过。
+ 已连接现有Chrome验证真实SFC与实际编译H5：关系树1366px、推广概览390px、二级列表320px、待办390px，无横向溢出；待办底部按钮在844px视窗内。
+ 预览全部使用本机合成API，CSP阻断外部连接，写请求被拒；框架自动/member/log访问统计POST也被拦截。没有连接线上账户。
+ 截图内外部图标字体被隔离策略阻止，因此截图不代表外部字体下载和真机图标验收。
+ 上述截图为上一轮验收证据；用户后续要求不向客户展示二级后，旧二级列表截图不再代表最终界面。
+ 展示调整后的H5、小程序已重新隔离构建，客户/管理员文案及收益保留已通过真实模板渲染与隔离库断言；后台规则保持分层。
+
+六、上线前尚需的真实验收
+
+必须区分本地隔离通过与实际部署成功。本轮未操作线上、未发真实通知，也没有微信原生真机的端到端送达证据。
+部署后小流量核对：
+ A邀请B、B邀请C，新建一笔核实订单，各层台账和框架佣金账户一致；再验证退款冲回。
+ 发单到B，B授权订阅后收到卡片；点卡片（含未登录情况）到正确原单，接单后A收到通知；改派后旧提醒不补发。
+ 同一订单重复支付回调/重复结算不得增加奖励；失败/未知退款不重发；店员仍免费共享，不建立付费推荐资格。
+ 普通进入待办可跳过并发单；从卡片进入不叠弹窗；手机320/390/430及原生底部安全区复核。
+
+合规提示：二级不等于天然合规。会员费用与层级奖励的商业模式上线前需独立审核；技术开关不是合规结论。
+参考国家市场监督管理总局《禁止传销条例》第七条：
+ https://www.samr.gov.cn/zw/zfxxgk/fdzdgknr/fgs/art/2023/art_487d326bb883484e81da9311580cd7a8.html

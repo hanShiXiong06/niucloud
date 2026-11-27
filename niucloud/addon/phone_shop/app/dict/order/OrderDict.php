@@ -60,13 +60,13 @@ class OrderDict
 //    const REFUND_FAIL = -1;
     const ORDER_CLOSE_ACTION = 'order_close';//订单创建
     const ORDER_DELIVERY_PART_ACTION = 'order_part_delivery';//订单支付
-    const ORDER_DELIVERY_ACTION = 'order_delivery';//订单关闭
+    const ORDER_DELIVERY_ACTION = 'order_delivery';// 订单发货
     const ORDER_FINISH_ACTION = 'order_finish';//订单部分发货
     const ORDER_REMARK_ACTION = 'order_remark';//订单发货
 
     const ORDER_EDIT_PRICE_ACTION = 'order_edit';//订单改价
     const ORDER_CLOSE_ALLOW_REFUND_ACTION = 'order_close_allow_refund';//订单完成
-    const SHOP_CLOSE = 'phone_shop_close';//订单商家备注
+    const SHOP_CLOSE = 'shop_close';//商家关闭
     const BUYER_CLOSE = 'buyer_close';//订单关闭允许售后
     const AUTO_CLOSE = 'auto_close';
     const REFUND_CLOSE = 'refund_close';//商家主动关闭
@@ -83,7 +83,7 @@ class OrderDict
         ];
     }//买家主动关闭
 
-    public static function getStatus($status = '')
+    public static function getStatus($status = '', $delivery_type = '')
     {
         $data = [
             self::WAIT_PAY => [
@@ -100,7 +100,7 @@ class OrderDict
                 ],
             ],
             self::WAIT_DELIVERY => [
-                'name' => get_lang('dict_shop_order.status_wait_shipping'),//待发货
+                'name' => $delivery_type == OrderDeliveryDict::STORE ? get_lang('dict_shop_order.status_wait_pickup') : get_lang('dict_shop_order.status_wait_shipping'),//待发货
                 'status' => self::WAIT_DELIVERY,
                 'is_refund' => 0,
                 'action' => [],
@@ -146,7 +146,7 @@ class OrderDict
         if ($status == '') {
             return $data;
         }
-        return $data[ $status ] ?? '';
+        return $data[$status] ?? '';
     }//自动关闭
 
     /**
@@ -170,7 +170,7 @@ class OrderDict
         if (!$type) {
             return $data;
         }
-        return $data[ $type ] ?? '';
+        return $data[$type] ?? '';
     }
 
     /**
@@ -189,6 +189,29 @@ class OrderDict
         if (!$type) {
             return $data;
         }
-        return $data[ $type ] ?? '';
+        return $data[$type] ?? '';
+    }
+
+    /**
+     * @param $type
+     * @return string
+     */
+    public static function getOrderActiveTypeName($type)
+    {
+        if (empty($type)) {
+            $type = self::TYPE;
+        }
+        $data = [
+            'pintuan' => '拼团',
+            'seckill' => '秒杀',
+            self::TYPE => '商城',
+            'exchange' => '兑换',
+            'giftcard' => '礼品卡',
+            'newcomer_discount' => '新人专享',
+            'discount' => '限时折扣',
+            'manjiansong' => '满减送',
+            'friend_help' => '好友助力',
+        ];
+        return $data[$type] ?? '';
     }
 }
