@@ -72,12 +72,13 @@ final class OrderPaymentReadService
             $value=$params[$key];$allowed=array_column(self::options()[$key==='payment_type'?'payment_types':'payment_channels'],'value');
             if(!is_string($value)||!in_array($value,$allowed,true))throw new CommonException('支付方式或终端筛选无效');
             // Match the same canonical cashier row used for presentation, not an abandoned attempt.
-            $query->whereRaw("(SELECT p.`$field` FROM `{$prefix}pay` p WHERE p.site_id=? AND p.trade_type=? AND BINARY p.trade_id=BINARY CAST(`{$prefix}hsx_lead_coop_order`.id AS CHAR) AND (`{$prefix}hsx_lead_coop_order`.out_trade_no='' OR BINARY p.out_trade_no=BINARY `{$prefix}hsx_lead_coop_order`.out_trade_no) ORDER BY CASE WHEN p.status=2 THEN 0 WHEN p.status=1 THEN 1 WHEN p.status=0 THEN 2 ELSE 3 END,p.id DESC LIMIT 1)=?",[$site,PaymentService::TRADE_TYPE,$value]);
+            // The plain int equality lets idx_site_trade (scripts/upgrade-pay-indexes.php) serve the lookup; BINARY keeps exact semantics.
+            $query->whereRaw("(SELECT p.`$field` FROM `{$prefix}pay` p WHERE p.site_id=? AND p.trade_type=? AND p.trade_id=`{$prefix}hsx_lead_coop_order`.id AND BINARY p.trade_id=BINARY CAST(`{$prefix}hsx_lead_coop_order`.id AS CHAR) AND (`{$prefix}hsx_lead_coop_order`.out_trade_no='' OR BINARY p.out_trade_no=BINARY `{$prefix}hsx_lead_coop_order`.out_trade_no) ORDER BY CASE WHEN p.status=2 THEN 0 WHEN p.status=1 THEN 1 WHEN p.status=0 THEN 2 ELSE 3 END,p.id DESC LIMIT 1)=?",[$site,PaymentService::TRADE_TYPE,$value]);
         }
         if(isset($params['refund_status'])&&$params['refund_status']!==''){
             $value=$params['refund_status'];if(!is_string($value)||!isset(PaymentRefundService::LABELS[$value]))throw new CommonException('退款状态筛选无效');
             $stored="COALESCE(JSON_UNQUOTE(JSON_EXTRACT(CASE WHEN JSON_VALID(rule_json) THEN rule_json ELSE '{}' END,'$.order_refund.status')),'none')";
-            $returned="COALESCE((SELECT SUM(r.money) FROM `{$prefix}pay_refund` r WHERE r.site_id=`{$prefix}hsx_lead_coop_order`.site_id AND BINARY r.out_trade_no=BINARY `{$prefix}hsx_lead_coop_order`.out_trade_no AND r.trade_type='hsx_lead_cooperation' AND BINARY r.trade_id=BINARY CAST(`{$prefix}hsx_lead_coop_order`.id AS CHAR) AND r.status='success'),0)";
+            $returned="COALESCE((SELECT SUM(r.money) FROM `{$prefix}pay_refund` r WHERE r.site_id=`{$prefix}hsx_lead_coop_order`.site_id AND r.out_trade_no=`{$prefix}hsx_lead_coop_order`.out_trade_no COLLATE utf8mb4_general_ci AND BINARY r.out_trade_no=BINARY `{$prefix}hsx_lead_coop_order`.out_trade_no AND r.trade_type='hsx_lead_cooperation' AND BINARY r.trade_id=BINARY CAST(`{$prefix}hsx_lead_coop_order`.id AS CHAR) AND r.status='success'),0)";
             $query->whereRaw("CASE WHEN $stored='none' AND $returned>0 THEN CASE WHEN $returned>=amount THEN 'refunded' ELSE 'partial_refunded' END ELSE $stored END=?",[$value]);
         }
     }

@@ -38,20 +38,17 @@ final class Addon
 
     private function registerSchedule(bool $disable): void
     {
-        $model = new SysSchedule();
-        $where = [['addon', '=', 'hsx_lead'], ['key', '=', 'hsx_lead_inventory_sync']];
-        $existing = $model->where($where)->findOrEmpty();
-        $status = $disable || $existing->isEmpty() ? ScheduleDict::OFF : (int)$existing['status'];
-        $promotionWhere = [['addon', '=', 'hsx_lead'], ['key', '=', 'hsx_lead_promotion_settle']];
-        $promotion = $model->where($promotionWhere)->findOrEmpty();
-        $promotionStatus = $disable || $promotion->isEmpty() ? ScheduleDict::OFF : (int)$promotion['status'];
-        $virtualWhere = [['addon', '=', 'hsx_lead'], ['key', '=', 'hsx_lead_virtual_payment_reconcile']];
-        $virtual = $model->where($virtualWhere)->findOrEmpty();
-        $virtualStatus = $disable || $virtual->isEmpty() ? ScheduleDict::OFF : (int)$virtual['status'];
+        // Preserve each existing schedule's on/off status across reinstall; new or fresh installs stay OFF.
+        $keys = ['hsx_lead_inventory_sync', 'hsx_lead_promotion_settle', 'hsx_lead_virtual_payment_reconcile'];
+        $statuses = [];
+        foreach ($keys as $key) {
+            $existing = (new SysSchedule())->where([['addon', '=', 'hsx_lead'], ['key', '=', $key]])->findOrEmpty();
+            $statuses[$key] = $disable || $existing->isEmpty() ? ScheduleDict::OFF : (int)$existing['status'];
+        }
         (new CoreScheduleInstallService())->installAddonSchedule('hsx_lead');
-        $model->where($where)->update(['status' => $status]);
-        $model->where($promotionWhere)->update(['status' => $promotionStatus]);
-        $model->where($virtualWhere)->update(['status' => $virtualStatus]);
+        foreach ($statuses as $key => $status) {
+            (new SysSchedule())->where([['addon', '=', 'hsx_lead'], ['key', '=', $key]])->update(['status' => $status]);
+        }
     }
 }
 

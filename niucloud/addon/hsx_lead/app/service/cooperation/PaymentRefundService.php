@@ -208,7 +208,7 @@ final class PaymentRefundService
         if(!OrderPaymentReadService::hasTable('pay_refund'))throw new CommonException('框架退款表未就绪');
         if((string)($order['out_trade_no']??'')==='')throw new CommonException('原支付流水缺失');
         $pay=$knownPay??OrderPaymentReadService::payment($order,$lock);
-        if(!$pay||(int)$pay['status']!==(int)PayDict::STATUS_FINISH||$pay['main_type']!==PayDict::MEMBER||(int)$pay['main_id']!==(int)$order['member_id']||Rules::cents((string)$pay['money'])!==Rules::cents((string)$order['amount']))throw new CommonException('原支付身份、金额或状态不一致');
+        if(!PaymentService::receiptMatches($pay,$order))throw new CommonException('原支付身份、金额或状态不一致');
         self::assertRefundRoute($order,$pay,$lock);
         if(!in_array($pay['type'],[PayDict::BALANCEPAY,PayDict::WECHATPAY,PayDict::ALIPAY,PayDict::OFFLINEPAY,VirtualPayOrderService::TYPE],true))throw new CommonException('原支付方式不支持此处原路退款，请平台人工核对');
         OrderPaymentReadService::assertManualSource($order,$pay);

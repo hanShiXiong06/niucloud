@@ -9,7 +9,7 @@ use app\dict\pay\{PayDict,RefundDict};
 use app\service\core\member\CoreMemberAccountService;
 use app\service\core\sys\CoreConfigService;
 use core\exception\CommonException;
-use think\facade\Db;
+use think\facade\{Cache,Db};
 
 /** Real framework member.pid relationships and commission accounts; no parallel wallet. */
 final class PromotionService
@@ -426,7 +426,7 @@ final class PromotionService
         if (($order['status']??'')!=='paid'||empty($order['out_trade_no'])) throw new CommonException('推广奖励缺少已支付凭据');
         $saved=Store::row('coop_order',$site,(int)$order['id'],true);
         $receipt=Db::name('pay')->where('site_id',$site)->where('trade_type',PaymentService::TRADE_TYPE)->where('trade_id',$saved['id'])->where('out_trade_no',$saved['out_trade_no'])->find();
-        if ($saved['status']!=='paid'||$saved['out_trade_no']!==$order['out_trade_no']||!$receipt||(int)$receipt['status']!==(int)PayDict::STATUS_FINISH||$receipt['main_type']!==PayDict::MEMBER||(int)$receipt['main_id']!==(int)$saved['member_id']||Rules::cents((string)$receipt['money'])!==Rules::cents((string)$saved['amount'])) throw new CommonException('未找到可核对的已支付事实，不会生成推广奖励');
+        if ($saved['status']!=='paid'||$saved['out_trade_no']!==$order['out_trade_no']||!PaymentService::receiptMatches($receipt,$saved)) throw new CommonException('未找到可核对的已支付事实，不会生成推广奖励');
         $rule=Data::decode($saved['rule_json']);if (!empty($rule['requires_manual_review'])) return;
         $snapshot=$rule['promotion_snapshot']??null;
         if (!is_array($snapshot)) {
@@ -453,8 +453,9 @@ final class PromotionService
             self::assertSnapshot($site,$order,$rule['promotion_snapshot']);self::recordPaid($site,$order);
             unset($rule['promotion_review_required'],$rule['promotion_review_message']);
             Store::query('coop_order',$site)->where('id',$id)->update(['rule_json'=>Data::json($rule),'update_time'=>time()]);
-            $rewards=self::query($site)->where('coop_order_id',$id)->order('commission_level')->select()->toArray();$rewards=array_map(fn(array$row):array=>$this->presentReward($row,true),$rewards);
+            $rewards=self::query($site)->where('coop_order_id',$id)->order('commission_level')->select()->toArray();$rewards=$this->presentRewards($rewards,true);
             $this->context->audit('promotion_reward',$id,'payment_reward_retried',['reward_ids'=>array_column($rewards,'id')]);
+            try{Cache::delete(self::paymentReviewsCacheKey($site));}catch(\Throwable $ignored){}
             return ['order_id'=>$id,'status'=>'paid','promotion_review_required'=>false,'reward_created'=>(bool)$rewards,'reward'=>$rewards[0]??null,'rewards'=>$rewards];
         });
     }
@@ -469,11 +470,12 @@ final class PromotionService
         foreach(['start_time'=>'>=','end_time'=>'<='] as $key=>$op) if ((int)($params[$key]??0)>0) $q->where('create_time',$op,(int)$params[$key]);
         $keyword=Data::text($params,'keyword',80);
         if ($keyword!=='') {
-            $members=Db::name('member')->where('site_id',$this->context->site)->whereLike('nickname|username','%'.addcslashes($keyword,'\\%_').'%')->column('member_id');
-            $orders=Store::query('coop_order',$this->context->site)->whereLike('order_no','%'.addcslashes($keyword,'\\%_').'%')->column('id');
+            // Bound the IN lists; a keyword this broad should be narrowed by the operator.
+            $members=Db::name('member')->where('site_id',$this->context->site)->whereLike('nickname|username','%'.addcslashes($keyword,'\\%_').'%')->limit(1000)->column('member_id');
+            $orders=Store::query('coop_order',$this->context->site)->whereLike('order_no','%'.addcslashes($keyword,'\\%_').'%')->limit(1000)->column('id');
             $q->where(function($part)use($members,$orders,$admin):void {$part->whereIn('payer_member_id',$members?:[0]);if($admin&&$members)$part->whereOr('provider_member_id','in',$members);if($orders)$part->whereOr('coop_order_id','in',$orders);});
         }
-        $page=Data::page($q,$params);$page['data']=array_map(fn(array $row):array=>$this->presentReward($row,$admin),$page['data']);
+        $page=Data::page($q,$params);$page['data']=$this->presentRewards($page['data'],$admin);
         if ($admin) $page['payment_reviews']=$this->paymentReviews();return $page;
     }
     /** One read-only list over existing cooperation receipts and promotion facts.
@@ -515,7 +517,19 @@ final class PromotionService
         return ['account'=>PaymentService::accountSummary($site,$id),'entries'=>['data'=>$rows,'total'=>$total,'current_page'=>$page,'per_page'=>$size],
             'types'=>[['value'=>'all','label'=>'全部'],['value'=>'publisher','label'=>'交付收益'],['value'=>'membership','label'=>'会员服务费'],['value'=>'maintenance','label'=>'平台维护费']]];
     }
+    private static function paymentReviewsCacheKey(int $site): string { return 'hsx_lead_promotion_payment_reviews_'.$site; }
+    /** The rule_json LIKE scan covers every paid order, so the admin list reuses it briefly; retry clears it.
+     * Display only: retryPromotion re-validates everything server-side. */
     private function paymentReviews(): array
+    {
+        $key=self::paymentReviewsCacheKey($this->context->site);
+        try{$cached=Cache::get($key);}catch(\Throwable $ignored){$cached=null;}
+        if(is_array($cached))return $cached;
+        $result=$this->scanPaymentReviews();
+        try{Cache::set($key,$result,60);}catch(\Throwable $ignored){}
+        return $result;
+    }
+    private function scanPaymentReviews(): array
     {
         $site=$this->context->site;$q=Store::query('coop_order',$site)->where('status','paid')->whereLike('rule_json','%"promotion_review_required":true%');
         $total=(int)(clone $q)->count();$rows=$q->order('id desc')->limit(10)->select()->toArray();$result=[];
@@ -530,12 +544,24 @@ final class PromotionService
         }
         return ['data'=>$result,'total'=>$total];
     }
-    private function presentReward(array $row,bool $admin): array
+    /** Batch the member and source-order reads for a page instead of three queries per reward row. */
+    private function presentRewards(array $rows,bool $admin): array
     {
-        $payer=Db::name('member')->where('site_id',$this->context->site)->where('member_id',$row['payer_member_id'])->find();
-        $provider=Db::name('member')->where('site_id',$this->context->site)->where('member_id',$row['provider_member_id'])->find();
+        if(!$rows)return[];$site=$this->context->site;
+        $memberIds=array_values(array_unique(array_map('intval',array_merge(array_column($rows,'payer_member_id'),array_column($rows,'provider_member_id')))));
+        $members=array_column(Db::name('member')->where('site_id',$site)->whereIn('member_id',$memberIds)->select()->toArray(),null,'member_id');
+        $orderIds=array_values(array_unique(array_map('intval',array_column($rows,'coop_order_id'))));
+        $orders=array_column(Store::query('coop_order',$site)->whereIn('id',$orderIds)->field('id,order_no,rule_json')->select()->toArray(),null,'id');
+        return array_map(fn(array $row):array=>$this->presentReward($row,$admin,$members,$orders),$rows);
+    }
+    private function presentReward(array $row,bool $admin,?array $members=null,?array $orders=null): array
+    {
+        if($members===null){
+            $payer=Db::name('member')->where('site_id',$this->context->site)->where('member_id',$row['payer_member_id'])->find();
+            $provider=Db::name('member')->where('site_id',$this->context->site)->where('member_id',$row['provider_member_id'])->find();
+        }else{$payer=$members[(int)$row['payer_member_id']]??null;$provider=$members[(int)$row['provider_member_id']]??null;}
         $row['payer_name']=$payer?self::summary($payer)['name']:'原会员';$row['provider_name']=$provider?self::summary($provider)['name']:'原推广会员';
-        $sourceOrder=Store::query('coop_order',$this->context->site)->where('id',$row['coop_order_id'])->field('order_no,rule_json')->find();
+        $sourceOrder=$orders===null?Store::query('coop_order',$this->context->site)->where('id',$row['coop_order_id'])->field('order_no,rule_json')->find():($orders[(int)$row['coop_order_id']]??null);
         $row['order_no']=(string)($sourceOrder['order_no']??'');
         $row['source_label']=['membership'=>'会员服务费','maintenance'=>'平台维护费'][$row['source']]??'待核对';
         $row['status_label']=!empty($row['review_required'])&&$row['status']==='settled'?'已入账·待人工追偿':(['pending'=>'待结算','settled'=>'已入框架佣金','held'=>'暂停待核对'][$row['status']]??'待核对');
@@ -556,7 +582,7 @@ final class PromotionService
                 $order=Store::row('coop_order',$site,(int)$row['coop_order_id'],true);
                 $pay=Db::name('pay')->where('site_id',$site)->where('trade_type',PaymentService::TRADE_TYPE)->where('trade_id',$order['id'])->where('out_trade_no',$row['out_trade_no'])->find();
                 $reason='';
-                if ($order['status']!=='paid'||(string)$order['out_trade_no']!==(string)$row['out_trade_no']||(int)$order['member_id']!==(int)$row['payer_member_id']||!$pay||(int)$pay['status']!==(int)PayDict::STATUS_FINISH||$pay['main_type']!==PayDict::MEMBER||Rules::cents((string)$pay['money'])!==Rules::cents((string)$order['amount'])||(int)$pay['main_id']!==(int)$row['payer_member_id']) $reason='原业务或支付凭据变化，暂停结算，请核对';
+                if ($order['status']!=='paid'||(string)$order['out_trade_no']!==(string)$row['out_trade_no']||(int)$order['member_id']!==(int)$row['payer_member_id']||!PaymentService::receiptMatches($pay,$order)) $reason='原业务或支付凭据变化，暂停结算，请核对';
                 elseif (!empty(Data::decode($order['rule_json'])['requires_manual_review'])) $reason='原付款业务存在待核对记录，暂停结算，请平台核对';
                 elseif (!empty(Data::decode($order['rule_json'])['promotion_review_required'])) $reason='原付款推广层级尚待核对，请先按原快照恢复完整奖励';
                 elseif (self::hasRefund($site,(string)$row['out_trade_no'])) $reason='原支付存在退款申请或已退款，暂停结算，请人工核对';
@@ -625,7 +651,7 @@ final class PromotionService
             self::assertRewardSnapshot($site,$order,$row);
             if (!empty(Data::decode($order['rule_json'])['requires_manual_review'])) throw new CommonException('原付款业务仍待核对，不能恢复结算');
             $pay=Db::name('pay')->where('site_id',$site)->where('trade_type',PaymentService::TRADE_TYPE)->where('trade_id',$order['id'])->where('out_trade_no',$row['out_trade_no'])->find();
-            if ($order['status']!=='paid'||$order['out_trade_no']!==$row['out_trade_no']||!$pay||(int)$pay['status']!==(int)PayDict::STATUS_FINISH||$pay['main_type']!==PayDict::MEMBER||(int)$pay['main_id']!==(int)$row['payer_member_id']||Rules::cents((string)$pay['money'])!==Rules::cents((string)$order['amount'])) throw new CommonException('原业务或付款凭据仍不一致，不能恢复结算');
+            if ($order['status']!=='paid'||$order['out_trade_no']!==$row['out_trade_no']||(int)$order['member_id']!==(int)$row['payer_member_id']||!PaymentService::receiptMatches($pay,$order)) throw new CommonException('原业务或付款凭据仍不一致，不能恢复结算');
             if (self::hasRefund($site,(string)$row['out_trade_no'])) throw new CommonException('原支付仍有待退款、退款中或已退款记录，不能恢复结算');
             $member=self::member($site,(int)$row['provider_member_id'],true);$amount=Rules::cents((string)$row['amount']);
             if ($amount<=0||Rules::cents((string)$member['commission'])+$amount>self::MAX_CENTS||Rules::cents((string)$member['commission_get'])+$amount>self::MAX_CENTS) throw new CommonException('会员佣金账户金额容量仍不足，不能恢复结算');

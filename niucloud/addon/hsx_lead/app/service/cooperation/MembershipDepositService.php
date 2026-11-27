@@ -119,9 +119,22 @@ final class MembershipDepositService
     public function adminList(array $params=[]):array
     {
         $this->admin('manage');$status=Data::text($params,'status',20);if($status!==''&&!isset(self::LABELS[$status]))throw new CommonException('押金申请状态无效');
-        $keyword=Data::text($params,'keyword',80);$rows=[];
-        foreach(Store::query('coop_order',$this->context->site)->where('purpose','membership')->whereLike('rule_json','%"'.self::KEY.'"%')->order('id desc')->select()->toArray()as$order){$rule=Data::decode($order['rule_json']);$r=$rule[self::KEY]??null;if(!is_array($r)||($status!==''&&($r['status']??'')!==$status))continue;$row=$this->present($order,$r,true);if($keyword!==''&&mb_stripos($row['merchant_name'].' '.$row['member_name'].' '.$row['id'],$keyword)===false)continue;$rows[]=$row;}
-        return Store::pageArray($rows,$params);
+        $keyword=Data::text($params,'keyword',80);$matches=[];
+        foreach(Store::query('coop_order',$this->context->site)->where('purpose','membership')->whereLike('rule_json','%"'.self::KEY.'"%')->order('id desc')->select()->toArray()as$order){
+            $r=Data::decode($order['rule_json'])[self::KEY]??null;
+            if(!is_array($r)||($status!==''&&($r['status']??'')!==$status))continue;
+            $matches[]=[$order,$r];
+        }
+        if($keyword!==''){
+            // Names come from present(); keyword search still needs every candidate presented.
+            $rows=[];
+            foreach($matches as[$order,$r]){$row=$this->present($order,$r,true);if(mb_stripos($row['merchant_name'].' '.$row['member_name'].' '.$row['id'],$keyword)!==false)$rows[]=$row;}
+            return Store::pageArray($rows,$params);
+        }
+        // present() queries every refund source; without a keyword only the visible page needs it.
+        $page=Store::pageArray($matches,$params);
+        $page['data']=array_map(fn(array $match):array=>$this->present($match[0],$match[1],true),$page['data']);
+        return $page;
     }
 
     public function detail(int $id):array
@@ -251,7 +264,7 @@ final class MembershipDepositService
             if($allocation!==['deposit'=>$originalSource['amount'],'service'=>'0.00','experience'=>'0.00','quantity'=>'0.00'])return false;
             $payments=Db::name('pay')->where('site_id',$site)->where('out_trade_no',$refund['out_trade_no'])->where('trade_type',PaymentService::TRADE_TYPE)->where('trade_id',$original['id'])->lock(true)->select()->toArray();
             if(count($payments)!==1)return false;$pay=$payments[0];
-            if($pay['type']!==PayDict::BALANCEPAY||$pay['main_type']!==PayDict::MEMBER||(int)$pay['main_id']!==(int)$original['member_id']||(int)$pay['status']!==(int)PayDict::STATUS_FINISH||Rules::cents((string)$pay['money'])!==Rules::cents((string)$original['amount'])||$pay['channel']!==$refund['channel'])return false;
+            if($pay['type']!==PayDict::BALANCEPAY||!PaymentService::receiptMatches($pay,$original)||$pay['channel']!==$refund['channel'])return false;
             $dictionary=MemberAccountChangeTypeDict::getType(MemberAccountTypeDict::BALANCE);$official=$dictionary['order_refund']??null;
             if(!is_array($official)||(int)($official['inc']??0)!==1||(int)($official['dec']??1)!==0||(int)($official['is_change_get']??1)!==0)return false;
             // Deliberately read every entry for this exact refund identity, not
