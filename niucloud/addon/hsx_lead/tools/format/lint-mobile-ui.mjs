@@ -50,7 +50,9 @@ const RULES = [
     },
     {
         id: 'raw-toast',
-        test: (line) => /uni\.showToast\(\{\s*title:\s*(?!['"`])/.test(line),
+        // The lookahead consumes the spaces itself: with `title:\s*(?!quote)` the \s* can back off to zero
+        // and the lookahead then sees a space, flagging literal titles such as `title: '已复制'`.
+        test: (line) => /uni\.showToast\(\{\s*title:(?!\s*['"`])/.test(line),
         message: '动态文字提示请用 coopNotice()，避免被微信截断（规范 §7）'
     },
     {
