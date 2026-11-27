@@ -4,7 +4,7 @@
 node_modules/
 tools/format/node_modules/
 package/
-resource/
+/resource/
 docs/
 sql/
 *.sql

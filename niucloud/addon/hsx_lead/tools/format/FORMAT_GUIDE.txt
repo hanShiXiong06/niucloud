@@ -9,7 +9,7 @@ Vue 865 行 > 300 字符），便于审查和 diff。
                              显式关闭 elseif、括号、引号、数组语法等会改 AST 的规则
   ../../.prettierrc.json     前端规则：120 列、4 空格、单引号、无分号（与框架 admin 一致）
   ../../.prettierignore      排除 *.php（PHP 不用 prettier）、package/ resource/ docs/ sql/ 语言包 json/md
-  package.json               固定版本 prettier 3.3.3（只用于 TS/Vue/CSS）
+  package.json               固定版本 prettier 3.3.3（只用于前端源码），write/check 使用同一份排版逻辑
   composer.json              固定 friendsofphp/php-cs-fixer 3.64.0、nikic/php-parser 5.3.1
   ast-compare.php            对比格式化前后每个 PHP 文件的语法树，必须完全一致
 
@@ -17,6 +17,13 @@ Vue 865 行 > 300 字符），便于审查和 diff。
 (require ...)['key'] 去掉了括号（运行时 TypeError），并强制把 else if 改成 elseif，无法配置关闭。
 已弃用。php-cs-fixer 按 token 改空白，不重新打印代码。
 已知取舍：php-cs-fixer 不会折行长表达式，超长 if 条件仍是长行；主要收益是拆开"一行多条语句"。
+
+Vue 排版说明（C/D）：
+  用本目录的 npm run write / npm run check，不要单独运行 prettier --write。
+  Vue 模板保留 120 列目标。不要重排内嵌 JS 事件、script 和 style；旧版排版器会误删多语句事件的分号。
+  开发工具在可解析的模板节点上保留相邻元素之间原本可见的空格，避免多行插值在 }} 前重复增加空行。
+  同一输入最多经过三遍达到稳定输出；不收敛或解析失败即报错，不跳过文件。独立 TS/CSS/SCSS 仍用 Prettier。
+  修改排版工具时，必须实际比较前后 Vue 模板的编译结果；仅能构建并不代表界面文字、空格和事件未变。
 
 所有命令都在本目录（niucloud/addon/hsx_lead/tools/format）执行。
 

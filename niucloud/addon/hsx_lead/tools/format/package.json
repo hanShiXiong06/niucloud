@@ -3,10 +3,14 @@
     "private": true,
     "description": "Dev-only formatter for hsx_lead front-end source (TS/Vue/CSS). PHP uses php-cs-fixer. Not part of the plugin package. Run from this directory.",
     "scripts": {
-        "check": "prettier --config ../../.prettierrc.json --ignore-path ../../.prettierignore --check",
-        "write": "prettier --config ../../.prettierrc.json --ignore-path ../../.prettierignore --write"
+        "check": "node format.mjs check",
+        "write": "node format.mjs write",
+        "test": "node test-formatter.mjs"
     },
     "devDependencies": {
+        "@vue/compiler-dom": "3.2.47",
+        "@vue/compiler-sfc": "3.2.47",
+        "fast-glob": "3.3.3",
         "prettier": "3.3.3"
     }
 }
