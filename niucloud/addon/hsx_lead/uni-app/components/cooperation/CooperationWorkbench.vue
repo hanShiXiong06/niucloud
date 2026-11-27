@@ -82,6 +82,7 @@
                             @select="openSelection"
                             @cancel="cancelLead"
                     /></view>
+                    <template #loading><CoopLeadSkeleton /></template>
                     <template #empty="{ isLoadFailed }"
                         ><view class="coop-lead-empty"
                             ><CoopState
@@ -121,6 +122,10 @@
                                 @click="login()" /></view
                     ></template>
                 </template>
+                <CoopLeadSkeleton
+                    v-else-if="managedDeliveries && !ui.ready.value && !ui.error.value"
+                    :tiles="ui.direction.value === 'outgoing' ? 2 : 3"
+                />
                 <CoopState
                     v-else-if="!ui.ready.value || ui.error.value"
                     :loading="ui.loading.value"
@@ -383,6 +388,7 @@ import CoopStatusTabs from './CoopStatusTabs.vue'
 import CoopWorkOverview from './CoopWorkOverview.vue'
 import CoopSubscribeEntry from './CoopSubscribeEntry.vue'
 import CoopWorkspaceNotices from './CoopWorkspaceNotices.vue'
+import CoopLeadSkeleton from './CoopLeadSkeleton.vue'
 import CoopPublishForm from './CoopPublishForm.vue'
 import CoopStorePicker from './CoopStorePicker.vue'
 import CoopStoreInventory from './CoopStoreInventory.vue'
