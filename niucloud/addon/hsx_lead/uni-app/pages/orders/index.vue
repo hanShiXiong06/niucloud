@@ -55,16 +55,16 @@
                             ><text class="payment-order__caption">{{ paymentOrderPlanCaption(row) }}</text></view
                         ><text
                             class="payment-order__status"
-                            :class="'is-' + paymentOrderPresentation(row).tone"
-                            >{{ paymentOrderPresentation(row).title }}</text
+                            :class="'is-' + presentation(row).tone"
+                            >{{ presentation(row).title }}</text
                         ></view
                     >
                     <view class="payment-order__amount"
-                        ><text>{{ paymentOrderPresentation(row).amountLabel }}</text
+                        ><text>{{ presentation(row).amountLabel }}</text
                         ><text>{{ coopMoney(row.amount) }}</text></view
                     >
-                    <view class="payment-order__next" :class="'is-' + paymentOrderPresentation(row).tone" role="status"
-                        ><text>{{ paymentOrderPresentation(row).hint }}</text></view
+                    <view class="payment-order__next" :class="'is-' + presentation(row).tone" role="status"
+                        ><text>{{ presentation(row).hint }}</text></view
                     >
                     <view
                         v-if="actionErrors[Number(row.id)]"
@@ -223,6 +223,7 @@ import PaymentRefundSheet from './components/PaymentRefundSheet.vue'
 import { cooperationOrders, cooperationOrder, checkCooperationOrderPayment, closeCooperationOrder, cooperationOrderRefund, requestCooperationOrderRefund, refreshCooperationOrderRefund, cancelCooperationOrderRefund, coopRequestId, coopDate, coopMoney, coopError, type CoopRow } from '../../api/cooperation'
 import { cooperationPaymentOrderStatuses, cooperationPaymentOrderStatus, cooperationPaymentOrderResumeUrl, cooperationPaymentOrderIsVirtual, cooperationPaymentOrderCheckUrl, cooperationPaymentReplacementId, cooperationPaymentReplacementMatches, cooperationPaymentRefundDetail } from '../../utils/cooperation-payment-orders'
 import { cooperationButtonStyle } from '../../utils/mobile-ui'
+import { coopNotice } from '../../utils/notice'
 import { backCooperationTask } from '../../utils/cooperation-navigation'
 import { createCooperationPagingGuard } from '../../utils/cooperation-paging'
 import { createCooperationPaymentWatch } from '../../utils/cooperation-payment-watch'
@@ -276,6 +277,27 @@ async function query(page: number, limit: number, version: number) {
     finally { if (current(who) && turn === sequence && version === revision.value) { listReading = false; syncPaymentWatch() } }
 }
 function refresh(resetWatch = true) { if (busyId.value) return; paymentReadEpoch++; listReading = false; if (resetWatch !== false) paymentWatch.stop(); sequence++; pagingGuard.reset(); error.value = ''; revision.value++ }
+// Each card reads its presentation five times; compute it once per row object.
+const presentations = computed(() => new Map(rows.value.map(row => [row, paymentOrderPresentation(row)])))
+function presentation(row: CoopRow) { return presentations.value.get(row) || paymentOrderPresentation(row) }
+// Update one card in place instead of remounting the pager, so the list keeps its scroll position.
+// A card whose status no longer matches the active tab leaves the list; an emptied list reloads to show the empty state.
+function applyOrder(order: CoopRow) {
+    const id = Number(order.id)
+    if (order.status !== status.value) rows.value = rows.value.filter(item => Number(item.id) !== id)
+    else rows.value = rows.value.map(item => Number(item.id) === id ? order : item)
+    if (!rows.value.length) revision.value++
+}
+// Outcome uncertain: re-read only this order. If that read fails, fall back to the full reload.
+async function reloadOrder(id: number) {
+    const who = owner, view = revision.value
+    try {
+        const response: any = await cooperationOrder(id), order = response?.data
+        if (!current(who) || view !== revision.value) return
+        if (Number(order?.id) !== id) throw new Error('付款单资料不一致')
+        applyOrder(order)
+    } catch { if (current(who) && view === revision.value) revision.value++ }
+}
 function filter(value: string) { const next = cooperationPaymentOrderStatus(value); if (busyId.value || status.value === next) return; status.value = next; rows.value = []; detailOrderId.value = 0; refresh() }
 function orderStatusLabel(value: string) { return cooperationPaymentOrderStatuses.find(item => item.value === value)?.label || '状态待核对' }
 function openMembership() { if (!busyId.value) uni.navigateTo({ url: '/addon/hsx_lead/pages/membership/index', fail: () => uni.showToast({ title: '会员页面未打开，请重试', icon: 'none' }) }) }
@@ -292,10 +314,10 @@ async function continuePayment(row: CoopRow) {
             const replacement = cooperationPaymentReplacementId(order); if (!replacement) break; previous = order; id = replacement
             if (hop === 5) throw new Error('付款单多次调整，请刷新核对最新订单')
         }
-        if (order.status === 'paid' && order.payment_state !== 'paid_pending') { rows.value = rows.value.map(item => Number(item.id) === Number(order.id) ? order : item); uni.showToast({ title: order.requires_manual_review ? '付款已确认，请查看订单核对提示' : '这笔付款单已支付，无需重复付款', icon: 'none' }); revision.value++; return }
+        if (order.status === 'paid' && order.payment_state !== 'paid_pending') { applyOrder(order); uni.showToast({ title: order.requires_manual_review ? '付款已确认，请查看订单核对提示' : '这笔付款单已支付，无需重复付款', icon: 'none' }); return }
         const url = cooperationPaymentOrderCheckUrl(order) || cooperationPaymentOrderResumeUrl(order); if (!url) throw new Error(order.close_reason || '这笔付款单当前不能继续支付，请刷新核对'); uni.navigateTo({ url })
     }
-    catch (cause) { if (current(who)) { const message = coopError(cause, '暂不能继续支付，请核对原单'); actionErrors.value[Number(row.id)] = message; uni.showToast({ title: message, icon: 'none' }); revision.value++ } }
+    catch (cause) { if (current(who)) { const message = coopError(cause, '暂不能继续支付，请核对原单'); actionErrors.value[Number(row.id)] = message; coopNotice(message, { inlineHint: '暂未完成，请查看该订单下方说明' }); void reloadOrder(Number(row.id)) } }
     finally { busyId.value = 0; busyAction.value = '' }
 }
 async function cancelOrder(row: CoopRow) {
@@ -307,8 +329,8 @@ async function cancelOrder(row: CoopRow) {
         const response: any = await closeCooperationOrder(Number(row.id)), order = response?.data
         if (!current(who)) return
         if (Number(order?.id) !== Number(row.id) || order.status !== 'closed') throw new Error(order?.close_message || '取消结果尚未确认，请刷新核对原单，勿重复操作')
-        uni.showToast({ title: '付款单已取消', icon: 'none' }); revision.value++
-    } catch (cause) { if (current(who)) { const message = coopError(cause, '取消结果待核对，请刷新原单'); actionErrors.value[Number(row.id)] = message; uni.showToast({ title: message, icon: 'none' }); revision.value++ } }
+        uni.showToast({ title: '付款单已取消', icon: 'none' }); applyOrder(order)
+    } catch (cause) { if (current(who)) { const message = coopError(cause, '取消结果待核对，请刷新原单'); actionErrors.value[Number(row.id)] = message; coopNotice(message, { inlineHint: '暂未完成，请查看该订单下方说明' }); void reloadOrder(Number(row.id)) } }
     finally { busyId.value = 0; busyAction.value = '' }
 }
 function closeRefund() { if (!refundBusy.value) { refundVisible.value = false; refundSequence++; refundLoading.value = false } }
@@ -344,9 +366,9 @@ async function submitRefund(reason: string) {
         const detail = cooperationPaymentRefundDetail(response?.data, id)
         if (detail.status === 'none' || detail.can_request === true) throw Error('申请结果尚未确认，请读取原申请，不要重复提交')
         refundDetail.value = detail; refundReadRequired.value = false
-        refundRequests.delete(id); revision.value++
-        uni.showToast({ title: detail.status === 'pending' ? '申请已提交，等待平台审核' : detail.status_name || '请查看原退款进度', icon: 'none' })
-    } catch (cause) { if (current(who)) { refundReadRequired.value = true; refundError.value = coopError(cause, '申请结果待核对，请读取原申请，勿重复提交'); revision.value++ } }
+        refundRequests.delete(id); void reloadOrder(id)
+        coopNotice(detail.status === 'pending' ? '申请已提交，等待平台审核' : detail.status_name || '请查看原退款进度')
+    } catch (cause) { if (current(who)) { refundReadRequired.value = true; refundError.value = coopError(cause, '申请结果待核对，请读取原申请，勿重复提交'); void reloadOrder(id) } }
     finally { refundBusy.value = false; busyId.value = 0 }
 }
 async function refreshRefund() {
@@ -355,8 +377,8 @@ async function refreshRefund() {
     try {
         const response: any = await refreshCooperationOrderRefund(id)
         if (!current(who) || !refundVisible.value) return
-        refundDetail.value = cooperationPaymentRefundDetail(response?.data, id); revision.value++
-        uni.showToast({ title: refundDetail.value.status === 'refunded' ? '渠道已确认退款' : refundDetail.value.status_name || '已读取原退款进度', icon: 'none' })
+        refundDetail.value = cooperationPaymentRefundDetail(response?.data, id); void reloadOrder(id)
+        coopNotice(refundDetail.value.status === 'refunded' ? '渠道已确认退款' : refundDetail.value.status_name || '已读取原退款进度')
     } catch (cause) { if (current(who)) { refundReadRequired.value = true; refundError.value = coopError(cause, '原退款进度暂未核实，请重新读取，不要重复申请') } }
     finally { refundBusy.value = false; busyId.value = 0 }
 }
@@ -373,7 +395,7 @@ async function withdrawRefund() {
         if (!current(who) || !refundVisible.value) return
         const detail = cooperationPaymentRefundDetail(response?.data, id)
         if (detail.can_cancel === true || !['none', 'rejected', 'cancelled'].includes(detail.status)) throw Error('撤回结果未确认，请重新读取原申请')
-        refundDetail.value = detail; refundReadRequired.value = false; refundRequests.delete(id); revision.value++
+        refundDetail.value = detail; refundReadRequired.value = false; refundRequests.delete(id); void reloadOrder(id)
         if (detail.can_request === true) refundRequests.set(id, coopRequestId())
         uni.showToast({ title: '退款申请已撤回', icon: 'none' })
     } catch (cause) { if (current(who)) { refundReadRequired.value = true; refundError.value = coopError(cause, '撤回结果待核对，请读取原申请') } }

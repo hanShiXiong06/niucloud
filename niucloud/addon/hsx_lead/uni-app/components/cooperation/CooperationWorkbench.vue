@@ -453,6 +453,7 @@ import { leadFeeSnapshot } from '../../utils/cooperation-business'
 import { cooperationPaymentContext, cooperationOrderContext, sameCooperationPaymentContext, type CooperationPaymentContext } from '../../utils/cooperation-payment'
 import { cooperationPaymentReplacementId, cooperationPaymentReplacementMatches } from '../../utils/cooperation-payment-orders'
 import { membershipPageUrl } from '../../utils/entity-membership'
+import { coopNotice } from '../../utils/notice'
 const props = withDefaults(defineProps<{ initialId?: number; initialTab?: CooperationTab; initialInviter?: number; initialPromotion?: boolean; task?: string; initialStoreId?: number; initialPaymentId?: number; initialPromotionTab?: string; initialBusinessType?: string; initialDirection?: 'outgoing' | 'incoming' }>(), { initialId: 0, initialTab: 'deliveries', initialInviter: 0, initialPromotion: false, task: '', initialStoreId: 0, initialPaymentId: 0, initialPromotionTab: 'overview', initialBusinessType: '', initialDirection: 'outgoing' })
 const ui = useCooperation(props.initialTab === 'stores' ? 'deliveries' : props.initialTab), pageUrl = cooperationPageUrls[props.initialTab], overlay = ref(''), childOverlay = ref(false), payRef = ref<any>(null), publishRef = ref<any>(null), profileRef = ref<any>(null), promotionRef = ref<any>(null), promotionTab = ref('overview'), confirming = ref(false), paymentId = ref(0), paymentMessage = ref(''), paymentChecking = ref(false), selectedId = ref(0), canonicalPending = ref(props.initialId > 0)
 ui.direction.value = props.initialDirection
@@ -739,7 +740,7 @@ async function assign(store: CoopRow) {
     }
     const value = await ui.assign(id, target, version, assignee, replace)
     if (!value || disposed || !pageActive || actor !== ui.sessionScope()) {
-        if (ui.writeError.value) uni.showToast({ title: ui.writeError.value, icon: 'none' })
+        if (ui.writeError.value) coopNotice(ui.writeError.value, { inlineHint: '暂未完成，请查看页面上的说明' })
         return
     }
     if (Number(value.id) !== id || value.status !== 'assigned' || Number(value.receiver_id) !== target) {
@@ -773,7 +774,7 @@ async function saveProfile(data: CoopRow) {
     if (!value) return
     profileRef.value?.clearDraft?.(); markChanged(); await ui.bootstrap()
     const invitationMessage = typeof value.onboarding_inviter?.message === 'string' ? value.onboarding_inviter.message.trim() : ''
-    uni.showToast({ title: invitationMessage || '门店资料已保存', icon: 'none', duration: invitationMessage ? 3000 : 1500 })
+    coopNotice(invitationMessage || '门店资料已保存', { duration: invitationMessage ? 3000 : 1500 })
     if (ui.config.value.erp_visible !== false && data.provider && ui.profile.value.id && !ui.profile.value.connection?.connected) uni.redirectTo({ url: cooperationTaskLink('connection') })
     else if (props.task) closeOverlay()
 }

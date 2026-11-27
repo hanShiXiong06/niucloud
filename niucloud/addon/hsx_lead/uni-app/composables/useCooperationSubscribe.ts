@@ -1,6 +1,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { getWeappTemplateId } from '@/app/api/system'
 import { getSiteId, getToken } from '@/utils/common'
+import { coopNotice } from '../utils/notice'
 
 const noticeKeys = 'hsx_lead_task_assigned,hsx_lead_task_changed'
 type SubscribeStatus =
@@ -55,7 +56,7 @@ export function useCooperationSubscribe(options: { enabled?: () => boolean } = {
         return who
     }
     function feedback(title: string) {
-        uni.showToast({ title, icon: 'none' })
+        coopNotice(title)
     }
     function prepare(notifyFailure = false) {
         if (!enabled() || !supported || disposed || !getToken()) return Promise.resolve(false)
