@@ -10,8 +10,9 @@ export interface CapabilitySummary {
     groups: CapabilitySummaryGroup[]
 }
 
-const text = (value: unknown) => typeof value === 'string' ? value.trim() : ''
-const idText = (value: unknown) => typeof value === 'string' ? value.trim() : typeof value === 'number' && Number.isFinite(value) ? String(value) : ''
+const text = (value: unknown) => (typeof value === 'string' ? value.trim() : '')
+const idText = (value: unknown) =>
+    typeof value === 'string' ? value.trim() : typeof value === 'number' && Number.isFinite(value) ? String(value) : ''
 const categoryText = (row: Record<string, unknown>) => {
     const value = text(row.category) || text(row.category_name)
     return ['其他品类', '其他分类', '未分类'].includes(value) ? '' : value
@@ -37,7 +38,7 @@ export function summarizeCapabilities(models: unknown): CapabilitySummary {
     const count = unique.size
     if (!count) return { count: 0, summaryText: '按品类选择', groups: [] }
     // Old rows often have brand but no category. Do not pretend they are phones.
-    const useCategories = [...unique.values()].every(row => !!row.category)
+    const useCategories = [...unique.values()].every((row) => !!row.category)
     const map = new Map<string, CapabilitySummaryGroup>()
     for (const row of unique.values()) {
         const name = useCategories ? row.category : row.brand || '未标注品牌'
@@ -48,7 +49,10 @@ export function summarizeCapabilities(models: unknown): CapabilitySummary {
         else map.set(key, { name, count: 1, kind })
     }
     const groups = [...map.values()].sort((left, right) => right.count - left.count)
-    const preview = groups.slice(0, 3).map(group => `${group.name} ${group.count} 款`).join(' · ')
-    const suffix = groups.length > 3 ? useCategories ? ` 等 ${groups.length} 类` : ` 等 ${groups.length} 组` : ''
+    const preview = groups
+        .slice(0, 3)
+        .map((group) => `${group.name} ${group.count} 款`)
+        .join(' · ')
+    const suffix = groups.length > 3 ? (useCategories ? ` 等 ${groups.length} 类` : ` 等 ${groups.length} 组`) : ''
     return { count, summaryText: preview + suffix, groups }
 }

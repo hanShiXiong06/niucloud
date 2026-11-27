@@ -2,11 +2,74 @@
     <view class="lead-business" :class="['is-'+layout,{'is-embedded':embedded}]" :style="entryStyle">
         <view v-if="shown(settings.showTitle)&&settings.title" class="lead-business-heading">{{ settings.title }}</view>
         <view v-if="settings.subtitle" class="lead-business-subtitle">{{ settings.subtitle }}</view>
-        <scroll-view v-if="entries.length" class="lead-business-scroll" :scroll-x="layout==='slide'" :show-scrollbar="false" @touchstart="touchStart" @touchmove="touchMove" @touchend="touchEnd" @scroll="scrolling"><view class="lead-business-items" :style="itemsStyle"><button v-for="business in entries" :key="business.key" class="lead-business-item" :style="{color:business.titleColor}" hover-class="lead-business-pressed" @tap="publish(business.key)"><view v-if="business.iconMode!=='none'" class="lead-business-symbol" :style="{color:business.iconColor,backgroundColor:business.iconBgColor,width:iconSize+'px',height:iconSize+'px'}"><image v-if="business.iconMode==='original'||business.iconMode==='image'&&business.image&&!failedImages.includes(business.image)" :src="img(business.iconMode==='original'?business.original:business.image)" mode="aspectFit" class="lead-business-image" @error="failedImage(business.image)" /><CoopBusinessIcon v-else-if="business.iconMode==='library'" :name="business.icon" :color="business.iconColor" size="default" /><CoopServiceLineIcon v-else :shape="business.shape" :color="business.iconColor" :size="Math.round(iconSize*.75)" /><text v-if="business.badge" class="lead-business-badge" :style="{color:business.badgeColor,backgroundColor:business.badgeBgColor}">{{ business.badge }}</text></view><view class="lead-business-label"><text>{{ business.name }}</text><text v-if="business.iconMode==='none'&&business.badge" class="lead-business-text-badge" :style="{color:business.badgeColor,backgroundColor:business.badgeBgColor}">{{ business.badge }}</text></view><u-icon v-if="layout==='list'" name="arrow-right" size="12" color="var(--lead-diy-subtle,#909399)" /></button></view></scroll-view>
+        <scroll-view
+            v-if="entries.length"
+            class="lead-business-scroll"
+            :scroll-x="layout==='slide'"
+            :show-scrollbar="false"
+            @touchstart="touchStart"
+            @touchmove="touchMove"
+            @touchend="touchEnd"
+            @scroll="scrolling"
+            ><view class="lead-business-items" :style="itemsStyle"
+                ><button
+                    v-for="business in entries"
+                    :key="business.key"
+                    class="lead-business-item"
+                    :style="{color:business.titleColor}"
+                    hover-class="lead-business-pressed"
+                    @tap="publish(business.key)"
+                    ><view
+                        v-if="business.iconMode!=='none'"
+                        class="lead-business-symbol"
+                        :style="{color:business.iconColor,backgroundColor:business.iconBgColor,width:iconSize+'px',height:iconSize+'px'}"
+                        ><image
+                            v-if="business.iconMode==='original'||business.iconMode==='image'&&business.image&&!failedImages.includes(business.image)"
+                            :src="img(business.iconMode==='original'?business.original:business.image)"
+                            mode="aspectFit"
+                            class="lead-business-image"
+                            @error="failedImage(business.image)"
+                        /><CoopBusinessIcon
+                            v-else-if="business.iconMode==='library'"
+                            :name="business.icon"
+                            :color="business.iconColor"
+                            size="default"
+                        /><CoopServiceLineIcon
+                            v-else
+                            :shape="business.shape"
+                            :color="business.iconColor"
+                            :size="Math.round(iconSize*.75)"
+                        /><text
+                            v-if="business.badge"
+                            class="lead-business-badge"
+                            :style="{color:business.badgeColor,backgroundColor:business.badgeBgColor}"
+                            >{{ business.badge }}</text
+                        ></view
+                    ><view class="lead-business-label"
+                        ><text>{{ business.name }}</text
+                        ><text
+                            v-if="business.iconMode==='none'&&business.badge"
+                            class="lead-business-text-badge"
+                            :style="{color:business.badgeColor,backgroundColor:business.badgeBgColor}"
+                            >{{ business.badge }}</text
+                        ></view
+                    ><u-icon
+                        v-if="layout==='list'"
+                        name="arrow-right"
+                        size="12"
+                        color="var(--lead-diy-subtle,#909399)" /></button></view
+        ></scroll-view>
         <view v-if="store.mode==='decorate'" class="lead-business-message">{{ previewMessage }}</view>
-        <view v-else-if="error" class="lead-business-error" role="alert"><text>{{ error }}</text><button @tap="load">重新加载</button></view>
+        <view v-else-if="error" class="lead-business-error" role="alert"
+            ><text>{{ error }}</text
+            ><button @tap="load">重新加载</button></view
+        >
         <view v-else-if="loading" class="lead-business-message">正在读取服务业务…</view>
-        <view v-else-if="!businesses.length" class="lead-business-message">{{ getToken()?'本站暂未开放可选业务':'登录后查看本站服务业务' }}</view>
+        <view
+            v-else-if="!businesses.length"
+            class="lead-business-message"
+            >{{ getToken()?'本站暂未开放可选业务':'登录后查看本站服务业务' }}</view
+        >
     </view>
 </template>
 <script setup lang="ts">

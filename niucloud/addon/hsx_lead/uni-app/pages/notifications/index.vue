@@ -3,23 +3,87 @@
         <CooperationNav title="通知偏好" back @back="backCooperationTask" />
         <scroll-view scroll-y class="account-notice-scroll" :show-scrollbar="false">
             <view class="account-notice-content">
-                <CoopState v-if="!state.loggedIn.value" title="登录后管理自己的提醒" hint="通知仅发送给相关账户本人" icon="bell" />
-                <CoopState v-else-if="state.loading.value && !state.ready.value" loading loading-text="正在读取通知偏好…" />
+                <CoopState
+                    v-if="!state.loggedIn.value"
+                    title="登录后管理自己的提醒"
+                    hint="通知仅发送给相关账户本人"
+                    icon="bell"
+                />
+                <CoopState
+                    v-else-if="state.loading.value && !state.ready.value"
+                    loading
+                    loading-text="正在读取通知偏好…"
+                />
                 <CoopState v-else-if="state.error.value" :error="state.error.value" @retry="state.load" />
                 <template v-else-if="state.ready.value">
-                    <view class="account-notice-intro"><u-icon name="bell" size="24" color="var(--primary-color,#d93833)" /><view><text>重要变动，及时知晓</text><text>按场景选择你希望接收的提醒</text></view></view>
+                    <view class="account-notice-intro"
+                        ><u-icon name="bell" size="24" color="var(--primary-color,#d93833)" /><view
+                            ><text>重要变动，及时知晓</text><text>按场景选择你希望接收的提醒</text></view
+                        ></view
+                    >
                     <view v-for="event in state.events.value" :key="event.event_key" class="account-notice-card">
-                        <view class="account-notice-heading"><text>{{ event.name }}</text><button v-if="state.supported.value" :disabled="!state.canSubscribeEvent(event.event_key)" @tap="state.subscribe(event.event_key)">订阅此项</button></view>
-                        <view v-for="channel in event.channels" :key="channel.channel" class="account-notice-channel"><view><text>{{ channelNames[channel.channel] }}</text><text>{{ !channel.configured ? '平台暂未开通' : channel.channel === 'weapp' ? '需微信订阅授权' : channel.channel === 'wechat' ? '需关注并绑定公众号' : '发送至已绑定手机号' }}</text></view><u-switch :model-value="channel.enabled" :disabled="state.loading.value || state.saving.value || state.readRequired.value || state.requesting.value" active-color="var(--primary-color,#d93833)" :aria-label="`${event.name}${channelNames[channel.channel]}`" @change="state.change(event.event_key,channel.channel,$event)" /></view>
+                        <view class="account-notice-heading"
+                            ><text>{{ event.name }}</text
+                            ><button
+                                v-if="state.supported.value"
+                                :disabled="!state.canSubscribeEvent(event.event_key)"
+                                @tap="state.subscribe(event.event_key)"
+                                >订阅此项</button
+                            ></view
+                        >
+                        <view v-for="channel in event.channels" :key="channel.channel" class="account-notice-channel"
+                            ><view
+                                ><text>{{ channelNames[channel.channel] }}</text
+                                ><text
+                                    >{{ !channel.configured ? '平台暂未开通' : channel.channel === 'weapp' ? '需微信订阅授权' : channel.channel === 'wechat' ? '需关注并绑定公众号' : '发送至已绑定手机号' }}</text
+                                ></view
+                            ><u-switch
+                                :model-value="channel.enabled"
+                                :disabled="state.loading.value || state.saving.value || state.readRequired.value || state.requesting.value"
+                                active-color="var(--primary-color,#d93833)"
+                                :aria-label="`${event.name}${channelNames[channel.channel]}`"
+                                @change="state.change(event.event_key,channel.channel,$event)"
+                        /></view>
                     </view>
-                    <view v-if="state.saving.value" class="account-notice-feedback" role="status"><u-loading-icon size="15" /><text>正在保存偏好…</text></view>
-                    <view v-if="state.saveError.value" class="account-notice-error" role="alert"><text>{{ state.saveError.value }}</text><button :disabled="state.loading.value || state.saving.value" @tap="state.load">重新读取并核对</button></view>
-                    <view v-if="state.subscriptionMessage.value" class="account-notice-message" role="status">{{ state.subscriptionMessage.value }}</view>
-                    <u-collapse :border="false" class="account-notice-help"><u-collapse-item title="关于提醒与微信订阅" name="notice-help"><view>偏好开启后，仍需平台开通对应渠道。微信小程序提醒还需要你主动确认订阅；拒绝、取消或额度用尽后，系统不会强制反复弹出。</view><view>公众号提醒需关注并绑定本站服务号。短信仅在你主动开启偏好后发送。</view><view>账户变动以账目记录为准，消息发送失败不会改变你的余额或佣金。</view></u-collapse-item></u-collapse>
+                    <view v-if="state.saving.value" class="account-notice-feedback" role="status"
+                        ><u-loading-icon size="15" /><text>正在保存偏好…</text></view
+                    >
+                    <view v-if="state.saveError.value" class="account-notice-error" role="alert"
+                        ><text>{{ state.saveError.value }}</text
+                        ><button :disabled="state.loading.value || state.saving.value" @tap="state.load"
+                            >重新读取并核对</button
+                        ></view
+                    >
+                    <view
+                        v-if="state.subscriptionMessage.value"
+                        class="account-notice-message"
+                        role="status"
+                        >{{ state.subscriptionMessage.value }}</view
+                    >
+                    <u-collapse :border="false" class="account-notice-help"
+                        ><u-collapse-item title="关于提醒与微信订阅" name="notice-help"
+                            ><view
+                                >偏好开启后，仍需平台开通对应渠道。微信小程序提醒还需要你主动确认订阅；拒绝、取消或额度用尽后，系统不会强制反复弹出。</view
+                            ><view>公众号提醒需关注并绑定本站服务号。短信仅在你主动开启偏好后发送。</view
+                            ><view>账户变动以账目记录为准，消息发送失败不会改变你的余额或佣金。</view></u-collapse-item
+                        ></u-collapse
+                    >
                 </template>
             </view>
         </scroll-view>
-        <view v-if="state.ready.value" class="account-notice-footer"><u-button type="primary" shape="circle" :custom-style="cooperationButtonStyle" :text="!state.supported.value ? '请在微信小程序内订阅' : !state.eligible.value.length ? '暂无可订阅的微信提醒' : state.eligible.value.length>3 ? '分组订阅微信提醒' : '订阅微信提醒'" :loading="state.requesting.value" :disabled="!state.canSubscribe.value" @click="state.subscribe()" /><text>{{ state.eligible.value.length>3 ? '每次最多3项，也可在上方逐项订阅；偏好开关不代表已授权' : '偏好开关不代表已获得微信订阅授权' }}</text></view>
+        <view v-if="state.ready.value" class="account-notice-footer"
+            ><u-button
+                type="primary"
+                shape="circle"
+                :custom-style="cooperationButtonStyle"
+                :text="!state.supported.value ? '请在微信小程序内订阅' : !state.eligible.value.length ? '暂无可订阅的微信提醒' : state.eligible.value.length>3 ? '分组订阅微信提醒' : '订阅微信提醒'"
+                :loading="state.requesting.value"
+                :disabled="!state.canSubscribe.value"
+                @click="state.subscribe()"
+            /><text
+                >{{ state.eligible.value.length>3 ? '每次最多3项，也可在上方逐项订阅；偏好开关不代表已授权' : '偏好开关不代表已获得微信订阅授权' }}</text
+            ></view
+        >
     </view>
 </template>
 <script setup lang="ts">

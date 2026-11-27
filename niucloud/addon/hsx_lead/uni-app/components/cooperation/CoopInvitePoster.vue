@@ -1,26 +1,93 @@
 <template>
-    <view class="coop-poster-mount"><u-popup :show="show && allowed" mode="center" :round="16" :z-index="11000" :safe-area-inset-bottom="false" @close="close">
-        <view class="coop-poster" @touchmove.stop.prevent>
-            <view class="coop-poster__header"><view><text class="coop-poster__title">{{ scene === 'entity' ? '邀请同事加入' : '我的邀请海报' }}</text><text class="coop-poster__subtitle">{{ scene === 'entity' ? '扫码申请，负责人确认后加入' : '扫码进入，邀请关系按平台规则确认' }}</text></view><button class="coop-poster__close" aria-label="关闭海报" @tap="close"><u-icon name="close" size="20" color="#71839a" /></button></view>
-            <view class="coop-poster__preview">
-                <image v-if="state.url.value" :key="state.url.value" class="coop-poster__image" :class="{ 'is-loading': !state.ready.value }" :src="state.url.value" :data-source="state.url.value" mode="aspectFit" :show-menu-by-longpress="true" @load="imageLoaded" @error="imageFailed" @tap="state.preview" />
-                <view v-if="state.loading.value" class="coop-poster__status" role="status"><u-loading-icon mode="circle" size="28" color="#4086df" /><text>正在生成邀请海报…</text><text class="coop-poster__hint">首次生成小程序码可能需要几秒</text></view>
-                <view v-else-if="state.error.value" class="coop-poster__status" role="alert"><u-icon name="photo" size="34" color="#9aabc0" /><text>{{ state.error.value }}</text><button class="coop-poster__retry" @tap="generate">重新生成</button></view>
+    <view class="coop-poster-mount"
+        ><u-popup
+            :show="show && allowed"
+            mode="center"
+            :round="16"
+            :z-index="11000"
+            :safe-area-inset-bottom="false"
+            @close="close"
+        >
+            <view class="coop-poster" @touchmove.stop.prevent>
+                <view class="coop-poster__header"
+                    ><view
+                        ><text
+                            class="coop-poster__title"
+                            >{{ scene === 'entity' ? '邀请同事加入' : '我的邀请海报' }}</text
+                        ><text
+                            class="coop-poster__subtitle"
+                            >{{ scene === 'entity' ? '扫码申请，负责人确认后加入' : '扫码进入，邀请关系按平台规则确认' }}</text
+                        ></view
+                    ><button class="coop-poster__close" aria-label="关闭海报" @tap="close"
+                        ><u-icon name="close" size="20" color="#71839a" /></button
+                ></view>
+                <view class="coop-poster__preview">
+                    <image
+                        v-if="state.url.value"
+                        :key="state.url.value"
+                        class="coop-poster__image"
+                        :class="{ 'is-loading': !state.ready.value }"
+                        :src="state.url.value"
+                        :data-source="state.url.value"
+                        mode="aspectFit"
+                        :show-menu-by-longpress="true"
+                        @load="imageLoaded"
+                        @error="imageFailed"
+                        @tap="state.preview"
+                    />
+                    <view v-if="state.loading.value" class="coop-poster__status" role="status"
+                        ><u-loading-icon mode="circle" size="28" color="#4086df" /><text>正在生成邀请海报…</text
+                        ><text class="coop-poster__hint">首次生成小程序码可能需要几秒</text></view
+                    >
+                    <view v-else-if="state.error.value" class="coop-poster__status" role="alert"
+                        ><u-icon name="photo" size="34" color="#9aabc0" /><text>{{ state.error.value }}</text
+                        ><button class="coop-poster__retry" @tap="generate">重新生成</button></view
+                    >
+                </view>
+                <view
+                    v-if="state.saveError.value"
+                    class="coop-poster__error"
+                    role="alert"
+                    >{{ state.saveError.value }}</view
+                >
+                <!-- #ifdef MP-WEIXIN -->
+                <button
+                    v-if="state.needsSettings.value"
+                    class="coop-poster__settings"
+                    open-type="openSetting"
+                    @opensetting="state.needsSettings.value = false"
+                    >打开相册权限设置</button
+                >
+                <!-- #endif -->
+                <view class="coop-poster__actions"
+                    ><button class="coop-poster__cancel" @tap="close">关闭</button
+                    ><view class="coop-poster__primary">
+                        <!-- #ifdef H5 -->
+                        <u-button
+                            type="primary"
+                            shape="circle"
+                            :custom-style="cooperationButtonStyle"
+                            :disabled="!state.ready.value"
+                            text="查看海报，长按保存"
+                            @click="state.preview"
+                        />
+                        <!-- #endif -->
+                        <!-- #ifndef H5 -->
+                        <u-button
+                            type="primary"
+                            shape="circle"
+                            :custom-style="cooperationButtonStyle"
+                            :loading="state.saving.value"
+                            :disabled="!state.ready.value || state.saving.value"
+                            text="保存到相册"
+                            @click="state.save"
+                        />
+                        <!-- #endif -->
+                    </view></view
+                >
             </view>
-            <view v-if="state.saveError.value" class="coop-poster__error" role="alert">{{ state.saveError.value }}</view>
-            <!-- #ifdef MP-WEIXIN -->
-            <button v-if="state.needsSettings.value" class="coop-poster__settings" open-type="openSetting" @opensetting="state.needsSettings.value = false">打开相册权限设置</button>
-            <!-- #endif -->
-            <view class="coop-poster__actions"><button class="coop-poster__cancel" @tap="close">关闭</button><view class="coop-poster__primary">
-                <!-- #ifdef H5 -->
-                <u-button type="primary" shape="circle" :custom-style="cooperationButtonStyle" :disabled="!state.ready.value" text="查看海报，长按保存" @click="state.preview" />
-                <!-- #endif -->
-                <!-- #ifndef H5 -->
-                <u-button type="primary" shape="circle" :custom-style="cooperationButtonStyle" :loading="state.saving.value" :disabled="!state.ready.value || state.saving.value" text="保存到相册" @click="state.save" />
-                <!-- #endif -->
-            </view></view>
-        </view>
-    </u-popup></view>
+        </u-popup></view
+    >
 </template>
 <script setup lang="ts">
 import { watch } from 'vue'

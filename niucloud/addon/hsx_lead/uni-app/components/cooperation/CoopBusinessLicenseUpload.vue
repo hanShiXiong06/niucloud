@@ -1,19 +1,76 @@
 <template>
     <view class="coop-license-upload">
-        <view class="coop-license-upload__heading"><text>营业执照</text><text class="coop-license-upload__optional">{{ required ? '必填' : '选填' }}</text><view class="coop-license-upload__privacy"><u-icon name="lock" size="12" color="#71849c" /><text>仅本人和平台可查看</text></view></view>
+        <view class="coop-license-upload__heading"
+            ><text>营业执照</text><text class="coop-license-upload__optional">{{ required ? '必填' : '选填' }}</text
+            ><view class="coop-license-upload__privacy"
+                ><u-icon name="lock" size="12" color="#71849c" /><text>仅本人和平台可查看</text></view
+            ></view
+        >
         <view class="coop-license-upload__content">
-            <view v-if="modelValue" class="coop-license-upload__tile" role="button" aria-label="预览营业执照" :aria-disabled="uploading || reading" @tap.stop="preview">
+            <view
+                v-if="modelValue"
+                class="coop-license-upload__tile"
+                role="button"
+                aria-label="预览营业执照"
+                :aria-disabled="uploading || reading"
+                @tap.stop="preview"
+            >
                 <image v-if="previewSource" :src="previewSource" mode="aspectFit" />
-                <view v-else class="coop-license-upload__placeholder"><u-icon name="file-text" size="27" color="#7890af" /><text>{{ reading ? '读取中' : '已上传' }}</text></view>
-                <button class="coop-license-upload__more" :disabled="disabled || uploading" aria-label="营业执照操作" @tap.stop="openActions"><view><u-icon name="more-dot-fill" size="18" color="#fff" /></view></button>
-                <view v-if="uploading" class="coop-license-upload__busy" role="status"><u-loading-icon mode="circle" size="20" color="#fff" /><text>上传中</text></view>
+                <view v-else class="coop-license-upload__placeholder"
+                    ><u-icon
+                        name="file-text"
+                        size="27"
+                        color="#7890af"
+                    /><text>{{ reading ? '读取中' : '已上传' }}</text></view
+                >
+                <button
+                    class="coop-license-upload__more"
+                    :disabled="disabled || uploading"
+                    aria-label="营业执照操作"
+                    @tap.stop="openActions"
+                    ><view><u-icon name="more-dot-fill" size="18" color="#fff" /></view
+                ></button>
+                <view v-if="uploading" class="coop-license-upload__busy" role="status"
+                    ><u-loading-icon mode="circle" size="20" color="#fff" /><text>上传中</text></view
+                >
             </view>
-            <u-upload ref="uploader" :multiple="false" :max-count="1" :max-size="5242880" :custom-style="{ display: modelValue ? 'none' : 'block' }" :disabled="disabled || uploading" :capture="['album', 'camera']" @after-read="afterRead" @oversize="error = '营业执照图片不能超过5MB'">
-                <view class="coop-license-upload__tile coop-license-upload__choose" role="button" aria-label="添加营业执照" :aria-disabled="disabled || uploading"><template v-if="uploading"><u-loading-icon mode="circle" size="21" /><text>上传中</text></template><template v-else><u-icon name="camera" size="26" color="#6386b6" /><text>上传营业执照</text></template></view>
+            <u-upload
+                ref="uploader"
+                :multiple="false"
+                :max-count="1"
+                :max-size="5242880"
+                :custom-style="{ display: modelValue ? 'none' : 'block' }"
+                :disabled="disabled || uploading"
+                :capture="['album', 'camera']"
+                @after-read="afterRead"
+                @oversize="error = '营业执照图片不能超过5MB'"
+            >
+                <view
+                    class="coop-license-upload__tile coop-license-upload__choose"
+                    role="button"
+                    aria-label="添加营业执照"
+                    :aria-disabled="disabled || uploading"
+                    ><template v-if="uploading"><u-loading-icon mode="circle" size="21" /><text>上传中</text></template
+                    ><template v-else
+                        ><u-icon name="camera" size="26" color="#6386b6" /><text>上传营业执照</text></template
+                    ></view
+                >
             </u-upload>
-            <view class="coop-license-upload__caption"><text>{{ modelValue ? '已添加1张证照' : '上传清晰完整的证照照片' }}</text><text>JPG / PNG / WebP · 5MB以内</text></view>
+            <view class="coop-license-upload__caption"
+                ><text>{{ modelValue ? '已添加1张证照' : '上传清晰完整的证照照片' }}</text
+                ><text>JPG / PNG / WebP · 5MB以内</text></view
+            >
         </view>
-        <view v-if="error" class="coop-license-upload__error" role="alert">{{ error }}<text v-if="modelValue && !uploading && !reading" role="button" aria-label="重试读取营业执照" @tap="loadPreview">重新读取</text></view>
+        <view v-if="error" class="coop-license-upload__error" role="alert"
+            >{{ error
+            }}<text
+                v-if="modelValue && !uploading && !reading"
+                role="button"
+                aria-label="重试读取营业执照"
+                @tap="loadPreview"
+                >重新读取</text
+            ></view
+        >
     </view>
 </template>
 <script setup lang="ts">

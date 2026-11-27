@@ -1,5 +1,13 @@
 <template>
-    <view class="coop-business-icon" :class="['is-' + actualSize, { 'is-pressed': pressed === true && disabled !== true, 'is-disabled': disabled === true }]" :style="iconStyle" :hover-class="disabled === true ? 'none' : 'coop-business-icon--pressed'" :hover-start-time="0" :hover-stay-time="120" aria-hidden="true">
+    <view
+        class="coop-business-icon"
+        :class="['is-' + actualSize, { 'is-pressed': pressed === true && disabled !== true, 'is-disabled': disabled === true }]"
+        :style="iconStyle"
+        :hover-class="disabled === true ? 'none' : 'coop-business-icon--pressed'"
+        :hover-start-time="0"
+        :hover-stay-time="120"
+        aria-hidden="true"
+    >
         <u-icon :name="symbol" :size="symbolSize" color="currentColor" />
     </view>
 </template>

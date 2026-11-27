@@ -1,5 +1,9 @@
 <template>
-    <view class="coop-search-field" :class="{ 'is-focused': focused, 'is-disabled': disabled, 'is-loading': loading, 'is-compact': compact }" :aria-busy="loading">
+    <view
+        class="coop-search-field"
+        :class="{ 'is-focused': focused, 'is-disabled': disabled, 'is-loading': loading, 'is-compact': compact }"
+        :aria-busy="loading"
+    >
         <u-search
             ref="searchRef"
             v-bind="$attrs"

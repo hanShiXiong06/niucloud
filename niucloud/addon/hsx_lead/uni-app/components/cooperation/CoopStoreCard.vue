@@ -1,13 +1,50 @@
 <template>
     <view class="coop-store" :class="{ selected }" @tap="$emit('select', store)">
         <view class="coop-store__head">
-            <CoopMerchantAvatar :image="store.storefront_image" :name="store.name" :active="store.membership?.active===true" :rank="membershipBadgeRank(store.membership)" :appearance="store.membership?.level_visual" :highlighted="membershipBadgeRank(store.membership)>=3" />
-            <view class="coop-store__name"><view>{{ store.name || '合作门店' }}</view><view class="coop-store__badges"><CoopLevelBadge v-if="hasSubjectLevel" :level="membershipBadgeRank(store.membership)" :label="store.membership.level_name" :appearance="store.membership.level_visual" :state="subjectLevelState" variant="inline" size="small" /><text v-else class="coop-store__grade">普通会员</text></view></view>
+            <CoopMerchantAvatar
+                :image="store.storefront_image"
+                :name="store.name"
+                :active="store.membership?.active===true"
+                :rank="membershipBadgeRank(store.membership)"
+                :appearance="store.membership?.level_visual"
+                :highlighted="membershipBadgeRank(store.membership)>=3"
+            />
+            <view class="coop-store__name"
+                ><view>{{ store.name || '合作门店' }}</view
+                ><view class="coop-store__badges"
+                    ><CoopLevelBadge
+                        v-if="hasSubjectLevel"
+                        :level="membershipBadgeRank(store.membership)"
+                        :label="store.membership.level_name"
+                        :appearance="store.membership.level_visual"
+                        :state="subjectLevelState"
+                        variant="inline"
+                        size="small"
+                    /><text v-else class="coop-store__grade">普通会员</text></view
+                ></view
+            >
             <CoopSelectionMark v-if="selectable" :selected="selected" />
         </view>
-        <view class="coop-store__region"><u-icon name="map" size="13" color="#89939e" /><text>{{ store.region_text || '地区未填写' }}</text></view>
-        <view v-if="store.is_internal" class="coop-store__capability"><text>本店内部交付</text><view class="coop-store__source"><text>由本店成员共同处理，不收协作费</text></view></view>
-        <view v-else class="coop-store__capability"><text>{{ capabilityText }}</text><view class="coop-store__source"><text>{{ capabilitySourceText }}</text><view v-if="modelDimension && store.erp_visible !== false" class="coop-store__stock-link" role="button" aria-label="查看门店货盘" @tap.stop="$emit('inventory', store)"><text>{{ Number(store.inventory_count) > 0 ? '查看库存' : '查看货盘' }}</text><u-icon name="arrow-right" size="11" color="var(--primary-color, #3478cc)" /></view></view></view>
+        <view class="coop-store__region"
+            ><u-icon name="map" size="13" color="#89939e" /><text>{{ store.region_text || '地区未填写' }}</text></view
+        >
+        <view v-if="store.is_internal" class="coop-store__capability"
+            ><text>本店内部交付</text
+            ><view class="coop-store__source"><text>由本店成员共同处理，不收协作费</text></view></view
+        >
+        <view v-else class="coop-store__capability"
+            ><text>{{ capabilityText }}</text
+            ><view class="coop-store__source"
+                ><text>{{ capabilitySourceText }}</text
+                ><view
+                    v-if="modelDimension && store.erp_visible !== false"
+                    class="coop-store__stock-link"
+                    role="button"
+                    aria-label="查看门店货盘"
+                    @tap.stop="$emit('inventory', store)"
+                    ><text>{{ Number(store.inventory_count) > 0 ? '查看库存' : '查看货盘' }}</text
+                    ><u-icon name="arrow-right" size="11" color="var(--primary-color, #3478cc)" /></view></view
+        ></view>
     </view>
 </template>
 <script setup lang="ts">
@@ -41,4 +78,5 @@ defineEmits<{ (event: 'select' | 'inventory', row: CoopRow): void }>()
 </style>
 <style scoped lang="scss">
 .coop-store__source { display: flex; justify-content: space-between; gap: 15rpx; align-items: center; margin-top: 13rpx; color: #8994a3; font-size: 21rpx; }.coop-store__source>text:first-child { min-width: 0; flex: 1; }.coop-store__stock-link { display: flex; align-items: center; gap: 4rpx; min-height: 62rpx; color: var(--primary-color, #d93833); font-size: 23rpx; flex: none; }
-.coop-store { border-color: #e3eaf3; transition: border-color 160ms ease, background-color 160ms ease; }.coop-store.selected { background: #fff; box-shadow: 0 0 0 1px rgba(52,120,204,.04); }.coop-store__head { gap: 22rpx; align-items: center; min-height: 106rpx; }.coop-store__name>view:first-child { color: #2d3d52; line-height: 1.45; }.coop-store__badges { align-items: center; gap: 9rpx; }.coop-store__grade { line-height: 1.55; white-space: nowrap; padding: 2rpx 9rpx; }.coop-store__region { align-items: flex-start; color: #78879a; }.coop-store__region>text { min-width: 0; flex: 1; }.coop-store__region>.u-icon { flex: none; padding-top: 4rpx; }.coop-store__source { flex-wrap: nowrap; align-items: center; gap: 12rpx; }.coop-store__source>text:first-child { line-height: 1.65; overflow-wrap: anywhere; }.coop-store__stock-link { display: inline-flex; flex-direction: row; align-items: center; justify-content: flex-end; flex-shrink: 0; gap: 6rpx; min-width: 90px; min-height: 44px; white-space: nowrap; }.coop-store__stock-link>text { display: block; flex: none; white-space: nowrap; }.coop-store__stock-link>.u-icon { flex: none; }@media(prefers-reduced-motion:reduce){.coop-store{transition:none;}}</style>
+.coop-store { border-color: #e3eaf3; transition: border-color 160ms ease, background-color 160ms ease; }.coop-store.selected { background: #fff; box-shadow: 0 0 0 1px rgba(52,120,204,.04); }.coop-store__head { gap: 22rpx; align-items: center; min-height: 106rpx; }.coop-store__name>view:first-child { color: #2d3d52; line-height: 1.45; }.coop-store__badges { align-items: center; gap: 9rpx; }.coop-store__grade { line-height: 1.55; white-space: nowrap; padding: 2rpx 9rpx; }.coop-store__region { align-items: flex-start; color: #78879a; }.coop-store__region>text { min-width: 0; flex: 1; }.coop-store__region>.u-icon { flex: none; padding-top: 4rpx; }.coop-store__source { flex-wrap: nowrap; align-items: center; gap: 12rpx; }.coop-store__source>text:first-child { line-height: 1.65; overflow-wrap: anywhere; }.coop-store__stock-link { display: inline-flex; flex-direction: row; align-items: center; justify-content: flex-end; flex-shrink: 0; gap: 6rpx; min-width: 90px; min-height: 44px; white-space: nowrap; }.coop-store__stock-link>text { display: block; flex: none; white-space: nowrap; }.coop-store__stock-link>.u-icon { flex: none; }@media(prefers-reduced-motion:reduce){.coop-store{transition:none;}}
+</style>

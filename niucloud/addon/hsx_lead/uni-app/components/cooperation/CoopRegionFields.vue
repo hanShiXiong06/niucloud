@@ -1,26 +1,100 @@
 <template>
     <view class="coop-region-fields">
-        <button class="region-trigger" :disabled="disabled" @tap="open"><u-icon name="map" size="18" color="#5379a7" /><text :class="{ placeholder: !selectedText }">{{ selectedText || '搜索省、市、区县' }}</text><u-icon name="arrow-right" size="13" color="#929aa6" /></button>
-        <u-popup :show="show" mode="bottom" :round="14" :z-index="regionZIndex" :safe-area-inset-bottom="false" @close="close">
+        <button class="region-trigger" :disabled="disabled" @tap="open"
+            ><u-icon name="map" size="18" color="#5379a7" /><text
+                :class="{ placeholder: !selectedText }"
+                >{{ selectedText || '搜索省、市、区县' }}</text
+            ><u-icon name="arrow-right" size="13" color="#929aa6"
+        /></button>
+        <u-popup
+            :show="show"
+            mode="bottom"
+            :round="14"
+            :z-index="regionZIndex"
+            :safe-area-inset-bottom="false"
+            @close="close"
+        >
             <view class="region-panel" @touchmove.prevent.stop>
-                <view class="region-head"><text>选择地区</text><button aria-label="关闭地区选择" @tap="close"><u-icon name="close" size="18" color="#697586" /></button></view>
-                <view class="region-search"><CooperationSearch v-model="keyword" placeholder="输入地区名称，如石家庄、长安区" :show-action="true" action-text="搜索" @search="search" @custom="search" @clear="clearSearch" /></view>
+                <view class="region-head"
+                    ><text>选择地区</text
+                    ><button aria-label="关闭地区选择" @tap="close"
+                        ><u-icon name="close" size="18" color="#697586" /></button
+                ></view>
+                <view class="region-search"
+                    ><CooperationSearch
+                        v-model="keyword"
+                        placeholder="输入地区名称，如石家庄、长安区"
+                        :show-action="true"
+                        action-text="搜索"
+                        @search="search"
+                        @custom="search"
+                        @clear="clearSearch"
+                /></view>
                 <scroll-view scroll-y class="region-results" @touchmove.stop>
-                    <view v-if="searching" class="region-message"><u-loading-icon size="22" /><text>正在查找地区</text></view>
-                    <view v-else-if="error" class="region-message"><text>{{ error }}</text><button @tap="search">重新查询</button></view>
+                    <view v-if="searching" class="region-message"
+                        ><u-loading-icon size="22" /><text>正在查找地区</text></view
+                    >
+                    <view v-else-if="error" class="region-message"
+                        ><text>{{ error }}</text
+                        ><button @tap="search">重新查询</button></view
+                    >
                     <template v-else-if="keyword.trim()">
                         <button v-for="area in results" :key="area.id" class="region-result" @tap="selectResult(area)">
-                            <view class="region-result__content"><text class="region-name">{{ area.name }}</text><text class="region-path">{{ area.region_text }}</text></view>
-                            <view class="region-result__tail"><text class="region-level">{{ ['','省份','城市','区县'][area.level] }}</text><u-icon name="arrow-right" size="12" color="#91a0b2" /></view>
+                            <view class="region-result__content"
+                                ><text class="region-name">{{ area.name }}</text
+                                ><text class="region-path">{{ area.region_text }}</text></view
+                            >
+                            <view class="region-result__tail"
+                                ><text class="region-level">{{ ['','省份','城市','区县'][area.level] }}</text
+                                ><u-icon name="arrow-right" size="12" color="#91a0b2"
+                            /></view>
                         </button>
-                        <view v-if="searched && !results.length" class="region-message">没有找到，试试城市或区县名称</view>
-                        <view v-if="results.length && total > results.length" class="region-note">还有其他结果，可输入更完整的名称缩小范围</view>
+                        <view v-if="searched && !results.length" class="region-message"
+                            >没有找到，试试城市或区县名称</view
+                        >
+                        <view v-if="results.length && total > results.length" class="region-note"
+                            >还有其他结果，可输入更完整的名称缩小范围</view
+                        >
                     </template>
-                    <view v-else class="region-message"><u-icon name="map" size="30" color="#a5b8d1" /><text>输入名称，直接找到客户所在地区</text></view>
-                    <view class="region-alternative"><button @tap="hierarchy = !hierarchy">{{ hierarchy ? '收起逐级选择' : '按省市区选择' }}<u-icon :name="hierarchy ? 'arrow-up' : 'arrow-down'" size="12" color="#8392a4" /></button></view>
-                    <view v-if="hierarchy" class="region-levels"><picker v-for="(field,index) in fields" :key="field" :range="options(index)" range-key="name" :value="selectedIndex(index)" :disabled="busy || (index > 0 && !draft[fields[index-1]])" @change="choose(index,$event)"><view class="region-choice">{{ names[index] || placeholders[index] }}<u-icon name="arrow-down" size="11" color="#929aa6" /></view></picker><view v-if="levelError" class="region-note" @tap="initialize">{{ levelError }}，点击重试</view></view>
+                    <view v-else class="region-message"
+                        ><u-icon name="map" size="30" color="#a5b8d1" /><text
+                            >输入名称，直接找到客户所在地区</text
+                        ></view
+                    >
+                    <view class="region-alternative"
+                        ><button @tap="hierarchy = !hierarchy"
+                            >{{ hierarchy ? '收起逐级选择' : '按省市区选择'
+                            }}<u-icon :name="hierarchy ? 'arrow-up' : 'arrow-down'" size="12" color="#8392a4" /></button
+                    ></view>
+                    <view v-if="hierarchy" class="region-levels"
+                        ><picker
+                            v-for="(field,index) in fields"
+                            :key="field"
+                            :range="options(index)"
+                            range-key="name"
+                            :value="selectedIndex(index)"
+                            :disabled="busy || (index > 0 && !draft[fields[index-1]])"
+                            @change="choose(index,$event)"
+                            ><view class="region-choice"
+                                >{{ names[index] || placeholders[index]
+                                }}<u-icon name="arrow-down" size="11" color="#929aa6" /></view></picker
+                        ><view v-if="levelError" class="region-note" @tap="initialize"
+                            >{{ levelError }}，点击重试</view
+                        ></view
+                    >
                 </scroll-view>
-                <view class="region-footer"><text v-if="minLevel === 3">请选择到区县，便于准确匹配门店</text><u-button v-if="hierarchy" :custom-style="cooperationButtonStyle" type="primary" shape="circle" text="使用所选地区" :disabled="busy || !draft[fields[minLevel-1]]" @click="applyDraft" /><button class="region-cancel" @tap="close">取消</button></view>
+                <view class="region-footer"
+                    ><text v-if="minLevel === 3">请选择到区县，便于准确匹配门店</text
+                    ><u-button
+                        v-if="hierarchy"
+                        :custom-style="cooperationButtonStyle"
+                        type="primary"
+                        shape="circle"
+                        text="使用所选地区"
+                        :disabled="busy || !draft[fields[minLevel-1]]"
+                        @click="applyDraft"
+                    /><button class="region-cancel" @tap="close">取消</button></view
+                >
             </view>
         </u-popup>
     </view>

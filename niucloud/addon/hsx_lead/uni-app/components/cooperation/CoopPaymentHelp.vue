@@ -1,25 +1,95 @@
 <template>
-    <view v-if="help.data.value || help.loading.value || help.error.value" class="coop-payment-help" :style="layoutStyle">
-        <button v-if="help.data.value" class="coop-payment-help__entry" role="button" aria-label="查看支付帮助" @tap.stop="open">
+    <view
+        v-if="help.data.value || help.loading.value || help.error.value"
+        class="coop-payment-help"
+        :style="layoutStyle"
+    >
+        <button
+            v-if="help.data.value"
+            class="coop-payment-help__entry"
+            role="button"
+            aria-label="查看支付帮助"
+            @tap.stop="open"
+        >
             <view class="coop-payment-help__mark" aria-hidden="true"><text>?</text></view>
             <text class="coop-payment-help__title">{{ help.data.value.title || '支付帮助' }}</text>
             <text class="coop-payment-help__arrow" aria-hidden="true">›</text>
         </button>
-        <view v-else-if="help.loading.value" class="coop-payment-help__loading" role="status"><u-loading-icon size="14" /><text>正在读取支付帮助</text></view>
-        <view v-else-if="help.error.value" class="coop-payment-help__error" role="status"><text>支付帮助暂不可用</text><button role="button" @tap.stop="help.refresh">重新加载</button></view>
+        <view v-else-if="help.loading.value" class="coop-payment-help__loading" role="status"
+            ><u-loading-icon size="14" /><text>正在读取支付帮助</text></view
+        >
+        <view v-else-if="help.error.value" class="coop-payment-help__error" role="status"
+            ><text>支付帮助暂不可用</text><button role="button" @tap.stop="help.refresh">重新加载</button></view
+        >
         <view class="coop-payment-help__mount">
-            <u-popup :show="help.opened.value" mode="bottom" :round="14" :z-index="popupZIndex" :safe-area-inset-bottom="false" @close="help.close">
+            <u-popup
+                :show="help.opened.value"
+                mode="bottom"
+                :round="14"
+                :z-index="popupZIndex"
+                :safe-area-inset-bottom="false"
+                @close="help.close"
+            >
                 <view v-if="help.data.value" class="coop-payment-help__sheet" @touchmove.stop.prevent>
-                    <view class="coop-payment-help__head"><text>{{ help.data.value.title || '支付帮助' }}</text><button role="button" aria-label="关闭支付帮助" @tap.stop="help.close"><text class="coop-payment-help__close-mark" aria-hidden="true">×</text></button></view>
+                    <view class="coop-payment-help__head"
+                        ><text>{{ help.data.value.title || '支付帮助' }}</text
+                        ><button role="button" aria-label="关闭支付帮助" @tap.stop="help.close"
+                            ><text class="coop-payment-help__close-mark" aria-hidden="true">×</text></button
+                        ></view
+                    >
                     <scroll-view scroll-y class="coop-payment-help__body" @touchmove.stop>
-                        <view v-if="paymentIssue || orderNumber" class="coop-payment-help__safety" role="status">{{ safetyMessage }}</view>
+                        <view
+                            v-if="paymentIssue || orderNumber"
+                            class="coop-payment-help__safety"
+                            role="status"
+                            >{{ safetyMessage }}</view
+                        >
                         <view class="coop-payment-help__instructions">
-                            <view class="coop-payment-help__content" :class="{ 'is-collapsed': contentCanCollapse && !contentExpanded }">{{ help.data.value.content }}</view>
-                            <button v-if="contentCanCollapse" class="coop-payment-help__expand" :aria-expanded="contentExpanded" @tap.stop="contentExpanded = !contentExpanded">{{ contentExpanded ? '收起说明' : '查看完整说明' }}<u-icon :name="contentExpanded ? 'arrow-up' : 'arrow-down'" size="10" color="var(--primary-color,#007aff)" /></button>
+                            <view
+                                class="coop-payment-help__content"
+                                :class="{ 'is-collapsed': contentCanCollapse && !contentExpanded }"
+                                >{{ help.data.value.content }}</view
+                            >
+                            <button
+                                v-if="contentCanCollapse"
+                                class="coop-payment-help__expand"
+                                :aria-expanded="contentExpanded"
+                                @tap.stop="contentExpanded = !contentExpanded"
+                                >{{ contentExpanded ? '收起说明' : '查看完整说明'
+                                }}<u-icon
+                                    :name="contentExpanded ? 'arrow-up' : 'arrow-down'"
+                                    size="10"
+                                    color="var(--primary-color,#007aff)"
+                            /></button>
                         </view>
-                        <view class="coop-payment-help__qr"><image v-if="!imageFailed" :key="imageRevision" :src="img(help.data.value.qr_image)" mode="aspectFit" :show-menu-by-longpress="true" role="button" aria-label="客服二维码，点击查看大图" @tap.stop="preview" @error="imageFailed=true" /><view v-else class="coop-payment-help__image-error"><text>二维码暂未加载</text><button role="button" @tap.stop="reloadImage">重新加载图片</button></view><text v-if="!imageFailed">点按查看大图</text></view>
-                        <view v-if="help.data.value.remark" class="coop-payment-help__detail"><view class="coop-payment-help__detail-head"><text>添加好友备注</text><button role="button" @tap.stop="copyRemark">复制备注</button></view><text class="coop-payment-help__text">{{ help.data.value.remark }}</text></view>
-                        <view v-if="orderNumber" class="coop-payment-help__detail"><view class="coop-payment-help__detail-head"><text>当前付款单号</text><button role="button" @tap.stop="copyOrder">复制单号</button></view><text class="coop-payment-help__text">{{ orderNumber }}</text></view>
+                        <view class="coop-payment-help__qr"
+                            ><image
+                                v-if="!imageFailed"
+                                :key="imageRevision"
+                                :src="img(help.data.value.qr_image)"
+                                mode="aspectFit"
+                                :show-menu-by-longpress="true"
+                                role="button"
+                                aria-label="客服二维码，点击查看大图"
+                                @tap.stop="preview"
+                                @error="imageFailed=true"
+                            /><view v-else class="coop-payment-help__image-error"
+                                ><text>二维码暂未加载</text
+                                ><button role="button" @tap.stop="reloadImage">重新加载图片</button></view
+                            ><text v-if="!imageFailed">点按查看大图</text></view
+                        >
+                        <view v-if="help.data.value.remark" class="coop-payment-help__detail"
+                            ><view class="coop-payment-help__detail-head"
+                                ><text>添加好友备注</text
+                                ><button role="button" @tap.stop="copyRemark">复制备注</button></view
+                            ><text class="coop-payment-help__text">{{ help.data.value.remark }}</text></view
+                        >
+                        <view v-if="orderNumber" class="coop-payment-help__detail"
+                            ><view class="coop-payment-help__detail-head"
+                                ><text>当前付款单号</text
+                                ><button role="button" @tap.stop="copyOrder">复制单号</button></view
+                            ><text class="coop-payment-help__text">{{ orderNumber }}</text></view
+                        >
                         <view class="coop-payment-help__safe-end" aria-hidden="true" />
                     </scroll-view>
                 </view>

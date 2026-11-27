@@ -2,12 +2,42 @@
     <view class="lead-entry" :class="['is-'+layout,{'with-motion':shown(settings.animate)}]" :style="entryStyle">
         <view v-if="frame.hasImage" class="lead-entry-mask" :style="frame.mask" />
         <view class="lead-entry-content">
-        <view v-if="shown(settings.showTitle)&&settings.title" class="lead-entry-intro"><text class="lead-entry-title">{{ settings.title }}</text><text v-if="settings.subtitle" class="lead-entry-eyebrow">{{ settings.subtitle }}</text></view>
-        <view class="lead-entry-actions">
-            <CoopRoleEntryCard v-for="item in roleEntries" :key="item.key" class="lead-entry-role" :role="item.key" :appearance="item.appearance" :layout="item.appearance.layoutPreset || layout" :preview="store.mode==='decorate'" />
-        </view>
-        <CoopBusinessNavigation v-if="shown(settings.showBusinesses)" ref="businessRef" class="lead-entry-businesses" :appearance="businessAppearance" embedded />
-        <view v-if="shown(settings.showTools)" class="lead-entry-tools"><button hover-class="lead-entry-action--pressed" @tap="go('profile')"><CoopBusinessIcon name="store" size="small" :color="settings.iconColor" /><text>{{ settings.profileText }}</text><u-icon name="arrow-right" size="10" :color="settings.subtleColor" /></button><button hover-class="lead-entry-action--pressed" @tap="go('wallet')"><CoopBusinessIcon name="wallet" size="small" :color="settings.iconColor" /><text>{{ settings.walletText }}</text><u-icon name="arrow-right" size="10" :color="settings.subtleColor" /></button></view>
+            <view v-if="shown(settings.showTitle)&&settings.title" class="lead-entry-intro"
+                ><text class="lead-entry-title">{{ settings.title }}</text
+                ><text v-if="settings.subtitle" class="lead-entry-eyebrow">{{ settings.subtitle }}</text></view
+            >
+            <view class="lead-entry-actions">
+                <CoopRoleEntryCard
+                    v-for="item in roleEntries"
+                    :key="item.key"
+                    class="lead-entry-role"
+                    :role="item.key"
+                    :appearance="item.appearance"
+                    :layout="item.appearance.layoutPreset || layout"
+                    :preview="store.mode==='decorate'"
+                />
+            </view>
+            <CoopBusinessNavigation
+                v-if="shown(settings.showBusinesses)"
+                ref="businessRef"
+                class="lead-entry-businesses"
+                :appearance="businessAppearance"
+                embedded
+            />
+            <view v-if="shown(settings.showTools)" class="lead-entry-tools"
+                ><button hover-class="lead-entry-action--pressed" @tap="go('profile')"
+                    ><CoopBusinessIcon
+                        name="store"
+                        size="small"
+                        :color="settings.iconColor" /><text>{{ settings.profileText }}</text
+                    ><u-icon name="arrow-right" size="10" :color="settings.subtleColor" /></button
+                ><button hover-class="lead-entry-action--pressed" @tap="go('wallet')"
+                    ><CoopBusinessIcon
+                        name="wallet"
+                        size="small"
+                        :color="settings.iconColor" /><text>{{ settings.walletText }}</text
+                    ><u-icon name="arrow-right" size="10" :color="settings.subtleColor" /></button
+            ></view>
         </view>
     </view>
 </template>

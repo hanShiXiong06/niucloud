@@ -2,42 +2,186 @@
     <CoopTaskSheet :page="page" :show="show" :title="title" :inactive="true" fixed-body full @close="cancel">
         <view class="catalog-picker">
             <view class="catalog-search">
-                <CooperationSearch v-model="keyword" :placeholder="selectedView ? '搜索已选项目' : '搜索分类或名称'" :show-action="true" action-text="搜索" @search="search" @custom="search" @clear="clearSearch" />
+                <CooperationSearch
+                    v-model="keyword"
+                    :placeholder="selectedView ? '搜索已选项目' : '搜索分类或名称'"
+                    :show-action="true"
+                    action-text="搜索"
+                    @search="search"
+                    @custom="search"
+                    @clear="clearSearch"
+                />
             </view>
             <view class="catalog-selection-summary">
-                <text>{{ `已选 ${chosen.length} 项` }}<text v-if="max > 0"> / 最多 {{ max }} 项</text></text>
-                <button class="catalog-selected-toggle" :class="{ active: selectedView }" @tap="toggleSelectedView">{{ selectedView ? '返回分类' : '查看已选' }}<u-icon :name="selectedView ? 'arrow-left' : 'arrow-right'" size="11" color="#718baa" /></button>
+                <text
+                    >{{ `已选 ${chosen.length} 项` }}<text v-if="max > 0"> / 最多 {{ max }} 项</text></text
+                >
+                <button class="catalog-selected-toggle" :class="{ active: selectedView }" @tap="toggleSelectedView"
+                    >{{ selectedView ? '返回分类' : '查看已选'
+                    }}<u-icon :name="selectedView ? 'arrow-left' : 'arrow-right'" size="11" color="#718baa"
+                /></button>
             </view>
             <CoopState v-if="loading || loadError" :loading="loading" :error="loadError" @retry="load" />
             <template v-else>
                 <scroll-view v-if="!query && !selectedView" scroll-x class="catalog-categories" :show-scrollbar="false">
                     <view class="catalog-category-tabs" role="tablist" aria-label="业务分类">
-                        <view v-for="item in categories" :key="item.key" role="tab" :aria-selected="activeCategory === item.key" :class="{ active: activeCategory === item.key }" @tap="selectCategory(item.key)">
-                            <view v-if="selectionMode === 'multiple'" class="catalog-parent-check" role="checkbox" :aria-label="`${categorySelectionState(item.key).checked ? '取消全选' : '全选'}${item.name}分类`" :aria-checked="categorySelectionState(item.key).indeterminate ? 'mixed' : categorySelectionState(item.key).checked" @tap.stop="toggleCategory(item.key)"><view class="catalog-check" :class="{ checked: categorySelectionState(item.key).checked, partial: categorySelectionState(item.key).indeterminate }"><text v-if="categorySelectionState(item.key).checked">✓</text><text v-else-if="categorySelectionState(item.key).indeterminate">−</text></view></view>
-                            <text>{{ item.name }}</text><text class="catalog-category-count">{{ categoryCount(item.key) }}/{{ item.count }}</text>
+                        <view
+                            v-for="item in categories"
+                            :key="item.key"
+                            role="tab"
+                            :aria-selected="activeCategory === item.key"
+                            :class="{ active: activeCategory === item.key }"
+                            @tap="selectCategory(item.key)"
+                        >
+                            <view
+                                v-if="selectionMode === 'multiple'"
+                                class="catalog-parent-check"
+                                role="checkbox"
+                                :aria-label="`${categorySelectionState(item.key).checked ? '取消全选' : '全选'}${item.name}分类`"
+                                :aria-checked="categorySelectionState(item.key).indeterminate ? 'mixed' : categorySelectionState(item.key).checked"
+                                @tap.stop="toggleCategory(item.key)"
+                                ><view
+                                    class="catalog-check"
+                                    :class="{ checked: categorySelectionState(item.key).checked, partial: categorySelectionState(item.key).indeterminate }"
+                                    ><text v-if="categorySelectionState(item.key).checked">✓</text
+                                    ><text v-else-if="categorySelectionState(item.key).indeterminate">−</text></view
+                                ></view
+                            >
+                            <text>{{ item.name }}</text
+                            ><text class="catalog-category-count">{{ categoryCount(item.key) }}/{{ item.count }}</text>
                         </view>
                     </view>
                 </scroll-view>
-                <view class="catalog-scope"><text>{{ scopeLabel }}</text><text>{{ visibleRows.length }} 项</text></view>
+                <view class="catalog-scope"
+                    ><text>{{ scopeLabel }}</text
+                    ><text>{{ visibleRows.length }} 项</text></view
+                >
                 <view v-if="allowBulk" class="catalog-bulk">
-                    <view v-if="!selectedView" class="catalog-select-all" role="checkbox" :aria-label="query ? '全选当前搜索结果' : '全选当前范围'" :aria-checked="rangeState.indeterminate ? 'mixed' : rangeState.checked" :aria-disabled="!visibleRows.length" @tap="batch('toggle_all')">
-                        <view class="catalog-check" :class="{ checked: rangeState.checked, partial: rangeState.indeterminate }"><text v-if="rangeState.checked">✓</text><text v-else-if="rangeState.indeterminate">−</text></view><text>全选当前{{ query ? '结果' : '范围' }}</text>
+                    <view
+                        v-if="!selectedView"
+                        class="catalog-select-all"
+                        role="checkbox"
+                        :aria-label="query ? '全选当前搜索结果' : '全选当前范围'"
+                        :aria-checked="rangeState.indeterminate ? 'mixed' : rangeState.checked"
+                        :aria-disabled="!visibleRows.length"
+                        @tap="batch('toggle_all')"
+                    >
+                        <view
+                            class="catalog-check"
+                            :class="{ checked: rangeState.checked, partial: rangeState.indeterminate }"
+                            ><text v-if="rangeState.checked">✓</text
+                            ><text v-else-if="rangeState.indeterminate">−</text></view
+                        ><text>全选当前{{ query ? '结果' : '范围' }}</text>
                     </view>
-                    <text v-else class="catalog-selected-label">已选 {{ chosen.length }} 项{{ max > 0 ? ' / 最多 ' + max + ' 项' : ' · 数量不限' }}</text>
-                    <view class="catalog-bulk-tools"><button v-if="!selectedView" :disabled="!visibleRows.length" @tap="batch('invert')">反选当前{{ query ? '结果' : '范围' }}</button><button :disabled="!rangeState.count" @tap="batch('clear')">{{ selectedView && !query ? '清空已选' : '清空当前范围' }}</button></view>
+                    <text v-else class="catalog-selected-label"
+                        >已选 {{ chosen.length }} 项{{ max > 0 ? ' / 最多 ' + max + ' 项' : ' · 数量不限' }}</text
+                    >
+                    <view class="catalog-bulk-tools"
+                        ><button v-if="!selectedView" :disabled="!visibleRows.length" @tap="batch('invert')"
+                            >反选当前{{ query ? '结果' : '范围' }}</button
+                        ><button
+                            :disabled="!rangeState.count"
+                            @tap="batch('clear')"
+                            >{{ selectedView && !query ? '清空已选' : '清空当前范围' }}</button
+                        ></view
+                    >
                 </view>
                 <view class="catalog-columns">
                     <scroll-view v-if="!query && !selectedView" scroll-y class="catalog-brands" :show-scrollbar="false">
-                        <view class="catalog-brand" role="button" :aria-pressed="!activeBrand" :class="{ active: !activeBrand }" @tap="activeBrand = ''"><view class="catalog-brand-copy"><text>全部分类</text><text>{{ categoryCount(activeCategory) }}/{{ categoryRows.length }}</text></view><view v-if="selectionMode === 'multiple'" class="catalog-parent-check" role="checkbox" :aria-label="`${categorySelectionState(activeCategory).checked ? '取消全选' : '全选'}${activeCategory}分类`" :aria-checked="categorySelectionState(activeCategory).indeterminate ? 'mixed' : categorySelectionState(activeCategory).checked" @tap.stop="toggleCategory(activeCategory)"><view class="catalog-check" :class="{ checked: categorySelectionState(activeCategory).checked, partial: categorySelectionState(activeCategory).indeterminate }"><text v-if="categorySelectionState(activeCategory).checked">✓</text><text v-else-if="categorySelectionState(activeCategory).indeterminate">−</text></view></view></view>
-                        <view v-for="item in activeGroup?.brands || []" :key="item.key" class="catalog-brand" role="button" :aria-label="`查看${item.name}选项`" :aria-pressed="activeBrand === item.key" :class="{ active: activeBrand === item.key }" @tap="activeBrand = item.key"><view class="catalog-brand-copy"><text>{{ item.name }}</text><text>{{ brandCount(item.key) }}/{{ item.count }}</text></view><view v-if="selectionMode === 'multiple'" class="catalog-parent-check" role="checkbox" :aria-label="`${brandSelectionState(item.key).checked ? '取消全选' : '全选'}${activeCategory}下${item.name}`" :aria-checked="brandSelectionState(item.key).indeterminate ? 'mixed' : brandSelectionState(item.key).checked" @tap.stop="toggleBrand(item.key)"><view class="catalog-check" :class="{ checked: brandSelectionState(item.key).checked, partial: brandSelectionState(item.key).indeterminate }"><text v-if="brandSelectionState(item.key).checked">✓</text><text v-else-if="brandSelectionState(item.key).indeterminate">−</text></view></view></view>
+                        <view
+                            class="catalog-brand"
+                            role="button"
+                            :aria-pressed="!activeBrand"
+                            :class="{ active: !activeBrand }"
+                            @tap="activeBrand = ''"
+                            ><view class="catalog-brand-copy"
+                                ><text>全部分类</text
+                                ><text>{{ categoryCount(activeCategory) }}/{{ categoryRows.length }}</text></view
+                            ><view
+                                v-if="selectionMode === 'multiple'"
+                                class="catalog-parent-check"
+                                role="checkbox"
+                                :aria-label="`${categorySelectionState(activeCategory).checked ? '取消全选' : '全选'}${activeCategory}分类`"
+                                :aria-checked="categorySelectionState(activeCategory).indeterminate ? 'mixed' : categorySelectionState(activeCategory).checked"
+                                @tap.stop="toggleCategory(activeCategory)"
+                                ><view
+                                    class="catalog-check"
+                                    :class="{ checked: categorySelectionState(activeCategory).checked, partial: categorySelectionState(activeCategory).indeterminate }"
+                                    ><text v-if="categorySelectionState(activeCategory).checked">✓</text
+                                    ><text v-else-if="categorySelectionState(activeCategory).indeterminate"
+                                        >−</text
+                                    ></view
+                                ></view
+                            ></view
+                        >
+                        <view
+                            v-for="item in activeGroup?.brands || []"
+                            :key="item.key"
+                            class="catalog-brand"
+                            role="button"
+                            :aria-label="`查看${item.name}选项`"
+                            :aria-pressed="activeBrand === item.key"
+                            :class="{ active: activeBrand === item.key }"
+                            @tap="activeBrand = item.key"
+                            ><view class="catalog-brand-copy"
+                                ><text>{{ item.name }}</text
+                                ><text>{{ brandCount(item.key) }}/{{ item.count }}</text></view
+                            ><view
+                                v-if="selectionMode === 'multiple'"
+                                class="catalog-parent-check"
+                                role="checkbox"
+                                :aria-label="`${brandSelectionState(item.key).checked ? '取消全选' : '全选'}${activeCategory}下${item.name}`"
+                                :aria-checked="brandSelectionState(item.key).indeterminate ? 'mixed' : brandSelectionState(item.key).checked"
+                                @tap.stop="toggleBrand(item.key)"
+                                ><view
+                                    class="catalog-check"
+                                    :class="{ checked: brandSelectionState(item.key).checked, partial: brandSelectionState(item.key).indeterminate }"
+                                    ><text v-if="brandSelectionState(item.key).checked">✓</text
+                                    ><text v-else-if="brandSelectionState(item.key).indeterminate">−</text></view
+                                ></view
+                            ></view
+                        >
                     </scroll-view>
-                    <scroll-view :key="modelPaneKey" scroll-y class="catalog-models" :show-scrollbar="false" :lower-threshold="160" @scrolltolower="loadMore">
-                        <view v-for="item in renderedRows" :key="item.id" class="catalog-model" role="checkbox" :aria-label="item.title" :aria-checked="selectedIds.has(item.id)" @tap="toggle(item)">
-                            <view class="catalog-model-identity"><text class="catalog-model-title">{{ item.title }}</text><text v-if="query || selectedView" class="catalog-model-path">{{ item.category }} · {{ item.brand }}</text></view>
-                            <view class="catalog-check" :class="{ checked: selectedIds.has(item.id) }"><text v-if="selectedIds.has(item.id)">✓</text></view>
+                    <scroll-view
+                        :key="modelPaneKey"
+                        scroll-y
+                        class="catalog-models"
+                        :show-scrollbar="false"
+                        :lower-threshold="160"
+                        @scrolltolower="loadMore"
+                    >
+                        <view
+                            v-for="item in renderedRows"
+                            :key="item.id"
+                            class="catalog-model"
+                            role="checkbox"
+                            :aria-label="item.title"
+                            :aria-checked="selectedIds.has(item.id)"
+                            @tap="toggle(item)"
+                        >
+                            <view class="catalog-model-identity"
+                                ><text class="catalog-model-title">{{ item.title }}</text
+                                ><text v-if="query || selectedView" class="catalog-model-path"
+                                    >{{ item.category }} · {{ item.brand }}</text
+                                ></view
+                            >
+                            <view class="catalog-check" :class="{ checked: selectedIds.has(item.id) }"
+                                ><text v-if="selectedIds.has(item.id)">✓</text></view
+                            >
                         </view>
-                        <view v-if="renderedRows.length < visibleRows.length" class="catalog-load-more">上滑查看更多</view>
-                        <view v-if="!visibleRows.length" class="catalog-empty"><u-icon name="search" size="31" color="#90a2ba" /><text>{{ selectedView && !query ? '还没有选择选项' : query ? '没有匹配的选项' : '当前分类暂无选项' }}</text><button v-if="query" @tap="keyword = ''">清除搜索</button><button v-else-if="selectedView" @tap="toggleSelectedView">去分类选择</button></view>
+                        <view v-if="renderedRows.length < visibleRows.length" class="catalog-load-more"
+                            >上滑查看更多</view
+                        >
+                        <view v-if="!visibleRows.length" class="catalog-empty"
+                            ><u-icon
+                                name="search"
+                                size="31"
+                                color="#90a2ba"
+                            /><text
+                                >{{ selectedView && !query ? '还没有选择选项' : query ? '没有匹配的选项' : '当前分类暂无选项' }}</text
+                            ><button v-if="query" @tap="keyword = ''">清除搜索</button
+                            ><button v-else-if="selectedView" @tap="toggleSelectedView">去分类选择</button></view
+                        >
                     </scroll-view>
                 </view>
             </template>
@@ -45,7 +189,14 @@
         <template #footer>
             <view v-if="selectionError" class="catalog-error" role="alert">{{ selectionError }}</view>
             <view class="catalog-save-hint">{{ selectionHint }}</view>
-            <u-button :custom-style="cooperationButtonStyle" type="primary" shape="circle" :text="`确认选择（${chosen.length}）`" :disabled="loading || !!loadError" @click="confirm" />
+            <u-button
+                :custom-style="cooperationButtonStyle"
+                type="primary"
+                shape="circle"
+                :text="`确认选择（${chosen.length}）`"
+                :disabled="loading || !!loadError"
+                @click="confirm"
+            />
         </template>
     </CoopTaskSheet>
 </template>

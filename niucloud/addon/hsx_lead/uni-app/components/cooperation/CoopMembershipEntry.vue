@@ -1,8 +1,51 @@
 <template>
-    <view class="entity-membership-entry" :class="{ 'is-embedded': embedded }" :style="appearanceStyle" role="button" aria-label="查看门店会员权益" @tap="$emit('open')">
-        <text v-if="appearance.showTitle !== 0 && appearance.showTitle !== false" class="entity-membership-entry__heading">{{ appearance.title || '门店会员' }}</text>
-        <view class="entity-membership-entry__body"><image v-if="appearance.entryImage" class="entity-membership-entry__image" :src="img(appearance.entryImage)" mode="aspectFit" /><CoopBusinessIcon v-else name="member" size="default" color="var(--lead-diy-icon,#333)" /><view class="entity-membership-entry__identity"><view class="entity-membership-entry__name"><text v-if="!membershipBadgeRank(membership)" class="entity-membership-entry__title">{{ membership.level_name || '查看会员权益' }}</text><CoopLevelBadge v-if="membershipBadgeRank(membership)" :level="membershipBadgeRank(membership)" :label="membership.level_name" :appearance="membership.level_visual" :state="membershipState(membership)" variant="inline" size="small" /></view><text class="entity-membership-entry__hint">{{ membership.active ? '有效期至 ' + entityExpiry(membership.expires_at) : membership.level_code ? '已到期，负责人可续费' : appearance.subtitle || '等级、有效期与账号名额' }}</text></view><u-icon name="arrow-right" size="13" color="var(--lead-diy-subtle,#909399)" /></view>
-        <view class="entity-membership-entry__bottom"><text>{{ membership.account_limit || membership.unlimited ? '账号 ' + (membership.used_accounts ?? '—') + ' / ' + entityAccounts(membership) : '全店共享，不重复开通' }}</text><text>{{ appearance.buttonText || (membership.can_manage ? '管理权益' : '查看权益') }}</text></view>
+    <view
+        class="entity-membership-entry"
+        :class="{ 'is-embedded': embedded }"
+        :style="appearanceStyle"
+        role="button"
+        aria-label="查看门店会员权益"
+        @tap="$emit('open')"
+    >
+        <text
+            v-if="appearance.showTitle !== 0 && appearance.showTitle !== false"
+            class="entity-membership-entry__heading"
+            >{{ appearance.title || '门店会员' }}</text
+        >
+        <view class="entity-membership-entry__body"
+            ><image
+                v-if="appearance.entryImage"
+                class="entity-membership-entry__image"
+                :src="img(appearance.entryImage)"
+                mode="aspectFit" /><CoopBusinessIcon
+                v-else
+                name="member"
+                size="default"
+                color="var(--lead-diy-icon,#333)" /><view class="entity-membership-entry__identity"
+                ><view class="entity-membership-entry__name"
+                    ><text
+                        v-if="!membershipBadgeRank(membership)"
+                        class="entity-membership-entry__title"
+                        >{{ membership.level_name || '查看会员权益' }}</text
+                    ><CoopLevelBadge
+                        v-if="membershipBadgeRank(membership)"
+                        :level="membershipBadgeRank(membership)"
+                        :label="membership.level_name"
+                        :appearance="membership.level_visual"
+                        :state="membershipState(membership)"
+                        variant="inline"
+                        size="small" /></view
+                ><text
+                    class="entity-membership-entry__hint"
+                    >{{ membership.active ? '有效期至 ' + entityExpiry(membership.expires_at) : membership.level_code ? '已到期，负责人可续费' : appearance.subtitle || '等级、有效期与账号名额' }}</text
+                ></view
+            ><u-icon name="arrow-right" size="13" color="var(--lead-diy-subtle,#909399)"
+        /></view>
+        <view class="entity-membership-entry__bottom"
+            ><text
+                >{{ membership.account_limit || membership.unlimited ? '账号 ' + (membership.used_accounts ?? '—') + ' / ' + entityAccounts(membership) : '全店共享，不重复开通' }}</text
+            ><text>{{ appearance.buttonText || (membership.can_manage ? '管理权益' : '查看权益') }}</text></view
+        >
     </view>
 </template>
 <script setup lang="ts">

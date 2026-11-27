@@ -10,7 +10,14 @@ export function membershipBadgeLevel(value: unknown): MembershipBadgeLevel {
     return 0
 }
 
-export function membershipBadgeAppearance(level: unknown, state: unknown = 'locked', size: unknown = 'default', variant: unknown = 'emblem', animated: unknown = false, label: unknown = '') {
+export function membershipBadgeAppearance(
+    level: unknown,
+    state: unknown = 'locked',
+    size: unknown = 'default',
+    variant: unknown = 'emblem',
+    animated: unknown = false,
+    label: unknown = ''
+) {
     const rank = membershipBadgeLevel(level)
     const status: MembershipBadgeState = state === 'active' || state === 'expired' ? state : 'locked'
     const scale: MembershipBadgeSize = size === 'small' || size === 'large' ? size : 'default'
@@ -28,6 +35,6 @@ export function membershipBadgeAppearance(level: unknown, state: unknown = 'lock
         stateLabel,
         ariaLabel: stateLabel ? `${name}，${stateLabel}` : name,
         glowing: rank > 0 && status === 'active',
-        animated: rank >= 3 && status === 'active' && animated === true,
+        animated: rank >= 3 && status === 'active' && animated === true
     }
 }

@@ -1,142 +1,307 @@
 <template>
-<CoopTaskSheet :page="page" :show="show" title="交付详情" :subtitle="lead.status_label || coopStatusLabels[lead.status]" :busy="busy" full @close="$emit('close')">
-<CoopState v-if="loading || error" :loading="loading" :error="error" @retry="$emit('reload')" />
-<template v-else-if="lead.id">
-<view v-if="lead.membership_required" class="coop-task-rule">{{ lead.membership_message }}</view>
-<view v-if="lead.attention_reasons?.length" class="coop-task-rule">
-<view v-for="reason in lead.attention_reasons" :key="reason">{{ reason }}</view>
-</view>
-<view class="coop-state-heading">
-<view>{{ lead.can_accept ? '等待你接单' : lead.can_report ? '联系客户，反馈结果' : lead.can_pay ? '已成交，等待付佣' : lead.status_label || coopStatusLabels[lead.status] }}</view>
-<text>{{ lead.can_accept ? '接单后开放必要联系方式与附件' : '客户货款由客户与门店直接结算' }}</text>
-</view>
-<CoopResponseDeadline :lead="lead" :active="active && show && !loading && !error" />
-<view class="coop-form-section">
-<view class="coop-section-title">客户需求<text>{{ lead.business_name || businessLabels[lead.business_type] || '业务需求' }}</text>
-</view>
-<view class="coop-customer-contact">
-<view>
-<view class="coop-customer-name">{{ lead.customer_name || '客户' }}</view>
-<view class="coop-contact-number">{{ lead.mobile || '接单后查看联系电话' }}</view>
-</view>
-<view v-if="canCall" class="coop-call" @tap="call">
-<u-icon name="phone" size="25" color="var(--primary-color, #d93833)" />
-<text>联系客户</text>
-</view>
-</view>
-<view class="coop-detail-region">{{ lead.region_text }}</view>
-<CoopModels :items="lead.demands || lead.models || []" />
-<template v-for="field in lead.fields || []" :key="field.key">
-<view v-if="field.type === 'address'" class="coop-detail-address">
-<view class="coop-detail-address__head"><text>{{ field.label }}</text><button v-if="fieldValue(field)" class="coop-detail-address__copy" :disabled="busy" @tap="copyAddress(field)"><u-icon name="file-text" size="15" color="var(--primary-color, #d93833)" /><text>复制地址</text></button></view>
-<text class="coop-detail-address__value">{{ fieldValue(field) || (lead.can_accept ? '接单后查看上门地址' : '未填写') }}</text>
-</view>
-<view v-else class="coop-detail-shop"><text>{{ field.label }}</text><text>{{ fieldValue(field) || (lead.can_accept ? '接单后查看' : '未填写') }}</text></view>
-</template>
-<view v-if="lead.remark" class="coop-detail-remark">{{ lead.remark }}</view>
-<view v-if="lead.attachments?.length" class="coop-detail-images">
-<image v-for="url in lead.attachments" :key="url" :src="img(url)" mode="aspectFill" @tap="preview(url)" />
-</view>
-</view>
-<view class="coop-form-section">
-<view class="coop-section-title">交付门店</view>
-<view class="coop-detail-shop coop-detail-party">
-<text>发布方</text>
-<view v-if="lead.publisher?.name" class="coop-detail-merchant">
-<CoopMerchantAvatar :image="lead.publisher.storefront_image" :name="lead.publisher.name" :active="lead.publisher.membership?.active===true" :rank="membershipBadgeRank(lead.publisher.membership)" :appearance="lead.publisher.membership?.level_visual" :highlighted="membershipBadgeRank(lead.publisher.membership)>=3" size="small" />
-<text>{{ lead.publisher.name }}</text>
-</view>
-<text v-else>—</text>
-</view>
-<view class="coop-detail-shop coop-detail-party">
-<text>承接方</text>
-<view v-if="lead.receiver?.name" class="coop-detail-merchant">
-<CoopMerchantAvatar :image="lead.receiver.storefront_image" :name="lead.receiver.name" :active="lead.receiver.membership?.active===true" :rank="membershipBadgeRank(lead.receiver.membership)" :appearance="lead.receiver.membership?.level_visual" :highlighted="membershipBadgeRank(lead.receiver.membership)>=3" size="small" />
-<text>{{ lead.receiver.name }}</text>
-</view>
-<text v-else>尚未选定</text>
-</view>
-<view v-if="lead.can_withdraw" class="coop-detail-withdraw"><button :disabled="busy" @tap="$emit('action','withdraw')">撤回交付</button></view>
-<view v-if="assigneeName" class="coop-detail-shop">
-<text>接收成员</text>
-<text>{{ assigneeName }}</text>
-</view>
-</view>
-<view v-if="!lead.is_internal && (lead.status === 'unpaid' || lead.status === 'paid')" class="coop-form-section">
-<view class="coop-section-title">协作佣金</view>
-<view class="coop-detail-shop">
-<text>{{ lead.status === 'paid' ? '已付佣金' : '待付佣金' }}</text>
-<text>{{ coopMoney(lead.commission_amount) }}</text>
-</view>
-<view v-if="lead.status === 'paid'" class="coop-detail-shop">
-<text>发布方应得净收益</text>
-<text>{{ coopMoney(lead.net_amount) }}</text>
-</view>
-</view>
-<view v-if="lead.is_internal" class="coop-task-rule">本店内部交付，不收协作费，不产生推广奖励。</view>
-<view v-else class="coop-task-rule">成交后最低付佣 {{ coopMoney(lead.commission_minimum) }}；未成交不收协作佣金。</view>
-<view class="coop-detail-service-note"><u-collapse :border="false"><u-collapse-item title="交付与费用说明" name="delivery-rule"><view class="coop-muted">按本单发布时规则计费。客户货款由客户与门店直接结算；认证与库存匹配不代表平台担保或锁货。</view></u-collapse-item></u-collapse></view>
-<view class="coop-form-section">
-<view class="coop-fold-title" role="button" :aria-expanded="history" @tap="history = !history">编号与处理记录<u-icon :name="history ? 'arrow-up' : 'arrow-down'" size="12" color="#89939f" />
-</view>
-<template v-if="history">
-<view class="coop-muted coop-detail-remark">{{ lead.lead_no }} · {{ coopDate(lead.create_time) }}</view>
-<view v-for="item in lead.history || []" :key="item.id || item.create_time" class="coop-history-item">
-<text>{{ item.content || item.remark || item.action_label || item.action }}</text>
-<text>{{ coopDate(item.create_time) }}</text>
-</view>
-<view v-if="!lead.history?.length" class="coop-muted">暂无处理记录</view>
-</template>
-</view>
-<view v-if="lead.notice?.length" class="coop-form-section"><u-collapse :border="false"><u-collapse-item title="消息提醒记录" name="notice-records"><view v-for="item in lead.notice" :key="item.id" class="coop-history-item"><view><text>{{ noticeChannel(item.channel) }} · {{ noticeStatus(item.status) }}</text><view class="coop-muted">{{ item.message }}</view></view><text>{{ coopDate(item.create_time) }}</text></view></u-collapse-item></u-collapse></view>
-</template>
-<template #footer>
-<view v-if="lead.id && !loading && !error" class="coop-footer-actions">
-<template v-if="lead.can_accept">
-<view class="coop-secondary">
-<u-button :custom-style="cooperationButtonStyle" shape="circle" text="暂不承接" :disabled="busy" @click="$emit('action', 'reject')" />
-</view>
-<view class="coop-primary">
-<u-button :custom-style="cooperationButtonStyle" type="primary" shape="circle" text="接受交付" :disabled="busy" :loading="busy" @click="$emit('action', 'accept')" />
-</view>
-</template>
-<template v-else-if="lead.can_report">
-<view class="coop-secondary">
-<u-button :custom-style="cooperationButtonStyle" shape="circle" text="未成交" :disabled="busy" @click="$emit('action', 'no_deal')" />
-</view>
-<view class="coop-primary">
-<u-button :custom-style="cooperationButtonStyle" type="primary" shape="circle" :text="lead.is_internal ? '确认本店交付完成' : '已成交，去付佣'" :disabled="busy" :loading="busy" @click="$emit('action', 'deal')" />
-</view>
-</template>
-<view v-else-if="lead.can_pay" class="coop-primary">
-<u-button :custom-style="cooperationButtonStyle" type="primary" shape="circle" text="支付协作佣金" :disabled="busy" @click="$emit('pay')" />
-</view>
-<template v-else-if="lead.membership_required && ['selecting', 'assigned'].includes(lead.status)">
-<view v-if="lead.can_reject || lead.can_cancel || lead.can_withdraw" class="coop-secondary"><u-button :custom-style="cooperationButtonStyle" shape="circle" :text="lead.can_reject ? '暂不承接' : lead.can_cancel ? '取消线索' : '撤回交付'" :disabled="busy" @click="$emit('action', lead.can_reject ? 'reject' : lead.can_cancel ? 'cancel' : 'withdraw')" /></view>
-<view class="coop-primary"><u-button :custom-style="cooperationButtonStyle" type="primary" shape="circle" text="开通入驻权益" :disabled="busy" @click="$emit('membership')" /></view>
-</template>
-<template v-else-if="lead.can_assign">
-<view v-if="lead.can_cancel" class="coop-secondary">
-<u-button :custom-style="cooperationButtonStyle" shape="circle" text="取消线索" :disabled="busy" @click="$emit('action', 'cancel')" />
-</view>
-<view class="coop-primary">
-<u-button :custom-style="cooperationButtonStyle" type="primary" shape="circle" text="选择交付门店" :disabled="busy" @click="$emit('select')" />
-</view>
-</template>
-<template v-else-if="lead.can_reassign">
-<view class="coop-secondary">
-<u-button :custom-style="cooperationButtonStyle" shape="circle" text="继续等待" :disabled="busy" @click="$emit('close')" />
-</view>
-<view class="coop-primary">
-<u-button :custom-style="cooperationButtonStyle" type="primary" shape="circle" text="重新选择门店" :disabled="busy" :loading="busy" @click="$emit('reselect')" />
-</view>
-</template>
-<view v-else class="coop-primary">
-<u-button :custom-style="cooperationButtonStyle" shape="circle" text="返回列表" @click="$emit('close')" />
-</view>
-</view>
-</template>
-</CoopTaskSheet>
+    <CoopTaskSheet
+        :page="page"
+        :show="show"
+        title="交付详情"
+        :subtitle="lead.status_label || coopStatusLabels[lead.status]"
+        :busy="busy"
+        full
+        @close="$emit('close')"
+    >
+        <CoopState v-if="loading || error" :loading="loading" :error="error" @retry="$emit('reload')" />
+        <template v-else-if="lead.id">
+            <view v-if="lead.membership_required" class="coop-task-rule">{{ lead.membership_message }}</view>
+            <view v-if="lead.attention_reasons?.length" class="coop-task-rule">
+                <view v-for="reason in lead.attention_reasons" :key="reason">{{ reason }}</view>
+            </view>
+            <view class="coop-state-heading">
+                <view
+                    >{{ lead.can_accept ? '等待你接单' : lead.can_report ? '联系客户，反馈结果' : lead.can_pay ? '已成交，等待付佣' : lead.status_label || coopStatusLabels[lead.status] }}</view
+                >
+                <text>{{ lead.can_accept ? '接单后开放必要联系方式与附件' : '客户货款由客户与门店直接结算' }}</text>
+            </view>
+            <CoopResponseDeadline :lead="lead" :active="active && show && !loading && !error" />
+            <view class="coop-form-section">
+                <view class="coop-section-title"
+                    >客户需求<text>{{ lead.business_name || businessLabels[lead.business_type] || '业务需求' }}</text>
+                </view>
+                <view class="coop-customer-contact">
+                    <view>
+                        <view class="coop-customer-name">{{ lead.customer_name || '客户' }}</view>
+                        <view class="coop-contact-number">{{ lead.mobile || '接单后查看联系电话' }}</view>
+                    </view>
+                    <view v-if="canCall" class="coop-call" @tap="call">
+                        <u-icon name="phone" size="25" color="var(--primary-color, #d93833)" />
+                        <text>联系客户</text>
+                    </view>
+                </view>
+                <view class="coop-detail-region">{{ lead.region_text }}</view>
+                <CoopModels :items="lead.demands || lead.models || []" />
+                <template v-for="field in lead.fields || []" :key="field.key">
+                    <view v-if="field.type === 'address'" class="coop-detail-address">
+                        <view class="coop-detail-address__head"
+                            ><text>{{ field.label }}</text
+                            ><button
+                                v-if="fieldValue(field)"
+                                class="coop-detail-address__copy"
+                                :disabled="busy"
+                                @tap="copyAddress(field)"
+                                ><u-icon name="file-text" size="15" color="var(--primary-color, #d93833)" /><text
+                                    >复制地址</text
+                                ></button
+                            ></view
+                        >
+                        <text
+                            class="coop-detail-address__value"
+                            >{{ fieldValue(field) || (lead.can_accept ? '接单后查看上门地址' : '未填写') }}</text
+                        >
+                    </view>
+                    <view v-else class="coop-detail-shop"
+                        ><text>{{ field.label }}</text
+                        ><text>{{ fieldValue(field) || (lead.can_accept ? '接单后查看' : '未填写') }}</text></view
+                    >
+                </template>
+                <view v-if="lead.remark" class="coop-detail-remark">{{ lead.remark }}</view>
+                <view v-if="lead.attachments?.length" class="coop-detail-images">
+                    <image
+                        v-for="url in lead.attachments"
+                        :key="url"
+                        :src="img(url)"
+                        mode="aspectFill"
+                        @tap="preview(url)"
+                    />
+                </view>
+            </view>
+            <view class="coop-form-section">
+                <view class="coop-section-title">交付门店</view>
+                <view class="coop-detail-shop coop-detail-party">
+                    <text>发布方</text>
+                    <view v-if="lead.publisher?.name" class="coop-detail-merchant">
+                        <CoopMerchantAvatar
+                            :image="lead.publisher.storefront_image"
+                            :name="lead.publisher.name"
+                            :active="lead.publisher.membership?.active===true"
+                            :rank="membershipBadgeRank(lead.publisher.membership)"
+                            :appearance="lead.publisher.membership?.level_visual"
+                            :highlighted="membershipBadgeRank(lead.publisher.membership)>=3"
+                            size="small"
+                        />
+                        <text>{{ lead.publisher.name }}</text>
+                    </view>
+                    <text v-else>—</text>
+                </view>
+                <view class="coop-detail-shop coop-detail-party">
+                    <text>承接方</text>
+                    <view v-if="lead.receiver?.name" class="coop-detail-merchant">
+                        <CoopMerchantAvatar
+                            :image="lead.receiver.storefront_image"
+                            :name="lead.receiver.name"
+                            :active="lead.receiver.membership?.active===true"
+                            :rank="membershipBadgeRank(lead.receiver.membership)"
+                            :appearance="lead.receiver.membership?.level_visual"
+                            :highlighted="membershipBadgeRank(lead.receiver.membership)>=3"
+                            size="small"
+                        />
+                        <text>{{ lead.receiver.name }}</text>
+                    </view>
+                    <text v-else>尚未选定</text>
+                </view>
+                <view v-if="lead.can_withdraw" class="coop-detail-withdraw"
+                    ><button :disabled="busy" @tap="$emit('action','withdraw')">撤回交付</button></view
+                >
+                <view v-if="assigneeName" class="coop-detail-shop">
+                    <text>接收成员</text>
+                    <text>{{ assigneeName }}</text>
+                </view>
+            </view>
+            <view
+                v-if="!lead.is_internal && (lead.status === 'unpaid' || lead.status === 'paid')"
+                class="coop-form-section"
+            >
+                <view class="coop-section-title">协作佣金</view>
+                <view class="coop-detail-shop">
+                    <text>{{ lead.status === 'paid' ? '已付佣金' : '待付佣金' }}</text>
+                    <text>{{ coopMoney(lead.commission_amount) }}</text>
+                </view>
+                <view v-if="lead.status === 'paid'" class="coop-detail-shop">
+                    <text>发布方应得净收益</text>
+                    <text>{{ coopMoney(lead.net_amount) }}</text>
+                </view>
+            </view>
+            <view v-if="lead.is_internal" class="coop-task-rule">本店内部交付，不收协作费，不产生推广奖励。</view>
+            <view v-else class="coop-task-rule"
+                >成交后最低付佣 {{ coopMoney(lead.commission_minimum) }}；未成交不收协作佣金。</view
+            >
+            <view class="coop-detail-service-note"
+                ><u-collapse :border="false"
+                    ><u-collapse-item title="交付与费用说明" name="delivery-rule"
+                        ><view class="coop-muted"
+                            >按本单发布时规则计费。客户货款由客户与门店直接结算；认证与库存匹配不代表平台担保或锁货。</view
+                        ></u-collapse-item
+                    ></u-collapse
+                ></view
+            >
+            <view class="coop-form-section">
+                <view class="coop-fold-title" role="button" :aria-expanded="history" @tap="history = !history"
+                    >编号与处理记录<u-icon :name="history ? 'arrow-up' : 'arrow-down'" size="12" color="#89939f" />
+                </view>
+                <template v-if="history">
+                    <view class="coop-muted coop-detail-remark"
+                        >{{ lead.lead_no }} · {{ coopDate(lead.create_time) }}</view
+                    >
+                    <view
+                        v-for="item in lead.history || []"
+                        :key="item.id || item.create_time"
+                        class="coop-history-item"
+                    >
+                        <text>{{ item.content || item.remark || item.action_label || item.action }}</text>
+                        <text>{{ coopDate(item.create_time) }}</text>
+                    </view>
+                    <view v-if="!lead.history?.length" class="coop-muted">暂无处理记录</view>
+                </template>
+            </view>
+            <view v-if="lead.notice?.length" class="coop-form-section"
+                ><u-collapse :border="false"
+                    ><u-collapse-item title="消息提醒记录" name="notice-records"
+                        ><view v-for="item in lead.notice" :key="item.id" class="coop-history-item"
+                            ><view
+                                ><text>{{ noticeChannel(item.channel) }} · {{ noticeStatus(item.status) }}</text
+                                ><view class="coop-muted">{{ item.message }}</view></view
+                            ><text>{{ coopDate(item.create_time) }}</text></view
+                        ></u-collapse-item
+                    ></u-collapse
+                ></view
+            >
+        </template>
+        <template #footer>
+            <view v-if="lead.id && !loading && !error" class="coop-footer-actions">
+                <template v-if="lead.can_accept">
+                    <view class="coop-secondary">
+                        <u-button
+                            :custom-style="cooperationButtonStyle"
+                            shape="circle"
+                            text="暂不承接"
+                            :disabled="busy"
+                            @click="$emit('action', 'reject')"
+                        />
+                    </view>
+                    <view class="coop-primary">
+                        <u-button
+                            :custom-style="cooperationButtonStyle"
+                            type="primary"
+                            shape="circle"
+                            text="接受交付"
+                            :disabled="busy"
+                            :loading="busy"
+                            @click="$emit('action', 'accept')"
+                        />
+                    </view>
+                </template>
+                <template v-else-if="lead.can_report">
+                    <view class="coop-secondary">
+                        <u-button
+                            :custom-style="cooperationButtonStyle"
+                            shape="circle"
+                            text="未成交"
+                            :disabled="busy"
+                            @click="$emit('action', 'no_deal')"
+                        />
+                    </view>
+                    <view class="coop-primary">
+                        <u-button
+                            :custom-style="cooperationButtonStyle"
+                            type="primary"
+                            shape="circle"
+                            :text="lead.is_internal ? '确认本店交付完成' : '已成交，去付佣'"
+                            :disabled="busy"
+                            :loading="busy"
+                            @click="$emit('action', 'deal')"
+                        />
+                    </view>
+                </template>
+                <view v-else-if="lead.can_pay" class="coop-primary">
+                    <u-button
+                        :custom-style="cooperationButtonStyle"
+                        type="primary"
+                        shape="circle"
+                        text="支付协作佣金"
+                        :disabled="busy"
+                        @click="$emit('pay')"
+                    />
+                </view>
+                <template v-else-if="lead.membership_required && ['selecting', 'assigned'].includes(lead.status)">
+                    <view v-if="lead.can_reject || lead.can_cancel || lead.can_withdraw" class="coop-secondary"
+                        ><u-button
+                            :custom-style="cooperationButtonStyle"
+                            shape="circle"
+                            :text="lead.can_reject ? '暂不承接' : lead.can_cancel ? '取消线索' : '撤回交付'"
+                            :disabled="busy"
+                            @click="$emit('action', lead.can_reject ? 'reject' : lead.can_cancel ? 'cancel' : 'withdraw')"
+                    /></view>
+                    <view class="coop-primary"
+                        ><u-button
+                            :custom-style="cooperationButtonStyle"
+                            type="primary"
+                            shape="circle"
+                            text="开通入驻权益"
+                            :disabled="busy"
+                            @click="$emit('membership')"
+                    /></view>
+                </template>
+                <template v-else-if="lead.can_assign">
+                    <view v-if="lead.can_cancel" class="coop-secondary">
+                        <u-button
+                            :custom-style="cooperationButtonStyle"
+                            shape="circle"
+                            text="取消线索"
+                            :disabled="busy"
+                            @click="$emit('action', 'cancel')"
+                        />
+                    </view>
+                    <view class="coop-primary">
+                        <u-button
+                            :custom-style="cooperationButtonStyle"
+                            type="primary"
+                            shape="circle"
+                            text="选择交付门店"
+                            :disabled="busy"
+                            @click="$emit('select')"
+                        />
+                    </view>
+                </template>
+                <template v-else-if="lead.can_reassign">
+                    <view class="coop-secondary">
+                        <u-button
+                            :custom-style="cooperationButtonStyle"
+                            shape="circle"
+                            text="继续等待"
+                            :disabled="busy"
+                            @click="$emit('close')"
+                        />
+                    </view>
+                    <view class="coop-primary">
+                        <u-button
+                            :custom-style="cooperationButtonStyle"
+                            type="primary"
+                            shape="circle"
+                            text="重新选择门店"
+                            :disabled="busy"
+                            :loading="busy"
+                            @click="$emit('reselect')"
+                        />
+                    </view>
+                </template>
+                <view v-else class="coop-primary">
+                    <u-button
+                        :custom-style="cooperationButtonStyle"
+                        shape="circle"
+                        text="返回列表"
+                        @click="$emit('close')"
+                    />
+                </view>
+            </view>
+        </template>
+    </CoopTaskSheet>
 </template>
 <script lang="ts">
 // Match Vue's transparent layout in native Mini Programs: an extra custom

@@ -1,4 +1,17 @@
-<template><ModelCatalogPicker :show="show" :page="page" :model-value="modelValue" :title="title" :subtitle="subtitle" :max="max" :business-type="businessType" :selection-mode="selectionMode" @update:model-value="$emit('update:modelValue', $event)" @close="$emit('close')" /></template>
+<template>
+    <ModelCatalogPicker
+        :show="show"
+        :page="page"
+        :model-value="modelValue"
+        :title="title"
+        :subtitle="subtitle"
+        :max="max"
+        :business-type="businessType"
+        :selection-mode="selectionMode"
+        @update:model-value="$emit('update:modelValue', $event)"
+        @close="$emit('close')"
+    />
+</template>
 <script setup lang="ts">
 import ModelCatalogPicker from './ModelCatalogPicker.vue'
 import type { CoopRow } from '../../api/cooperation'

@@ -1,13 +1,54 @@
 <template>
     <view class="lead-profile-page lead-diy-page" :style="themeColor()">
         <CoopDiyPageStatus :loading="pageLoad.loading.value" :error="pageLoad.error.value" @retry="retryPage" />
-        <view v-show="pageLoad.ready.value" class="diy-template-wrap bg-index" :style="diy.pageStyle() + (!context.preview.value && !context.displayable.value ? 'min-height:0;' : '')"><diy-group ref="groupRef" :data="diy.data" /></view>
+        <view
+            v-show="pageLoad.ready.value"
+            class="diy-template-wrap bg-index"
+            :style="diy.pageStyle() + (!context.preview.value && !context.displayable.value ? 'min-height:0;' : '')"
+            ><diy-group ref="groupRef" :data="diy.data"
+        /></view>
         <template v-if="pageLoad.ready.value && !context.preview.value">
-            <view v-if="!context.loggedIn.value" class="lead-profile-page__status"><CoopState title="欢迎来到商户协作" hint="登录后查看自己的门店、权益与协作收益" icon="account" /><u-button :custom-style="cooperationButtonStyle" type="primary" shape="circle" text="使用会员身份登录" @click="context.login(loginParams)" /></view>
-            <view v-else-if="context.loading.value || context.error.value" class="lead-profile-page__status"><CoopState :loading="context.loading.value" :error="context.error.value" @retry="context.refresh()" /></view>
-            <view v-else-if="context.ready.value && !context.profile.value.id && context.pendingEntity.value.status === 'pending'" class="lead-profile-page__status"><CoopState title="等待负责人确认" :hint="context.pendingEntity.value.name" icon="clock" /><u-button :custom-style="cooperationButtonStyle" type="primary" shape="circle" text="查看加入申请" @click="openEntity" /></view>
-            <view v-else-if="context.ready.value && !context.profile.value.id" class="lead-profile-page__status"><CoopState title="创建或加入门店" hint="已有门店的同事，使用负责人分享的主体码加入" icon="home" /><u-button :custom-style="cooperationButtonStyle" type="primary" shape="circle" text="创建我的门店" @click="context.action('profile')" /><button class="lead-profile-page__join" @tap="openEntity">加入已有门店</button></view>
-            <view v-if="context.profile.value.blocked_at" class="lead-profile-page__blocked" role="alert">合作已停用：{{ context.profile.value.block_reason || '请联系平台核对' }}。历史交付与已形成收益仍保留。</view>
+            <view v-if="!context.loggedIn.value" class="lead-profile-page__status"
+                ><CoopState
+                    title="欢迎来到商户协作"
+                    hint="登录后查看自己的门店、权益与协作收益"
+                    icon="account" /><u-button
+                    :custom-style="cooperationButtonStyle"
+                    type="primary"
+                    shape="circle"
+                    text="使用会员身份登录"
+                    @click="context.login(loginParams)"
+            /></view>
+            <view v-else-if="context.loading.value || context.error.value" class="lead-profile-page__status"
+                ><CoopState :loading="context.loading.value" :error="context.error.value" @retry="context.refresh()"
+            /></view>
+            <view
+                v-else-if="context.ready.value && !context.profile.value.id && context.pendingEntity.value.status === 'pending'"
+                class="lead-profile-page__status"
+                ><CoopState title="等待负责人确认" :hint="context.pendingEntity.value.name" icon="clock" /><u-button
+                    :custom-style="cooperationButtonStyle"
+                    type="primary"
+                    shape="circle"
+                    text="查看加入申请"
+                    @click="openEntity"
+            /></view>
+            <view v-else-if="context.ready.value && !context.profile.value.id" class="lead-profile-page__status"
+                ><CoopState
+                    title="创建或加入门店"
+                    hint="已有门店的同事，使用负责人分享的主体码加入"
+                    icon="home"
+                /><u-button
+                    :custom-style="cooperationButtonStyle"
+                    type="primary"
+                    shape="circle"
+                    text="创建我的门店"
+                    @click="context.action('profile')"
+                /><button class="lead-profile-page__join" @tap="openEntity">加入已有门店</button></view
+            >
+            <view v-if="context.profile.value.blocked_at" class="lead-profile-page__blocked" role="alert"
+                >合作已停用：{{ context.profile.value.block_reason || '请联系平台核对'
+                }}。历史交付与已形成收益仍保留。</view
+            >
         </template>
     </view>
 </template>

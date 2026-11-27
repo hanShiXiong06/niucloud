@@ -1,4 +1,6 @@
-<template><CoopRoleEntryCard :role="settings.role" :appearance="settings" :preview="store.mode==='decorate'" /></template>
+<template>
+    <CoopRoleEntryCard :role="settings.role" :appearance="settings" :preview="store.mode==='decorate'" />
+</template>
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
 import useDiyStore from '@/app/stores/diy'

@@ -2,8 +2,17 @@
     <view class="promotion-entry" :style="themeColor()">
         <view class="promotion-entry__card">
             <text class="promotion-entry__title">欢迎加入商户协作</text>
-            <text class="promotion-entry__hint">{{ loggedIn ? '查看我的门店与协作信息' : '登录或注册，开启门店协作' }}</text>
-            <u-button type="primary" shape="circle" :custom-style="cooperationButtonStyle" :text="loggedIn ? '进入我的页面' : '登录 / 注册'" @click="enter" />
+            <text
+                class="promotion-entry__hint"
+                >{{ loggedIn ? '查看我的门店与协作信息' : '登录或注册，开启门店协作' }}</text
+            >
+            <u-button
+                type="primary"
+                shape="circle"
+                :custom-style="cooperationButtonStyle"
+                :text="loggedIn ? '进入我的页面' : '登录 / 注册'"
+                @click="enter"
+            />
             <button class="promotion-entry__browse" @tap="browse">先逛逛</button>
         </view>
     </view>

@@ -1,116 +1,416 @@
 <template>
-<CoopTaskSheet :page="page" :show="show" title="ERP 库存同步" :subtitle="flow.subtitle" :busy="busy && !syncing && !smsMode" full @close="close">
-<template v-if="flow.step !== 'authorize' && flow.step !== 'preview'">
-    <view class="coop-connection-overview" :class="'is-' + summaryTone">
-        <view class="coop-connection-provider"><view class="coop-connection-provider__icon"><u-icon name="grid" size="23" color="#557fb4" /></view><view><text>{{ connectionProviderName }}</text><text>{{ authorizationLabel }}</text></view><text class="coop-connection-auto" :class="{ 'is-paused': channelClosed || !connection.enabled }">{{ channelClosed ? '渠道暂停' : connection.enabled ? '自动同步已开启' : '自动同步已关闭' }}</text></view>
-        <view class="coop-connection-status"><u-icon :name="statusIcon" size="25" :color="statusColor" /><text>{{ syncStateLabel }}</text></view>
-        <view v-if="!syncAttention" class="coop-connection-summary">{{ statusDescription }}</view>
-        <view v-if="run.id && !channelClosed && !syncAttention && !connection.requires_sync_restart" class="coop-sync-progress" :class="{ complete: currentSyncStatus === 'completed' }"><view><text>{{ progressText }}</text><text v-if="knownProgressPercent !== null">{{ knownProgressPercent }}%</text></view><view v-if="knownProgressPercent !== null" class="coop-connection-progress-track"><view :style="{ width: knownProgressPercent + '%' }" /></view></view>
-        <view class="coop-connection-metrics"><view><text>最近更新货盘</text><text>{{ coopDate(connection.last_sync_at) }}</text></view><view><text>同步频率</text><text>{{ savedIntervalLabel }}</text></view></view>
-        <view v-if="channelClosed" class="coop-connection-attention">该渠道已被平台暂停，暂时不能同步；原账号和历史记录保留。</view>
-        <view v-else-if="syncAttention" class="coop-connection-attention" role="alert"><text>{{ syncAttention.message }}</text></view>
-        <view v-else-if="tokenOnly && !['pending','running'].includes(currentSyncStatus)" class="coop-connection-attention"><text>临时授权到期后不能自动续登，请补齐账号密码。</text><text class="coop-connection-link" @tap="editAuthorization">补齐账号密码 ›</text></view>
-        <view v-if="setupStage && !syncAttention && !channelClosed" class="coop-connection-attention">授权已保存，按底部按钮继续完成同步设置，无需重新填写账号。</view>
-        <view class="coop-small-actions"><view><u-button :custom-style="cooperationButtonStyle" text="刷新状态" :disabled="busy" @click="refresh" /></view><view v-if="connection.enabled && !channelClosed && !syncAttention && currentSyncStatus === 'completed'"><u-button :custom-style="cooperationButtonStyle" text="重新同步" :loading="busy" :disabled="busy" @click="sync" /></view></view>
-    </view>
-
-    <view class="coop-connection-history">
-        <view class="coop-connection-heading"><text>同步记录</text><text>{{ historyCaption }}</text></view>
-        <view v-if="!stateLoaded && busy" class="coop-connection-empty"><u-loading-icon size="21" /><text>正在读取同步记录</text></view>
-        <template v-else-if="historyRows.length">
-            <view v-for="item in historyRows" :key="item.id" class="coop-sync-log">
-                <button class="coop-sync-log__toggle" :aria-expanded="expandedRunId === Number(item.id)" @tap="expandedRunId = expandedRunId === Number(item.id) ? 0 : Number(item.id)"><view class="coop-sync-log__dot" :class="'is-' + logTone(item)" /><view class="coop-sync-log__main"><view><text>{{ logStatus(item) }}</text><text v-if="item.is_current_snapshot" class="coop-sync-log__current">当前货盘</text></view><text>{{ coopDate(item.started_at || item.create_time) }}</text></view><view class="coop-sync-log__count"><text>{{ inventoryCount(item) }}</text><text>{{ item.trigger_label || triggerLabel(item.trigger_type) }}</text></view><u-icon :name="expandedRunId === Number(item.id) ? 'arrow-up' : 'arrow-down'" size="12" color="#8b99aa" /></button>
-                <view v-if="['failed','interrupted','cancelled','paused'].includes(String(item.status)) && expandedRunId !== Number(item.id)" class="coop-sync-log__issue">{{ item.message || item.error_message || '本次同步未完成，展开查看详情' }}</view>
-                <view v-if="expandedRunId === Number(item.id)" class="coop-sync-log__detail"><view><text>开始时间</text><text>{{ coopDate(item.started_at || item.create_time) }}</text></view><view><text>结束时间</text><text>{{ item.finished_at ? coopDate(item.finished_at) : ['pending','running','paused'].includes(String(item.status)) ? '尚未结束' : '尚未记录' }}</text></view><view><text>整理库存</text><text>{{ inventoryCount(item) }}<text v-if="item.page_count != null"> · {{ Number(item.page_count) }} 页</text></text></view><view class="coop-sync-log__message">{{ item.message || item.error_message || '这轮同步没有补充说明。' }}</view></view>
+    <CoopTaskSheet
+        :page="page"
+        :show="show"
+        title="ERP 库存同步"
+        :subtitle="flow.subtitle"
+        :busy="busy && !syncing && !smsMode"
+        full
+        @close="close"
+    >
+        <template v-if="flow.step !== 'authorize' && flow.step !== 'preview'">
+            <view class="coop-connection-overview" :class="'is-' + summaryTone">
+                <view class="coop-connection-provider"
+                    ><view class="coop-connection-provider__icon"><u-icon name="grid" size="23" color="#557fb4" /></view
+                    ><view
+                        ><text>{{ connectionProviderName }}</text
+                        ><text>{{ authorizationLabel }}</text></view
+                    ><text
+                        class="coop-connection-auto"
+                        :class="{ 'is-paused': channelClosed || !connection.enabled }"
+                        >{{ channelClosed ? '渠道暂停' : connection.enabled ? '自动同步已开启' : '自动同步已关闭' }}</text
+                    ></view
+                >
+                <view class="coop-connection-status"
+                    ><u-icon :name="statusIcon" size="25" :color="statusColor" /><text>{{ syncStateLabel }}</text></view
+                >
+                <view v-if="!syncAttention" class="coop-connection-summary">{{ statusDescription }}</view>
+                <view
+                    v-if="run.id && !channelClosed && !syncAttention && !connection.requires_sync_restart"
+                    class="coop-sync-progress"
+                    :class="{ complete: currentSyncStatus === 'completed' }"
+                    ><view
+                        ><text>{{ progressText }}</text
+                        ><text v-if="knownProgressPercent !== null">{{ knownProgressPercent }}%</text></view
+                    ><view v-if="knownProgressPercent !== null" class="coop-connection-progress-track"
+                        ><view :style="{ width: knownProgressPercent + '%' }" /></view
+                ></view>
+                <view class="coop-connection-metrics"
+                    ><view
+                        ><text>最近更新货盘</text><text>{{ coopDate(connection.last_sync_at) }}</text></view
+                    ><view
+                        ><text>同步频率</text><text>{{ savedIntervalLabel }}</text></view
+                    ></view
+                >
+                <view v-if="channelClosed" class="coop-connection-attention"
+                    >该渠道已被平台暂停，暂时不能同步；原账号和历史记录保留。</view
+                >
+                <view v-else-if="syncAttention" class="coop-connection-attention" role="alert"
+                    ><text>{{ syncAttention.message }}</text></view
+                >
+                <view
+                    v-else-if="tokenOnly && !['pending','running'].includes(currentSyncStatus)"
+                    class="coop-connection-attention"
+                    ><text>临时授权到期后不能自动续登，请补齐账号密码。</text
+                    ><text class="coop-connection-link" @tap="editAuthorization">补齐账号密码 ›</text></view
+                >
+                <view v-if="setupStage && !syncAttention && !channelClosed" class="coop-connection-attention"
+                    >授权已保存，按底部按钮继续完成同步设置，无需重新填写账号。</view
+                >
+                <view class="coop-small-actions"
+                    ><view
+                        ><u-button
+                            :custom-style="cooperationButtonStyle"
+                            text="刷新状态"
+                            :disabled="busy"
+                            @click="refresh" /></view
+                    ><view
+                        v-if="connection.enabled && !channelClosed && !syncAttention && currentSyncStatus === 'completed'"
+                        ><u-button
+                            :custom-style="cooperationButtonStyle"
+                            text="重新同步"
+                            :loading="busy"
+                            :disabled="busy"
+                            @click="sync" /></view
+                ></view>
             </view>
+
+            <view class="coop-connection-history">
+                <view class="coop-connection-heading"
+                    ><text>同步记录</text><text>{{ historyCaption }}</text></view
+                >
+                <view v-if="!stateLoaded && busy" class="coop-connection-empty"
+                    ><u-loading-icon size="21" /><text>正在读取同步记录</text></view
+                >
+                <template v-else-if="historyRows.length">
+                    <view v-for="item in historyRows" :key="item.id" class="coop-sync-log">
+                        <button
+                            class="coop-sync-log__toggle"
+                            :aria-expanded="expandedRunId === Number(item.id)"
+                            @tap="expandedRunId = expandedRunId === Number(item.id) ? 0 : Number(item.id)"
+                            ><view class="coop-sync-log__dot" :class="'is-' + logTone(item)" /><view
+                                class="coop-sync-log__main"
+                                ><view
+                                    ><text>{{ logStatus(item) }}</text
+                                    ><text v-if="item.is_current_snapshot" class="coop-sync-log__current"
+                                        >当前货盘</text
+                                    ></view
+                                ><text>{{ coopDate(item.started_at || item.create_time) }}</text></view
+                            ><view class="coop-sync-log__count"
+                                ><text>{{ inventoryCount(item) }}</text
+                                ><text>{{ item.trigger_label || triggerLabel(item.trigger_type) }}</text></view
+                            ><u-icon
+                                :name="expandedRunId === Number(item.id) ? 'arrow-up' : 'arrow-down'"
+                                size="12"
+                                color="#8b99aa"
+                        /></button>
+                        <view
+                            v-if="['failed','interrupted','cancelled','paused'].includes(String(item.status)) && expandedRunId !== Number(item.id)"
+                            class="coop-sync-log__issue"
+                            >{{ item.message || item.error_message || '本次同步未完成，展开查看详情' }}</view
+                        >
+                        <view v-if="expandedRunId === Number(item.id)" class="coop-sync-log__detail"
+                            ><view
+                                ><text>开始时间</text
+                                ><text>{{ coopDate(item.started_at || item.create_time) }}</text></view
+                            ><view
+                                ><text>结束时间</text
+                                ><text
+                                    >{{ item.finished_at ? coopDate(item.finished_at) : ['pending','running','paused'].includes(String(item.status)) ? '尚未结束' : '尚未记录' }}</text
+                                ></view
+                            ><view
+                                ><text>整理库存</text
+                                ><text
+                                    >{{ inventoryCount(item)
+                                    }}<text v-if="item.page_count != null">
+                                        · {{ Number(item.page_count) }} 页</text
+                                    ></text
+                                ></view
+                            ><view
+                                class="coop-sync-log__message"
+                                >{{ item.message || item.error_message || '这轮同步没有补充说明。' }}</view
+                            ></view
+                        >
+                    </view>
+                </template>
+                <view v-else class="coop-connection-empty"
+                    ><u-icon
+                        name="clock"
+                        size="25"
+                        color="#a0aec0"
+                    /><text>{{ historyAvailable ? '还没有同步记录' : '同步记录暂不可用，请刷新后重试' }}</text></view
+                >
+                <button
+                    v-if="recentRunRows.length > 3"
+                    class="coop-sync-log__more"
+                    @tap="historyExpanded = !historyExpanded"
+                    >{{ historyExpanded ? '收起记录' : '展开其余 ' + (recentRunRows.length - 3) + ' 次记录'
+                    }}<u-icon :name="historyExpanded ? 'arrow-up' : 'arrow-down'" size="12" color="#7890ad"
+                /></button>
+            </view>
+
+            <view class="coop-connection-settings"
+                ><u-collapse :border="false"
+                    ><u-collapse-item title="同步设置" name="sync-settings" icon="setting"
+                        ><view class="coop-connection-settings__body"
+                            ><view class="coop-form-row"
+                                ><text>同步间隔</text
+                                ><picker
+                                    :range="intervals"
+                                    range-key="label"
+                                    :value="intervalIndex"
+                                    :disabled="busy"
+                                    @change="selectInterval(Number($event.detail.value))"
+                                    ><view>{{ intervals[intervalIndex].label }} ›</view></picker
+                                ></view
+                            ><view v-if="intervalDirty" class="coop-sync-toggle"
+                                ><u-button
+                                    :custom-style="cooperationButtonStyle"
+                                    text="保存设置"
+                                    :disabled="busy"
+                                    :loading="busy"
+                                    @click="saveSettings" /></view
+                            ><view class="coop-detail-shop"
+                                ><text>自动同步</text
+                                ><text
+                                    >{{ channelClosed ? '平台已暂停渠道' : connection.enabled ? '已开启' : '已关闭' }}</text
+                                ></view
+                            ><view
+                                v-if="connection.enabled && connection.next_sync_at && !channelClosed"
+                                class="coop-detail-shop"
+                                ><text>计划同步时间</text><text>{{ coopDate(connection.next_sync_at) }}</text></view
+                            ><view v-if="connection.enabled && !setupStage" class="coop-sync-toggle"
+                                ><u-button
+                                    :custom-style="cooperationButtonStyle"
+                                    text="暂停自动同步"
+                                    :loading="busy"
+                                    :disabled="busy"
+                                    @click="toggleSync" /></view
+                            ><view v-if="channelClosed" class="coop-muted"
+                                >平台恢复渠道后才能继续读取库存；也可以保留账号并关闭本站自动同步。</view
+                            ></view
+                        ></u-collapse-item
+                    ><u-collapse-item title="授权账号" name="authorization-settings" icon="account"
+                        ><view class="coop-connection-settings__body"
+                            ><view class="coop-detail-shop"
+                                ><text>账号授权</text><text>{{ authorizationLabel }}</text></view
+                            ><view v-if="renewal.message" class="coop-muted">{{ renewal.message }}</view
+                            ><view class="coop-sync-toggle"
+                                ><u-button
+                                    :custom-style="cooperationButtonStyle"
+                                    :text="channelClosed ? '更换 ERP 渠道' : tokenOnly ? '补齐账号密码' : '更换或重新验证账号'"
+                                    :disabled="busy"
+                                    @click="editAuthorization" /></view></view></u-collapse-item
+                    ><u-collapse-item title="同步说明" name="sync-help" icon="info-circle"
+                        ><view class="coop-connection-help-body"
+                            ><view>只读取 ERP 库存，不修改来源系统的价格或库存。</view
+                            ><view>一轮完整同步结束后才更新货盘；未完成时保留上一批完整记录。</view
+                            ><view>记录中的数量是本轮整理的库存资料，不等于当前可售设备数。</view></view
+                        ></u-collapse-item
+                    ></u-collapse
+                ></view
+            >
         </template>
-        <view v-else class="coop-connection-empty"><u-icon name="clock" size="25" color="#a0aec0" /><text>{{ historyAvailable ? '还没有同步记录' : '同步记录暂不可用，请刷新后重试' }}</text></view>
-        <button v-if="recentRunRows.length > 3" class="coop-sync-log__more" @tap="historyExpanded = !historyExpanded">{{ historyExpanded ? '收起记录' : '展开其余 ' + (recentRunRows.length - 3) + ' 次记录' }}<u-icon :name="historyExpanded ? 'arrow-up' : 'arrow-down'" size="12" color="#7890ad" /></button>
-    </view>
-
-    <view class="coop-connection-settings"><u-collapse :border="false"><u-collapse-item title="同步设置" name="sync-settings" icon="setting"><view class="coop-connection-settings__body"><view class="coop-form-row"><text>同步间隔</text><picker :range="intervals" range-key="label" :value="intervalIndex" :disabled="busy" @change="selectInterval(Number($event.detail.value))"><view>{{ intervals[intervalIndex].label }} ›</view></picker></view><view v-if="intervalDirty" class="coop-sync-toggle"><u-button :custom-style="cooperationButtonStyle" text="保存设置" :disabled="busy" :loading="busy" @click="saveSettings" /></view><view class="coop-detail-shop"><text>自动同步</text><text>{{ channelClosed ? '平台已暂停渠道' : connection.enabled ? '已开启' : '已关闭' }}</text></view><view v-if="connection.enabled && connection.next_sync_at && !channelClosed" class="coop-detail-shop"><text>计划同步时间</text><text>{{ coopDate(connection.next_sync_at) }}</text></view><view v-if="connection.enabled && !setupStage" class="coop-sync-toggle"><u-button :custom-style="cooperationButtonStyle" text="暂停自动同步" :loading="busy" :disabled="busy" @click="toggleSync" /></view><view v-if="channelClosed" class="coop-muted">平台恢复渠道后才能继续读取库存；也可以保留账号并关闭本站自动同步。</view></view></u-collapse-item><u-collapse-item title="授权账号" name="authorization-settings" icon="account"><view class="coop-connection-settings__body"><view class="coop-detail-shop"><text>账号授权</text><text>{{ authorizationLabel }}</text></view><view v-if="renewal.message" class="coop-muted">{{ renewal.message }}</view><view class="coop-sync-toggle"><u-button :custom-style="cooperationButtonStyle" :text="channelClosed ? '更换 ERP 渠道' : tokenOnly ? '补齐账号密码' : '更换或重新验证账号'" :disabled="busy" @click="editAuthorization" /></view></view></u-collapse-item><u-collapse-item title="同步说明" name="sync-help" icon="info-circle"><view class="coop-connection-help-body"><view>只读取 ERP 库存，不修改来源系统的价格或库存。</view><view>一轮完整同步结束后才更新货盘；未完成时保留上一批完整记录。</view><view>记录中的数量是本轮整理的库存资料，不等于当前可售设备数。</view></view></u-collapse-item></u-collapse></view>
-</template>
-<view v-if="flow.step === 'authorize'" class="coop-form-section">
-<view class="coop-section-title">{{ selectedChannelAvailable ? '填写' + selectedProviderName + '账号' : '填写 ERP 账号' }}</view>
-<template v-if="flow.step === 'authorize'">
-<view v-if="!selectedChannelAvailable" class="coop-task-rule">{{ providers.length ? '当前渠道已关闭，请选择其他开放的 ERP。原账号和历史数据不会因此删除。' : '本站当前没有开放 ERP 接入，请联系平台管理员。已有账号及历史数据保留。' }}</view>
-<view class="coop-form-column">
-<text>ERP 来源</text>
-<picker :range="providerOptions" range-key="name" :value="providerIndex" :disabled="busy || !providers.length" @change="changeProvider(providerOptions[Number($event.detail.value)]?.key || '')">
-<view class="coop-picker-field">{{ schema ? selectedProviderName : (channelClosed && provider === connection.provider ? connectionProviderName + '（已关闭）' : '选择 ERP') }} ›</view>
-</picker>
-</view>
-<template v-if="selectedChannelAvailable">
-<view v-for="field in credentialFields" :key="field.key" class="coop-form-column">
-<text>{{ field.label }}</text>
-<u-input v-model="credentials[field.key]" :custom-style="cooperationInputStyle" :password="!!field.secret" :disabled="busy" :maxlength="field.max_length || 512" :placeholder="`填写${field.label}`" />
-</view>
-<template v-if="interactive">
-<view v-for="field in schema?.interactive_auth?.fields || []" :key="field.key" class="coop-form-column">
-<text>{{ field.label }}</text>
-<u-input v-model="authorization[field.key]" :custom-style="cooperationInputStyle" :password="!!field.secret" :disabled="busy" :maxlength="field.max_length || 4096" :placeholder="`填写${field.label}`" />
-</view>
-<view v-if="smsMode" class="coop-form-column">
-<text>短信验证码</text>
-<view class="coop-captcha-row coop-sms-row">
-<view class="coop-sms-input"><u-input v-model="authorization.code" :custom-style="cooperationInputStyle" type="number" :maxlength="codeLength" :placeholder="`填写 ${codeLength} 位数字验证码`" :disabled="busy || !challengeToken" /></view>
-<view class="coop-sms-action"><u-button :custom-style="cooperationButtonStyle" :disabled="busy || smsRetrySeconds > 0 || !validSmsMobile" :loading="challengeSending" :text="smsRetrySeconds > 0 ? smsRetrySeconds + 's 后重发' : challengeToken ? '重新获取' : '获取验证码'" @click="challenge" /></view>
-</view>
-<view v-if="challengeToken" class="coop-muted">验证码已发送至 {{ smsMobileMask }}，请在有效期内完成验证。</view>
-<view v-else-if="smsRetrySeconds > 0" class="coop-muted">请求已提交，请稍后再试；系统不会自动重发短信。</view>
-</view>
-<template v-else>
-<view class="coop-captcha-row">
-<image v-if="captchaImage" :src="captchaImage" mode="aspectFit" @tap="challenge" />
-<view class="coop-captcha-action"><u-button :custom-style="cooperationButtonStyle" :disabled="busy" :text="captchaImage ? '刷新验证码' : '获取验证码'" @click="challenge" /></view>
-</view>
-<view class="coop-form-column">
-<text>图片验证码</text>
-<u-input v-model="authorization.code" :custom-style="cooperationInputStyle" maxlength="4" placeholder="填写图片中的验证码" :disabled="busy" />
-</view>
-</template>
-<picker v-if="companies.length" :range="companies" range-key="name" :value="companyIndex" :disabled="busy" @change="companyId = String(companies[Number($event.detail.value)]?.id || '')">
-<view class="coop-picker-field">{{ companies[companyIndex]?.name || '选择所属公司' }} ›</view>
-</picker>
-</template>
-<view v-if="scopeFields.length" class="coop-fold-title" @tap="scopeOpen = !scopeOpen">来源范围（通常自动识别）<u-icon :name="scopeOpen ? 'arrow-up' : 'arrow-down'" size="12" color="#89939f" />
-</view>
-<template v-if="scopeOpen">
-<view v-for="field in scopeFields" :key="field.key" class="coop-form-column">
-<text>{{ field.label }}</text>
-<u-input v-model="scope[field.key]" :custom-style="cooperationInputStyle" :disabled="busy" :placeholder="field.required ? '必填' : '可留空自动核对'" />
-</view>
-</template>
-
-</template>
-</template>
-</view>
-<view v-if="preview" class="coop-form-section">
-<view class="coop-section-title">核对本次来源</view>
-<view class="coop-muted">验证成功，尚未保存授权。请确认下面的来源门店。</view>
-<view class="coop-detail-shop">
-<text>来源门店</text>
-<text>{{ preview.identity?.name || preview.identity?.store_id || '尚未核对' }}</text>
-</view>
-<view class="coop-detail-shop">
-<text>验证样本</text>
-<text>{{ preview.first_page_count ?? '—' }} 条，启用后同步完整库存</text>
-</view>
-<picker v-if="preview.requires_store_selection" :range="preview.stores || []" range-key="name" :value="storeIndex" :disabled="busy" @change="scope.store_id = String(preview.stores[Number($event.detail.value)]?.store_id || '')">
-<view class="coop-picker-field">{{ scope.store_id || '选择一个来源门店后重新验证' }} ›</view>
-</picker>
-<view class="coop-consent" @tap="!busy && (confirmed = !confirmed)">
-<CoopSelectionMark :selected="confirmed" />
-<text>我已核对{{ selectedProviderName }}的来源门店，同意保存授权并开启自动库存同步。</text>
-</view>
-<view class="coop-muted">确认后会保存本次授权并开始首次同步；不会修改 ERP 库存。更换账号将影响后续库存匹配。</view>
-</view>
-<view v-if="error" class="coop-inline-error coop-form-error">{{ error }}</view>
-<view v-if="flow.step === 'authorize' || flow.step === 'preview'" class="coop-connection-help"><u-collapse :border="false"><u-collapse-item title="授权与同步说明" name="authorization" icon="info-circle"><view class="coop-connection-help-body"><view>账号授权仅用于读取库存。请使用门店授权的账号；启用同步不会修改 ERP 价格或库存。</view><view>{{ renewalNote }}</view><view>验证失败不会更换原接入。需要扫码或子账号时，请使用已获授权的账号。</view></view></u-collapse-item></u-collapse></view>
-<template #footer>
-<view class="coop-connection-actions"><view v-if="flow.showSecondary" class="coop-connection-secondary"><u-button :custom-style="cooperationButtonStyle" shape="circle" :text="flow.secondaryLabel" :disabled="busy && !syncing" @click="secondaryAction" /></view><view class="coop-connection-primary"><u-button :custom-style="cooperationButtonStyle" shape="circle" type="primary" :text="smsMode && flow.primary === 'verify' ? '验证并预览' : flow.primaryLabel" :loading="busy && !challengeSending" :disabled="primaryDisabled" @click="primaryAction" /></view></view>
-</template>
-</CoopTaskSheet>
+        <view v-if="flow.step === 'authorize'" class="coop-form-section">
+            <view
+                class="coop-section-title"
+                >{{ selectedChannelAvailable ? '填写' + selectedProviderName + '账号' : '填写 ERP 账号' }}</view
+            >
+            <template v-if="flow.step === 'authorize'">
+                <view
+                    v-if="!selectedChannelAvailable"
+                    class="coop-task-rule"
+                    >{{ providers.length ? '当前渠道已关闭，请选择其他开放的 ERP。原账号和历史数据不会因此删除。' : '本站当前没有开放 ERP 接入，请联系平台管理员。已有账号及历史数据保留。' }}</view
+                >
+                <view class="coop-form-column">
+                    <text>ERP 来源</text>
+                    <picker
+                        :range="providerOptions"
+                        range-key="name"
+                        :value="providerIndex"
+                        :disabled="busy || !providers.length"
+                        @change="changeProvider(providerOptions[Number($event.detail.value)]?.key || '')"
+                    >
+                        <view class="coop-picker-field"
+                            >{{ schema ? selectedProviderName : (channelClosed && provider === connection.provider ? connectionProviderName + '（已关闭）' : '选择 ERP') }}
+                            ›</view
+                        >
+                    </picker>
+                </view>
+                <template v-if="selectedChannelAvailable">
+                    <view v-for="field in credentialFields" :key="field.key" class="coop-form-column">
+                        <text>{{ field.label }}</text>
+                        <u-input
+                            v-model="credentials[field.key]"
+                            :custom-style="cooperationInputStyle"
+                            :password="!!field.secret"
+                            :disabled="busy"
+                            :maxlength="field.max_length || 512"
+                            :placeholder="`填写${field.label}`"
+                        />
+                    </view>
+                    <template v-if="interactive">
+                        <view
+                            v-for="field in schema?.interactive_auth?.fields || []"
+                            :key="field.key"
+                            class="coop-form-column"
+                        >
+                            <text>{{ field.label }}</text>
+                            <u-input
+                                v-model="authorization[field.key]"
+                                :custom-style="cooperationInputStyle"
+                                :password="!!field.secret"
+                                :disabled="busy"
+                                :maxlength="field.max_length || 4096"
+                                :placeholder="`填写${field.label}`"
+                            />
+                        </view>
+                        <view v-if="smsMode" class="coop-form-column">
+                            <text>短信验证码</text>
+                            <view class="coop-captcha-row coop-sms-row">
+                                <view class="coop-sms-input"
+                                    ><u-input
+                                        v-model="authorization.code"
+                                        :custom-style="cooperationInputStyle"
+                                        type="number"
+                                        :maxlength="codeLength"
+                                        :placeholder="`填写 ${codeLength} 位数字验证码`"
+                                        :disabled="busy || !challengeToken"
+                                /></view>
+                                <view class="coop-sms-action"
+                                    ><u-button
+                                        :custom-style="cooperationButtonStyle"
+                                        :disabled="busy || smsRetrySeconds > 0 || !validSmsMobile"
+                                        :loading="challengeSending"
+                                        :text="smsRetrySeconds > 0 ? smsRetrySeconds + 's 后重发' : challengeToken ? '重新获取' : '获取验证码'"
+                                        @click="challenge"
+                                /></view>
+                            </view>
+                            <view v-if="challengeToken" class="coop-muted"
+                                >验证码已发送至 {{ smsMobileMask }}，请在有效期内完成验证。</view
+                            >
+                            <view v-else-if="smsRetrySeconds > 0" class="coop-muted"
+                                >请求已提交，请稍后再试；系统不会自动重发短信。</view
+                            >
+                        </view>
+                        <template v-else>
+                            <view class="coop-captcha-row">
+                                <image v-if="captchaImage" :src="captchaImage" mode="aspectFit" @tap="challenge" />
+                                <view class="coop-captcha-action"
+                                    ><u-button
+                                        :custom-style="cooperationButtonStyle"
+                                        :disabled="busy"
+                                        :text="captchaImage ? '刷新验证码' : '获取验证码'"
+                                        @click="challenge"
+                                /></view>
+                            </view>
+                            <view class="coop-form-column">
+                                <text>图片验证码</text>
+                                <u-input
+                                    v-model="authorization.code"
+                                    :custom-style="cooperationInputStyle"
+                                    maxlength="4"
+                                    placeholder="填写图片中的验证码"
+                                    :disabled="busy"
+                                />
+                            </view>
+                        </template>
+                        <picker
+                            v-if="companies.length"
+                            :range="companies"
+                            range-key="name"
+                            :value="companyIndex"
+                            :disabled="busy"
+                            @change="companyId = String(companies[Number($event.detail.value)]?.id || '')"
+                        >
+                            <view class="coop-picker-field"
+                                >{{ companies[companyIndex]?.name || '选择所属公司' }} ›</view
+                            >
+                        </picker>
+                    </template>
+                    <view v-if="scopeFields.length" class="coop-fold-title" @tap="scopeOpen = !scopeOpen"
+                        >来源范围（通常自动识别）<u-icon
+                            :name="scopeOpen ? 'arrow-up' : 'arrow-down'"
+                            size="12"
+                            color="#89939f"
+                        />
+                    </view>
+                    <template v-if="scopeOpen">
+                        <view v-for="field in scopeFields" :key="field.key" class="coop-form-column">
+                            <text>{{ field.label }}</text>
+                            <u-input
+                                v-model="scope[field.key]"
+                                :custom-style="cooperationInputStyle"
+                                :disabled="busy"
+                                :placeholder="field.required ? '必填' : '可留空自动核对'"
+                            />
+                        </view>
+                    </template>
+                </template>
+            </template>
+        </view>
+        <view v-if="preview" class="coop-form-section">
+            <view class="coop-section-title">核对本次来源</view>
+            <view class="coop-muted">验证成功，尚未保存授权。请确认下面的来源门店。</view>
+            <view class="coop-detail-shop">
+                <text>来源门店</text>
+                <text>{{ preview.identity?.name || preview.identity?.store_id || '尚未核对' }}</text>
+            </view>
+            <view class="coop-detail-shop">
+                <text>验证样本</text>
+                <text>{{ preview.first_page_count ?? '—' }} 条，启用后同步完整库存</text>
+            </view>
+            <picker
+                v-if="preview.requires_store_selection"
+                :range="preview.stores || []"
+                range-key="name"
+                :value="storeIndex"
+                :disabled="busy"
+                @change="scope.store_id = String(preview.stores[Number($event.detail.value)]?.store_id || '')"
+            >
+                <view class="coop-picker-field">{{ scope.store_id || '选择一个来源门店后重新验证' }} ›</view>
+            </picker>
+            <view class="coop-consent" @tap="!busy && (confirmed = !confirmed)">
+                <CoopSelectionMark :selected="confirmed" />
+                <text>我已核对{{ selectedProviderName }}的来源门店，同意保存授权并开启自动库存同步。</text>
+            </view>
+            <view class="coop-muted"
+                >确认后会保存本次授权并开始首次同步；不会修改 ERP 库存。更换账号将影响后续库存匹配。</view
+            >
+        </view>
+        <view v-if="error" class="coop-inline-error coop-form-error">{{ error }}</view>
+        <view v-if="flow.step === 'authorize' || flow.step === 'preview'" class="coop-connection-help"
+            ><u-collapse :border="false"
+                ><u-collapse-item title="授权与同步说明" name="authorization" icon="info-circle"
+                    ><view class="coop-connection-help-body"
+                        ><view>账号授权仅用于读取库存。请使用门店授权的账号；启用同步不会修改 ERP 价格或库存。</view
+                        ><view>{{ renewalNote }}</view
+                        ><view>验证失败不会更换原接入。需要扫码或子账号时，请使用已获授权的账号。</view></view
+                    ></u-collapse-item
+                ></u-collapse
+            ></view
+        >
+        <template #footer>
+            <view class="coop-connection-actions"
+                ><view v-if="flow.showSecondary" class="coop-connection-secondary"
+                    ><u-button
+                        :custom-style="cooperationButtonStyle"
+                        shape="circle"
+                        :text="flow.secondaryLabel"
+                        :disabled="busy && !syncing"
+                        @click="secondaryAction" /></view
+                ><view class="coop-connection-primary"
+                    ><u-button
+                        :custom-style="cooperationButtonStyle"
+                        shape="circle"
+                        type="primary"
+                        :text="smsMode && flow.primary === 'verify' ? '验证并预览' : flow.primaryLabel"
+                        :loading="busy && !challengeSending"
+                        :disabled="primaryDisabled"
+                        @click="primaryAction" /></view
+            ></view>
+        </template>
+    </CoopTaskSheet>
 </template>
 <script lang="ts">
 // Match Vue's transparent layout in native Mini Programs: an extra custom
@@ -344,7 +644,8 @@ onBeforeUnmount(() => { sequence++; driving = false; stopPolling(); clearSecret(
 .coop-sms-input { flex: 1; min-width: 0; }
 .coop-sms-action { width: 214rpx; flex: none; }
 .coop-sync-progress { background: #edf3fa; border-radius: 10rpx; padding: 22rpx; margin-top: 20rpx; color: #637a95; font-size: 23rpx; line-height: 1.8; }.coop-sync-progress.complete { color: #52765e; background: #edf7ef; }.coop-sync-progress>view { display: flex; align-items: center; gap: 12rpx; font-size: 28rpx; font-weight: 600; margin-bottom: 8rpx; }.coop-sync-progress>text { display: block; }
-.coop-connection-actions { display: flex; align-items: center; gap: 20rpx; width: 100%; }.coop-connection-secondary { flex: 0 0 28%; min-width: 0; }.coop-connection-primary { flex: 1; min-width: 0; }.coop-connection-help { margin: 20rpx 24rpx; background: #fff; border-radius: 12rpx; }.coop-connection-help-body { font-size: 23rpx; color: #8490a0; line-height: 1.8; padding: 0 8rpx 18rpx; }.coop-connection-help-body>view+view { margin-top: 12rpx; }</style>
+.coop-connection-actions { display: flex; align-items: center; gap: 20rpx; width: 100%; }.coop-connection-secondary { flex: 0 0 28%; min-width: 0; }.coop-connection-primary { flex: 1; min-width: 0; }.coop-connection-help { margin: 20rpx 24rpx; background: #fff; border-radius: 12rpx; }.coop-connection-help-body { font-size: 23rpx; color: #8490a0; line-height: 1.8; padding: 0 8rpx 18rpx; }.coop-connection-help-body>view+view { margin-top: 12rpx; }
+</style>
 <style scoped lang="scss">
 .coop-connection-overview,.coop-connection-history,.coop-connection-settings { margin:20rpx 24rpx; background:#fff; border-radius:12rpx; overflow:hidden; }
 .coop-connection-overview { padding:28rpx; border-top:4rpx solid #d7e5f6; }

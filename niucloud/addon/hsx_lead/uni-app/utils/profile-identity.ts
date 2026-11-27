@@ -4,11 +4,11 @@ export function profileMemberNo(member: Record<string, any> = {}) {
 }
 export function profileMemberIdentifier(member: Record<string, any> = {}) {
     const number = profileMemberNo(member)
-    if (number) return { label:'UID', value:number }
+    if (number) return { label: 'UID', value: number }
     const id = Number(member.member_id)
     // Older/test accounts may not have a framework member_no. Show their real
     // account ID explicitly as ID; never invent an NIU number or rewrite data.
-    return { label:'ID', value:Number.isSafeInteger(id) && id > 0 ? String(id) : '' }
+    return { label: 'ID', value: Number.isSafeInteger(id) && id > 0 ? String(id) : '' }
 }
 export function profileMemberBalance(member: Record<string, any> = {}) {
     const cents = (value: unknown) => {
@@ -18,8 +18,11 @@ export function profileMemberBalance(member: Record<string, any> = {}) {
         const number = Number(whole) * 100 + Number(decimal.padEnd(2, '0'))
         return Number.isSafeInteger(number) ? number : null
     }
-    const balance = cents(member.balance), money = cents(member.money)
+    const balance = cents(member.balance),
+        money = cents(member.money)
     if (balance === null || money === null || !Number.isSafeInteger(balance + money)) return '—'
     return ((balance + money) / 100).toFixed(2)
 }
-export function profileIdentityStyle(value: unknown) { return value === 'member' ? 'member' : 'store' }
+export function profileIdentityStyle(value: unknown) {
+    return value === 'member' ? 'member' : 'store'
+}

@@ -2,9 +2,48 @@
     <view v-if="componentVisible" class="lead-profile-section" :style="componentStyle">
         <view v-if="frame.hasImage" class="lead-profile-section__mask" :style="maskStyle" />
         <view class="lead-profile-section__content">
-            <view v-if="kind!=='benefits' && visibleFlag('showTitle') && settings.title" class="lead-profile-section__heading"><text>{{ settings.title }}</text><text v-if="kind!=='promotion' && settings.subtitle" class="lead-profile-section__subtitle">{{ settings.subtitle }}</text></view><text v-if="context.preview.value" class="lead-profile-section__demo" title="示例门店与金额仅供布局预览">装修示例</text>
-            <CoopMemberIdentity v-if="kind==='identity' && identityStyle==='member'" :profile="context.displayProfile.value" :member="context.displayMember.value" :appearance="resolvedAppearance" :preview="context.preview.value" @action="action($event)" />
-            <CoopProfilePanel v-else :profile="context.displayProfile.value" :member="context.displayMember.value" :config="context.displayConfig.value" :providers="[]" display-only :section="kind" :appearance="resolvedAppearance" :busy="context.preview.value" @edit="action('profile')" @settings="action('settings')" @balance="action('balance')" @outgoing="action('outgoing')" @incoming="action('incoming')" @members="action('members')" @connection="action('connection')" @inventory="action('inventory')" @subscribe="action('subscribe')" @membership="action('membership')" @promotion="action('promotion', $event)" />
+            <view
+                v-if="kind!=='benefits' && visibleFlag('showTitle') && settings.title"
+                class="lead-profile-section__heading"
+                ><text>{{ settings.title }}</text
+                ><text
+                    v-if="kind!=='promotion' && settings.subtitle"
+                    class="lead-profile-section__subtitle"
+                    >{{ settings.subtitle }}</text
+                ></view
+            ><text v-if="context.preview.value" class="lead-profile-section__demo" title="示例门店与金额仅供布局预览"
+                >装修示例</text
+            >
+            <CoopMemberIdentity
+                v-if="kind==='identity' && identityStyle==='member'"
+                :profile="context.displayProfile.value"
+                :member="context.displayMember.value"
+                :appearance="resolvedAppearance"
+                :preview="context.preview.value"
+                @action="action($event)"
+            />
+            <CoopProfilePanel
+                v-else
+                :profile="context.displayProfile.value"
+                :member="context.displayMember.value"
+                :config="context.displayConfig.value"
+                :providers="[]"
+                display-only
+                :section="kind"
+                :appearance="resolvedAppearance"
+                :busy="context.preview.value"
+                @edit="action('profile')"
+                @settings="action('settings')"
+                @balance="action('balance')"
+                @outgoing="action('outgoing')"
+                @incoming="action('incoming')"
+                @members="action('members')"
+                @connection="action('connection')"
+                @inventory="action('inventory')"
+                @subscribe="action('subscribe')"
+                @membership="action('membership')"
+                @promotion="action('promotion', $event)"
+            />
         </view>
     </view>
 </template>

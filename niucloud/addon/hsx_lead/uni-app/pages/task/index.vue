@@ -1,4 +1,16 @@
-<template><CooperationWorkbench v-if="task" ref="workbench" :task="task" :initial-id="id" :initial-store-id="storeId" :initial-payment-id="paymentId" :initial-business-type="businessType" :initial-promotion-tab="promotionTab" :initial-inviter="inviter" /></template>
+<template>
+    <CooperationWorkbench
+        v-if="task"
+        ref="workbench"
+        :task="task"
+        :initial-id="id"
+        :initial-store-id="storeId"
+        :initial-payment-id="paymentId"
+        :initial-business-type="businessType"
+        :initial-promotion-tab="promotionTab"
+        :initial-inviter="inviter"
+    />
+</template>
 <script setup lang="ts">
 import { ref } from 'vue'
 import { onHide, onLoad, onShow } from '@dcloudio/uni-app'

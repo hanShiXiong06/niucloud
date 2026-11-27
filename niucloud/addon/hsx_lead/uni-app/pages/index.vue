@@ -1,8 +1,13 @@
 <template>
     <view class="lead-home lead-diy-page" :style="themeColor()">
         <CoopDiyPageStatus :loading="pageLoad.loading.value" :error="pageLoad.error.value" @retry="retry" />
-        <view v-show="pageLoad.ready.value" class="diy-template-wrap bg-index" :style="diy.pageStyle()"><diy-group ref="groupRef" :data="diy.data" /></view>
-        <CoopPendingEntry :active="entryActive && pageLoad.ready.value && !decorating" @publish="openCooperationTask('publish')" />
+        <view v-show="pageLoad.ready.value" class="diy-template-wrap bg-index" :style="diy.pageStyle()"
+            ><diy-group ref="groupRef" :data="diy.data"
+        /></view>
+        <CoopPendingEntry
+            :active="entryActive && pageLoad.ready.value && !decorating"
+            @publish="openCooperationTask('publish')"
+        />
     </view>
 </template>
 <script setup lang="ts">

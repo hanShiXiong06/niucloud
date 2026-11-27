@@ -2,37 +2,91 @@
     <view class="coop-guest-workspace">
         <view class="coop-guest-hero">
             <view class="coop-guest-hero__copy">
-                <text class="coop-guest-hero__eyebrow">{{ outgoing ? '把客户交给合适的门店' : '让门店能力承接客户需求' }}</text>
-                <text class="coop-guest-hero__title">{{ outgoing ? '客户在当地\n交付也在当地' : '做好本地交付\n接住每一份信任' }}</text>
+                <text
+                    class="coop-guest-hero__eyebrow"
+                    >{{ outgoing ? '把客户交给合适的门店' : '让门店能力承接客户需求' }}</text
+                >
+                <text
+                    class="coop-guest-hero__title"
+                    >{{ outgoing ? '客户在当地\n交付也在当地' : '做好本地交付\n接住每一份信任' }}</text
+                >
             </view>
             <image class="coop-guest-hero__image" :src="heroImage" mode="aspectFit" aria-hidden="true" />
         </view>
-        <text class="coop-guest-intro">{{ outgoing ? '发布客户需求，按地区和业务找到交付门店，后续进度在这里跟进。' : '登记门店的经营范围，承接商户交付的客户，跟进、成交，一处处理。' }}</text>
+        <text
+            class="coop-guest-intro"
+            >{{ outgoing ? '发布客户需求，按地区和业务找到交付门店，后续进度在这里跟进。' : '登记门店的经营范围，承接商户交付的客户，跟进、成交，一处处理。' }}</text
+        >
 
         <view class="coop-guest-primary">
-            <u-button :custom-style="cooperationButtonStyle" type="primary" shape="circle" :disabled="enabled === false" :text="enabled === false ? '协作服务暂未开放' : outgoing ? '发布客户需求' : '登记门店交付能力'" @click="act(outgoing ? 'publish' : 'profile')" />
+            <u-button
+                :custom-style="cooperationButtonStyle"
+                type="primary"
+                shape="circle"
+                :disabled="enabled === false"
+                :text="enabled === false ? '协作服务暂未开放' : outgoing ? '发布客户需求' : '登记门店交付能力'"
+                @click="act(outgoing ? 'publish' : 'profile')"
+            />
         </view>
-        <view v-if="error" class="coop-guest-notice" role="status"><text>业务信息暂未更新</text><button :disabled="loading" @tap="emit('retry')">重新加载</button></view>
+        <view v-if="error" class="coop-guest-notice" role="status"
+            ><text>业务信息暂未更新</text><button :disabled="loading" @tap="emit('retry')">重新加载</button></view
+        >
 
-        <view v-if="loading && !entries.length" class="coop-guest-services-loading" aria-busy="true"><u-loading-icon size="16" /><text>正在读取本站协作业务</text></view>
+        <view v-if="loading && !entries.length" class="coop-guest-services-loading" aria-busy="true"
+            ><u-loading-icon size="16" /><text>正在读取本站协作业务</text></view
+        >
         <view v-else-if="entries.length" class="coop-guest-services">
-            <view class="coop-guest-section-heading"><text>本站协作业务</text><text class="coop-guest-section-heading__aside">{{ entries.length }} 项服务</text></view>
+            <view class="coop-guest-section-heading"
+                ><text>本站协作业务</text
+                ><text class="coop-guest-section-heading__aside">{{ entries.length }} 项服务</text></view
+            >
             <view class="coop-guest-services__grid">
-                <button v-for="item in entries" :key="item.key" class="coop-guest-service" hover-class="coop-guest-pressed" :disabled="enabled === false" @tap="act('business', item.key)">
-                    <view class="coop-guest-service__icon" :style="{ color: item.iconColor, background: item.iconBgColor }"><CoopServiceLineIcon :shape="item.shape" :size="25" /></view>
+                <button
+                    v-for="item in entries"
+                    :key="item.key"
+                    class="coop-guest-service"
+                    hover-class="coop-guest-pressed"
+                    :disabled="enabled === false"
+                    @tap="act('business', item.key)"
+                >
+                    <view
+                        class="coop-guest-service__icon"
+                        :style="{ color: item.iconColor, background: item.iconBgColor }"
+                        ><CoopServiceLineIcon :shape="item.shape" :size="25"
+                    /></view>
                     <text>{{ item.name }}</text>
                 </button>
             </view>
         </view>
 
         <view class="coop-guest-guide">
-            <view class="coop-guest-section-heading"><text>{{ outgoing ? '从需求到交付' : '从接单到成交' }}</text></view>
+            <view class="coop-guest-section-heading"
+                ><text>{{ outgoing ? '从需求到交付' : '从接单到成交' }}</text></view
+            >
             <view v-for="(step, index) in steps" :key="step.title" class="coop-guest-step">
-                <view class="coop-guest-step__number"><text>{{ index + 1 }}</text><view v-if="index < steps.length - 1" class="coop-guest-step__line" /></view>
-                <view class="coop-guest-step__content"><text>{{ step.title }}</text><text>{{ step.description }}</text></view>
+                <view class="coop-guest-step__number"
+                    ><text>{{ index + 1 }}</text
+                    ><view v-if="index < steps.length - 1" class="coop-guest-step__line"
+                /></view>
+                <view class="coop-guest-step__content"
+                    ><text>{{ step.title }}</text
+                    ><text>{{ step.description }}</text></view
+                >
             </view>
         </view>
-        <button class="coop-guest-progress" hover-class="coop-guest-pressed" :disabled="enabled === false" @tap="act('progress')"><view><u-icon :name="outgoing ? 'order' : 'chat'" size="20" color="currentColor" /><text>{{ outgoing ? '查看我发出的需求' : '查看交付给我的客户' }}</text></view><u-icon name="arrow-right" size="13" color="#8b95a5" /></button>
+        <button
+            class="coop-guest-progress"
+            hover-class="coop-guest-pressed"
+            :disabled="enabled === false"
+            @tap="act('progress')"
+            ><view
+                ><u-icon
+                    :name="outgoing ? 'order' : 'chat'"
+                    size="20"
+                    color="currentColor"
+                /><text>{{ outgoing ? '查看我发出的需求' : '查看交付给我的客户' }}</text></view
+            ><u-icon name="arrow-right" size="13" color="#8b95a5"
+        /></button>
     </view>
 </template>
 

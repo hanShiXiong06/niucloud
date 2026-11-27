@@ -1,24 +1,114 @@
 <template>
-    <CoopTaskSheet :page="page" :show="show" title="发布客户需求" :busy="busy || uploading" :inactive="regionOpen" full @close="$emit('close')">
+    <CoopTaskSheet
+        :page="page"
+        :show="show"
+        title="发布客户需求"
+        :busy="busy || uploading"
+        :inactive="regionOpen"
+        full
+        @close="$emit('close')"
+    >
         <view class="coop-form-section">
             <view class="coop-section-title">客户资料</view>
-            <view class="coop-form-row"><text>客户称呼</text><input v-model="form.customer_name" maxlength="80" placeholder="例如：刘先生" :disabled="busy" /></view>
-            <view class="coop-form-row"><text>联系电话</text><input v-model="form.mobile" type="number" maxlength="20" placeholder="客户手机号" :disabled="busy" /></view>
-            <view class="coop-form-column"><text>客户所在地区</text><CoopRegionFields v-model="region" :min-level="3" :disabled="busy" @overlay="regionOpen = $event" /></view>
+            <view class="coop-form-row"
+                ><text>客户称呼</text
+                ><input v-model="form.customer_name" maxlength="80" placeholder="例如：刘先生" :disabled="busy"
+            /></view>
+            <view class="coop-form-row"
+                ><text>联系电话</text
+                ><input v-model="form.mobile" type="number" maxlength="20" placeholder="客户手机号" :disabled="busy"
+            /></view>
+            <view class="coop-form-column"
+                ><text>客户所在地区</text
+                ><CoopRegionFields v-model="region" :min-level="3" :disabled="busy" @overlay="regionOpen = $event"
+            /></view>
         </view>
         <view class="coop-form-section">
             <view class="coop-section-title">客户想找什么</view>
-            <view v-if="businesses.length" class="coop-form-row coop-business-choice"><text>业务类型</text><picker :range="businesses" range-key="name" :value="businessIndex" :disabled="busy" @change="changeBusiness"><view class="coop-business-choice__value"><text>{{ business?.name || '请选择业务' }}</text><u-icon name="arrow-right" size="12" color="#8996a6" /></view></picker></view>
-            <CoopState v-if="!businesses.length" title="暂无开放的业务" hint="请联系平台配置业务类型后再发布，不会清除已填内容。" />
-            <view v-if="business" class="coop-search-trigger" @tap="chooseDemand"><u-icon name="search" color="#9ba3ad" size="17" /><text>{{ models.length ? '已选 ' + models.length + ' 项' : '选择意向' + dimension }}<text class="coop-demand-limit">{{ demandLimit ? ' · 最多 ' + demandLimit + ' 项' : ' · 数量不限' }} ›</text></text></view>
-            <CoopBusinessField v-for="field in business?.fields || []" :key="form.business_type + ':' + field.key" v-model="values[field.key]" :field="field" :disabled="busy" />
-            <view v-if="business" class="coop-publish-rule">成交最低协作费 {{ coopMoney(business.commission_minimum) }}<text> · 未成交不收费</text></view>
-            <view v-if="business" class="coop-publish-fee"><u-collapse :border="false"><u-collapse-item title="费用如何分配" name="business-fee"><view class="coop-fee-description">平台维护费按本笔协作费的 {{ feeRules.percent ?? '—' }}% 计算，最低 {{ coopMoney(feeRules.minimum) }}，剩余归发布方。以发布时保存到本单的规则为准。</view></u-collapse-item></u-collapse></view>
+            <view v-if="businesses.length" class="coop-form-row coop-business-choice"
+                ><text>业务类型</text
+                ><picker
+                    :range="businesses"
+                    range-key="name"
+                    :value="businessIndex"
+                    :disabled="busy"
+                    @change="changeBusiness"
+                    ><view class="coop-business-choice__value"
+                        ><text>{{ business?.name || '请选择业务' }}</text
+                        ><u-icon name="arrow-right" size="12" color="#8996a6" /></view></picker
+            ></view>
+            <CoopState
+                v-if="!businesses.length"
+                title="暂无开放的业务"
+                hint="请联系平台配置业务类型后再发布，不会清除已填内容。"
+            />
+            <view v-if="business" class="coop-search-trigger" @tap="chooseDemand"
+                ><u-icon name="search" color="#9ba3ad" size="17" /><text
+                    >{{ models.length ? '已选 ' + models.length + ' 项' : '选择意向' + dimension
+                    }}<text class="coop-demand-limit"
+                        >{{ demandLimit ? ' · 最多 ' + demandLimit + ' 项' : ' · 数量不限' }} ›</text
+                    ></text
+                ></view
+            >
+            <CoopBusinessField
+                v-for="field in business?.fields || []"
+                :key="form.business_type + ':' + field.key"
+                v-model="values[field.key]"
+                :field="field"
+                :disabled="busy"
+            />
+            <view v-if="business" class="coop-publish-rule"
+                >成交最低协作费 {{ coopMoney(business.commission_minimum) }}<text> · 未成交不收费</text></view
+            >
+            <view v-if="business" class="coop-publish-fee"
+                ><u-collapse :border="false"
+                    ><u-collapse-item title="费用如何分配" name="business-fee"
+                        ><view class="coop-fee-description"
+                            >平台维护费按本笔协作费的 {{ feeRules.percent ?? '—' }}% 计算，最低
+                            {{ coopMoney(feeRules.minimum) }}，剩余归发布方。以发布时保存到本单的规则为准。</view
+                        ></u-collapse-item
+                    ></u-collapse
+                ></view
+            >
         </view>
-        <view class="coop-form-section"><view class="coop-section-title">补充沟通截图<text>选填</text></view><CoopAttachmentUpload v-model="form.attachments" :disabled="busy" @pending="uploading = $event" /><view class="coop-fold-title" role="button" :aria-expanded="remarkOpen" @tap="remarkOpen = !remarkOpen">补充备注<u-icon :name="remarkOpen ? 'arrow-up' : 'arrow-down'" size="12" color="#929ba6" /></view><u-textarea v-if="remarkOpen" v-model="form.remark" :disabled="busy" :maxlength="2000" placeholder="预算、成色或到店时间等，选填" /></view>
-        <view class="coop-consent" @tap="!busy && (form.consent = !form.consent)"><CoopSelectionMark :selected="form.consent" /><text>已向客户说明，会将必要联系方式与需求交给所选门店跟进。</text></view>
+        <view class="coop-form-section"
+            ><view class="coop-section-title">补充沟通截图<text>选填</text></view
+            ><CoopAttachmentUpload v-model="form.attachments" :disabled="busy" @pending="uploading = $event" /><view
+                class="coop-fold-title"
+                role="button"
+                :aria-expanded="remarkOpen"
+                @tap="remarkOpen = !remarkOpen"
+                >补充备注<u-icon :name="remarkOpen ? 'arrow-up' : 'arrow-down'" size="12" color="#929ba6" /></view
+            ><u-textarea
+                v-if="remarkOpen"
+                v-model="form.remark"
+                :disabled="busy"
+                :maxlength="2000"
+                placeholder="预算、成色或到店时间等，选填"
+        /></view>
+        <view class="coop-consent" @tap="!busy && (form.consent = !form.consent)"
+            ><CoopSelectionMark :selected="form.consent" /><text
+                >已向客户说明，会将必要联系方式与需求交给所选门店跟进。</text
+            ></view
+        >
         <view class="coop-draft-note">返回后可继续编辑本机草稿</view>
-        <template #footer><view v-if="localError || error" class="coop-inline-error coop-submit-error" role="alert" aria-live="polite">{{ localError || error }}</view><u-button :custom-style="cooperationButtonStyle" type="primary" shape="circle" text="下一步，选交付门店" :loading="busy || uploading" loading-text="正在保存" :disabled="busy || uploading || !business" @click="submit" /></template>
+        <template #footer
+            ><view
+                v-if="localError || error"
+                class="coop-inline-error coop-submit-error"
+                role="alert"
+                aria-live="polite"
+                >{{ localError || error }}</view
+            ><u-button
+                :custom-style="cooperationButtonStyle"
+                type="primary"
+                shape="circle"
+                text="下一步，选交付门店"
+                :loading="busy || uploading"
+                loading-text="正在保存"
+                :disabled="busy || uploading || !business"
+                @click="submit"
+        /></template>
     </CoopTaskSheet>
 </template>
 <script lang="ts">
@@ -90,4 +180,6 @@ defineExpose({ clear })
 .coop-fee-description { font-size: 12px; color: #7d8b9d; line-height: 1.8; }
 </style>
 
-<style scoped>.coop-publish-rule,.coop-draft-note { font-size: 12px; color: #70829a; line-height: 1.8; }.coop-publish-rule { padding-top: 12px; }.coop-draft-note { padding: 0 16px 16px; }.coop-demand-limit { font-size: 12px; color: #8a98aa; }</style>
+<style scoped>
+.coop-publish-rule,.coop-draft-note { font-size: 12px; color: #70829a; line-height: 1.8; }.coop-publish-rule { padding-top: 12px; }.coop-draft-note { padding: 0 16px 16px; }.coop-demand-limit { font-size: 12px; color: #8a98aa; }
+</style>

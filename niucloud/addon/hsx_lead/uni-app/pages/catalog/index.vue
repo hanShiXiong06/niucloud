@@ -1,4 +1,22 @@
-<template><view class="catalog-page" :style="themeColor()"><ModelCatalogPicker v-if="ready" page :show="true" :model-value="items" :title="title" :max="max" :business-type="businessType" :selection-mode="selectionMode" :bulk-actions="bulkActions" @update:model-value="select" @close="backCooperationTask" /><template v-else><CooperationNav title="选择业务能力" back @back="backCooperationTask" /><CoopState title="请从业务表单打开选择器" hint="返回表单后重新选择，不会清除已填写的内容。" /></template></view></template>
+<template>
+    <view class="catalog-page" :style="themeColor()"
+        ><ModelCatalogPicker
+            v-if="ready"
+            page
+            :show="true"
+            :model-value="items"
+            :title="title"
+            :max="max"
+            :business-type="businessType"
+            :selection-mode="selectionMode"
+            :bulk-actions="bulkActions"
+            @update:model-value="select"
+            @close="backCooperationTask" /><template v-else
+            ><CooperationNav title="选择业务能力" back @back="backCooperationTask" /><CoopState
+                title="请从业务表单打开选择器"
+                hint="返回表单后重新选择，不会清除已填写的内容。" /></template
+    ></view>
+</template>
 <script setup lang="ts">
 import { getCurrentInstance, ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'

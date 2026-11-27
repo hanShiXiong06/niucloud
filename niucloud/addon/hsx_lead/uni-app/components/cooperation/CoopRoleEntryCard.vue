@@ -1,9 +1,32 @@
 <template>
-    <view class="coop-role-card" :class="['is-'+layout, { 'is-borderless': !shown(settings.showBorder), 'with-motion': shown(settings.animate) }]" :style="cardStyle" role="button" :aria-label="settings.title" @tap="go">
+    <view
+        class="coop-role-card"
+        :class="['is-'+layout, { 'is-borderless': !shown(settings.showBorder), 'with-motion': shown(settings.animate) }]"
+        :style="cardStyle"
+        role="button"
+        :aria-label="settings.title"
+        @tap="go"
+    >
         <view v-if="frame.hasImage" class="coop-role-card__mask" :style="frame.mask" />
         <view class="coop-role-card__content">
-            <view class="coop-role-card__copy"><text v-if="settings.title" class="coop-role-card__title">{{ settings.title }}</text><text v-if="settings.subtitle" class="coop-role-card__subtitle">{{ settings.subtitle }}</text><button v-if="settings.buttonText" class="coop-role-card__button" :class="{'is-solid': settings.buttonStyle==='solid', 'is-link': settings.buttonStyle!=='solid'}" hover-class="coop-role-card__pressed" @tap.stop="go"><text>{{ settings.buttonText }}</text><u-icon name="arrow-right" size="11" color="currentColor" /></button></view>
-            <image v-if="picture" class="coop-role-card__art" :src="picture" mode="aspectFit" /><CoopBusinessIcon v-else-if="shown(settings.showImage)" :name="role==='customers'?'customer':'store'" :color="settings.iconColor" :size="layout==='classic'?'large':'default'" />
+            <view class="coop-role-card__copy"
+                ><text v-if="settings.title" class="coop-role-card__title">{{ settings.title }}</text
+                ><text v-if="settings.subtitle" class="coop-role-card__subtitle">{{ settings.subtitle }}</text
+                ><button
+                    v-if="settings.buttonText"
+                    class="coop-role-card__button"
+                    :class="{'is-solid': settings.buttonStyle==='solid', 'is-link': settings.buttonStyle!=='solid'}"
+                    hover-class="coop-role-card__pressed"
+                    @tap.stop="go"
+                    ><text>{{ settings.buttonText }}</text
+                    ><u-icon name="arrow-right" size="11" color="currentColor" /></button
+            ></view>
+            <image v-if="picture" class="coop-role-card__art" :src="picture" mode="aspectFit" /><CoopBusinessIcon
+                v-else-if="shown(settings.showImage)"
+                :name="role==='customers'?'customer':'store'"
+                :color="settings.iconColor"
+                :size="layout==='classic'?'large':'default'"
+            />
         </view>
     </view>
 </template>

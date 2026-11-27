@@ -9,22 +9,55 @@
                 </view>
                 <image class="discovery__art" :src="storeArt" mode="aspectFit" aria-hidden="true" />
             </view>
-            <u-button type="primary" shape="circle" text="查找交付门店" :custom-style="buttonStyle" @click="navigate('browse')">
-                <view class="discovery__primary-label"><u-icon name="map" size="18" color="#fff" /><text>查找交付门店</text><u-icon name="arrow-right" size="13" color="#fff" /></view>
+            <u-button
+                type="primary"
+                shape="circle"
+                text="查找交付门店"
+                :custom-style="buttonStyle"
+                @click="navigate('browse')"
+            >
+                <view class="discovery__primary-label"
+                    ><u-icon name="map" size="18" color="#fff" /><text>查找交付门店</text
+                    ><u-icon name="arrow-right" size="13" color="#fff"
+                /></view>
             </u-button>
         </view>
 
         <view class="discovery__section-head"><text>我的经营资料</text></view>
         <view class="discovery__shortcuts">
-            <button class="discovery__shortcut discovery__shortcut--inventory" aria-label="查看我的货盘" @tap="navigate('inventory')">
-                <view class="discovery__shortcut-top"><image :src="inventoryArt" mode="aspectFit" aria-hidden="true" /><u-icon name="arrow-right" size="13" color="#8d9caf" /></view>
+            <button
+                class="discovery__shortcut discovery__shortcut--inventory"
+                aria-label="查看我的货盘"
+                @tap="navigate('inventory')"
+            >
+                <view class="discovery__shortcut-top"
+                    ><image :src="inventoryArt" mode="aspectFit" aria-hidden="true" /><u-icon
+                        name="arrow-right"
+                        size="13"
+                        color="#8d9caf"
+                /></view>
                 <text class="discovery__shortcut-title">我的货盘</text>
-                <view class="discovery__metric"><text class="discovery__metric-number">{{ inventoryCount }}</text><text>条库存参考</text></view>
+                <view class="discovery__metric"
+                    ><text class="discovery__metric-number">{{ inventoryCount }}</text
+                    ><text>条库存参考</text></view
+                >
             </button>
-            <button class="discovery__shortcut discovery__shortcut--capability" aria-label="管理我的交付能力" @tap="navigate('capability')">
-                <view class="discovery__shortcut-top"><image :src="capabilityArt" mode="aspectFit" aria-hidden="true" /><u-icon name="arrow-right" size="13" color="#8d9caf" /></view>
+            <button
+                class="discovery__shortcut discovery__shortcut--capability"
+                aria-label="管理我的交付能力"
+                @tap="navigate('capability')"
+            >
+                <view class="discovery__shortcut-top"
+                    ><image :src="capabilityArt" mode="aspectFit" aria-hidden="true" /><u-icon
+                        name="arrow-right"
+                        size="13"
+                        color="#8d9caf"
+                /></view>
                 <text class="discovery__shortcut-title">交付能力</text>
-                <view class="discovery__metric"><text class="discovery__metric-number">{{ modelCount }}</text><text>项已登记能力</text></view>
+                <view class="discovery__metric"
+                    ><text class="discovery__metric-number">{{ modelCount }}</text
+                    ><text>项已登记能力</text></view
+                >
             </button>
         </view>
     </view>

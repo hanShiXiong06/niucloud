@@ -1,27 +1,82 @@
 <template>
     <view class="coop-pending-mount">
-        <u-popup :show="pending.visible.value" mode="bottom" :round="20" :z-index="10090" :safe-area-inset-bottom="false" @close="later">
-            <view class="coop-pending" :style="themeColor()" role="dialog" aria-label="待接交付提醒" @touchmove.prevent.stop>
-                <CooperationNav title="有交付等待你处理" :safe-area-inset-top="false" :actions="[{ key: 'close', icon: 'close', ariaLabel: '稍后处理待接交付' }]" @action="later" />
+        <u-popup
+            :show="pending.visible.value"
+            mode="bottom"
+            :round="20"
+            :z-index="10090"
+            :safe-area-inset-bottom="false"
+            @close="later"
+        >
+            <view
+                class="coop-pending"
+                :style="themeColor()"
+                role="dialog"
+                aria-label="待接交付提醒"
+                @touchmove.prevent.stop
+            >
+                <CooperationNav
+                    title="有交付等待你处理"
+                    :safe-area-inset-top="false"
+                    :actions="[{ key: 'close', icon: 'close', ariaLabel: '稍后处理待接交付' }]"
+                    @action="later"
+                />
                 <scroll-view scroll-y class="coop-pending__body" @touchmove.stop>
-                    <view class="coop-pending__summary"><view class="coop-pending__icon"><u-icon name="order" size="24" color="var(--primary-color,#007aff)" /></view><view><text class="coop-pending__count">{{ pending.total.value }} 笔待接交付</text><text class="coop-pending__hint">先查看需求，再决定是否接单</text></view></view>
+                    <view class="coop-pending__summary"
+                        ><view class="coop-pending__icon"
+                            ><u-icon name="order" size="24" color="var(--primary-color,#007aff)" /></view
+                        ><view
+                            ><text class="coop-pending__count">{{ pending.total.value }} 笔待接交付</text
+                            ><text class="coop-pending__hint">先查看需求，再决定是否接单</text></view
+                        ></view
+                    >
                     <view class="coop-pending__list">
-                        <button v-for="item in pending.items.value" :key="item.id + ':' + item.assignmentVersion" class="coop-pending__item" :class="{ 'is-selected': pending.selectedId.value === item.id }" :disabled="opening" :aria-label="'选择查看' + item.businessName" @tap="select(item.id)">
-                            <view class="coop-pending__item-copy"><text class="coop-pending__business">{{ item.businessName }}</text><text class="coop-pending__meta">{{ item.publisherName }}{{ item.region ? ' · ' + item.region : '' }}</text></view>
-                            <u-icon :name="pending.selectedId.value === item.id ? 'checkmark-circle-fill' : 'arrow-right'" size="19" :color="pending.selectedId.value === item.id ? 'var(--primary-color,#007aff)' : '#9a9fa8'" />
+                        <button
+                            v-for="item in pending.items.value"
+                            :key="item.id + ':' + item.assignmentVersion"
+                            class="coop-pending__item"
+                            :class="{ 'is-selected': pending.selectedId.value === item.id }"
+                            :disabled="opening"
+                            :aria-label="'选择查看' + item.businessName"
+                            @tap="select(item.id)"
+                        >
+                            <view class="coop-pending__item-copy"
+                                ><text class="coop-pending__business">{{ item.businessName }}</text
+                                ><text class="coop-pending__meta"
+                                    >{{ item.publisherName }}{{ item.region ? ' · ' + item.region : '' }}</text
+                                ></view
+                            >
+                            <u-icon
+                                :name="pending.selectedId.value === item.id ? 'checkmark-circle-fill' : 'arrow-right'"
+                                size="19"
+                                :color="pending.selectedId.value === item.id ? 'var(--primary-color,#007aff)' : '#9a9fa8'"
+                            />
                         </button>
                     </view>
                     <text class="coop-pending__note">稍后处理不会拒单，交付仍保留在「找客户」。</text>
                 </scroll-view>
                 <view class="coop-pending__footer">
-                    <u-button type="primary" shape="circle" :custom-style="cooperationButtonStyle" :loading="opening" :disabled="opening" text="查看并处理" @click="viewSelected" />
-                    <view class="coop-pending__secondary"><button :disabled="opening" @tap="later">稍后处理</button><button :disabled="opening" @tap="publish">我先发布需求 <text>›</text></button></view>
+                    <u-button
+                        type="primary"
+                        shape="circle"
+                        :custom-style="cooperationButtonStyle"
+                        :loading="opening"
+                        :disabled="opening"
+                        text="查看并处理"
+                        @click="viewSelected"
+                    />
+                    <view class="coop-pending__secondary"
+                        ><button :disabled="opening" @tap="later">稍后处理</button
+                        ><button :disabled="opening" @tap="publish">我先发布需求 <text>›</text></button></view
+                    >
                 </view>
             </view>
         </u-popup>
     </view>
 </template>
-<script lang="ts">export default { options: { virtualHost: true } }</script>
+<script lang="ts">
+export default { options: { virtualHost: true } }
+</script>
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { getSiteId, getToken } from '@/utils/common'

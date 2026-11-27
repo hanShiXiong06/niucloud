@@ -1,25 +1,151 @@
 <template>
     <view class="income-panel">
         <view class="income-account">
-            <view class="income-account__heading"><text>可提现佣金</text><button aria-label="账户说明" @tap="showAccountHelp"><u-icon name="info-circle" size="17" color="#8993a2" /></button></view>
-            <view class="income-account__main"><text class="income-account__balance">{{ ui.ready.value ? coopMoney(ui.account.value.available) : '—' }}</text><button class="income-withdraw" :disabled="!ui.ready.value || !!ui.error.value || ui.loading.value || Number(ui.account.value.available || 0) <= 0" @tap="withdraw">提现</button></view>
-            <view class="income-account__foot"><text>提现处理中 {{ ui.ready.value ? coopMoney(ui.account.value.frozen) : '—' }}</text><button @tap="cashOutRecords">提现记录<u-icon name="arrow-right" size="11" color="#7f8a9b" /></button></view>
+            <view class="income-account__heading"
+                ><text>可提现佣金</text
+                ><button aria-label="账户说明" @tap="showAccountHelp"
+                    ><u-icon name="info-circle" size="17" color="#8993a2" /></button
+            ></view>
+            <view class="income-account__main"
+                ><text
+                    class="income-account__balance"
+                    >{{ ui.ready.value ? coopMoney(ui.account.value.available) : '—' }}</text
+                ><button
+                    class="income-withdraw"
+                    :disabled="!ui.ready.value || !!ui.error.value || ui.loading.value || Number(ui.account.value.available || 0) <= 0"
+                    @tap="withdraw"
+                    >提现</button
+                ></view
+            >
+            <view class="income-account__foot"
+                ><text>提现处理中 {{ ui.ready.value ? coopMoney(ui.account.value.frozen) : '—' }}</text
+                ><button @tap="cashOutRecords">提现记录<u-icon name="arrow-right" size="11" color="#7f8a9b" /></button
+            ></view>
         </view>
-        <view class="income-filter"><scroll-view scroll-x :show-scrollbar="false" class="income-types"><view class="income-types__inner"><button v-for="item in cooperationIncomeTypes" :key="item.value" :class="{ 'is-active': ui.incomeType.value === item.value }" @tap="selectType(item.value)">{{ item.label }}</button></view></scroll-view></view>
-        <view class="income-list-heading"><text>收益明细</text><button @tap="selectStatus"><text>{{ statusLabel }}</text><u-icon name="arrow-down" size="10" color="#8692a2" /></button></view>
+        <view class="income-filter"
+            ><scroll-view scroll-x :show-scrollbar="false" class="income-types"
+                ><view class="income-types__inner"
+                    ><button
+                        v-for="item in cooperationIncomeTypes"
+                        :key="item.value"
+                        :class="{ 'is-active': ui.incomeType.value === item.value }"
+                        @tap="selectType(item.value)"
+                        >{{ item.label }}</button
+                    ></view
+                ></scroll-view
+            ></view
+        >
+        <view class="income-list-heading"
+            ><text>收益明细</text
+            ><button @tap="selectStatus"
+                ><text>{{ statusLabel }}</text
+                ><u-icon name="arrow-down" size="10" color="#8692a2" /></button
+        ></view>
         <view class="income-list-area">
-            <z-paging v-if="active" :key="revision" ref="pagingRef" :model-value="ui.rows.value" class="income-pager" :fixed="false" height="100%" :auto="true" :concat="false" :scrollable="!detail" :refresher-enabled="!detail" :default-page-size="20" :auto-clean-list-when-reload="false" :safe-area-inset-bottom="false" :call-network-reject="false" :show-loading-more-no-more-line="false" loading-more-fail-text="读取失败，点击重试" loading-more-no-more-text="已显示全部收益" @query="pagingQuery">
-                <view v-if="ui.error.value && ui.rows.value.length" class="income-read-error" role="alert">{{ ui.error.value }}</view>
-                <view v-for="item in ui.rows.value" :key="cooperationIncomeKey(item)" class="income-row" role="button" @tap="openDetail(item)">
-                    <view class="income-row__icon" :class="'is-' + item.income_type"><u-icon :name="item.income_type === 'publisher' ? 'order' : 'share'" size="19" :color="item.income_type === 'publisher' ? '#9d7b4c' : 'var(--primary-color,#3978c2)'" /></view>
-                    <view class="income-row__content"><view class="income-row__title"><text>{{ cooperationIncomeLabel(item.income_type) }}<text v-if="rewardLevel(item)" class="income-row__level">{{ rewardLevel(item) }}</text></text><text class="income-row__amount" :class="{ 'is-credited': cooperationIncomeCredited(item) }">{{ cooperationIncomeCredited(item) ? '+' : '' }}{{ coopMoney(item.amount) }}</text></view><view class="income-row__person">{{ item.payer_name || item.customer_name || '协作收入' }}</view><view class="income-row__meta"><text>{{ coopDate(item.create_time) }}</text><text :class="{ 'is-pending': item.status === 'pending' }">{{ cooperationIncomeStatus(item) }}</text></view></view>
+            <z-paging
+                v-if="active"
+                :key="revision"
+                ref="pagingRef"
+                :model-value="ui.rows.value"
+                class="income-pager"
+                :fixed="false"
+                height="100%"
+                :auto="true"
+                :concat="false"
+                :scrollable="!detail"
+                :refresher-enabled="!detail"
+                :default-page-size="20"
+                :auto-clean-list-when-reload="false"
+                :safe-area-inset-bottom="false"
+                :call-network-reject="false"
+                :show-loading-more-no-more-line="false"
+                loading-more-fail-text="读取失败，点击重试"
+                loading-more-no-more-text="已显示全部收益"
+                @query="pagingQuery"
+            >
+                <view
+                    v-if="ui.error.value && ui.rows.value.length"
+                    class="income-read-error"
+                    role="alert"
+                    >{{ ui.error.value }}</view
+                >
+                <view
+                    v-for="item in ui.rows.value"
+                    :key="cooperationIncomeKey(item)"
+                    class="income-row"
+                    role="button"
+                    @tap="openDetail(item)"
+                >
+                    <view class="income-row__icon" :class="'is-' + item.income_type"
+                        ><u-icon
+                            :name="item.income_type === 'publisher' ? 'order' : 'share'"
+                            size="19"
+                            :color="item.income_type === 'publisher' ? '#9d7b4c' : 'var(--primary-color,#3978c2)'"
+                    /></view>
+                    <view class="income-row__content"
+                        ><view class="income-row__title"
+                            ><text
+                                >{{ cooperationIncomeLabel(item.income_type)
+                                }}<text
+                                    v-if="rewardLevel(item)"
+                                    class="income-row__level"
+                                    >{{ rewardLevel(item) }}</text
+                                ></text
+                            ><text
+                                class="income-row__amount"
+                                :class="{ 'is-credited': cooperationIncomeCredited(item) }"
+                                >{{ cooperationIncomeCredited(item) ? '+' : '' }}{{ coopMoney(item.amount) }}</text
+                            ></view
+                        ><view
+                            class="income-row__person"
+                            >{{ item.payer_name || item.customer_name || '协作收入' }}</view
+                        ><view class="income-row__meta"
+                            ><text>{{ coopDate(item.create_time) }}</text
+                            ><text
+                                :class="{ 'is-pending': item.status === 'pending' }"
+                                >{{ cooperationIncomeStatus(item) }}</text
+                            ></view
+                        ></view
+                    >
                 </view>
-                <template #empty="{ isLoadFailed }"><view class="income-empty"><CoopState :error="isLoadFailed ? ui.error.value || '收益读取失败，请重试' : ''" title="还没有这类收益" hint="符合规则的付款后，收益会记录在这里" icon="order" @retry="refresh" /></view></template>
+                <template #empty="{ isLoadFailed }"
+                    ><view class="income-empty"
+                        ><CoopState
+                            :error="isLoadFailed ? ui.error.value || '收益读取失败，请重试' : ''"
+                            title="还没有这类收益"
+                            hint="符合规则的付款后，收益会记录在这里"
+                            icon="order"
+                            @retry="refresh" /></view
+                ></template>
             </z-paging>
         </view>
         <CoopTaskSheet :show="!!detail" title="收益详情" @close="detail = null">
-            <view v-if="detail && rewardLevel(detail)" class="income-detail__level">{{ rewardLevel(detail) }} · 按原订单的有效计佣金额计算</view>
-            <view v-if="detail" class="income-detail"><view class="income-detail__amount">{{ coopMoney(detail.amount) }}</view><view class="income-detail__status">{{ cooperationIncomeStatus(detail) }}</view><view class="income-detail__row"><text>收益类型</text><text>{{ cooperationIncomeLabel(detail.income_type) }}</text></view><view class="income-detail__row"><text>{{ detail.income_type === 'publisher' ? '客户' : '付费会员' }}</text><text>{{ detail.payer_name || detail.customer_name || '—' }}</text></view><template v-if="detail.income_type !== 'publisher'"><view class="income-detail__row"><text>计佣基数</text><text>{{ coopMoney(detail.base_amount) }}</text></view><view class="income-detail__row"><text>付款时比例</text><text>{{ detail.rate }}%</text></view></template><view class="income-detail__row"><text>产生时间</text><text>{{ coopDate(detail.create_time) }}</text></view><view v-if="Number(detail.available_at) > 0" class="income-detail__row"><text>预计可结算</text><text>{{ coopDate(detail.available_at) }}</text></view><view v-if="detail.reason" class="income-detail__reason">{{ detail.reason }}</view><view v-if="detail.income_type === 'membership'" class="income-detail__basis">只按实付服务费计算，不含押金和经验费</view></view>
+            <view v-if="detail && rewardLevel(detail)" class="income-detail__level"
+                >{{ rewardLevel(detail) }} · 按原订单的有效计佣金额计算</view
+            >
+            <view v-if="detail" class="income-detail"
+                ><view class="income-detail__amount">{{ coopMoney(detail.amount) }}</view
+                ><view class="income-detail__status">{{ cooperationIncomeStatus(detail) }}</view
+                ><view class="income-detail__row"
+                    ><text>收益类型</text><text>{{ cooperationIncomeLabel(detail.income_type) }}</text></view
+                ><view class="income-detail__row"
+                    ><text>{{ detail.income_type === 'publisher' ? '客户' : '付费会员' }}</text
+                    ><text>{{ detail.payer_name || detail.customer_name || '—' }}</text></view
+                ><template v-if="detail.income_type !== 'publisher'"
+                    ><view class="income-detail__row"
+                        ><text>计佣基数</text><text>{{ coopMoney(detail.base_amount) }}</text></view
+                    ><view class="income-detail__row"
+                        ><text>付款时比例</text><text>{{ detail.rate }}%</text></view
+                    ></template
+                ><view class="income-detail__row"
+                    ><text>产生时间</text><text>{{ coopDate(detail.create_time) }}</text></view
+                ><view v-if="Number(detail.available_at) > 0" class="income-detail__row"
+                    ><text>预计可结算</text><text>{{ coopDate(detail.available_at) }}</text></view
+                ><view v-if="detail.reason" class="income-detail__reason">{{ detail.reason }}</view
+                ><view v-if="detail.income_type === 'membership'" class="income-detail__basis"
+                    >只按实付服务费计算，不含押金和经验费</view
+                ></view
+            >
         </CoopTaskSheet>
     </view>
 </template>

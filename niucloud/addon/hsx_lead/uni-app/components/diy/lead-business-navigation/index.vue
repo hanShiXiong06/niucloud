@@ -1,4 +1,10 @@
-<template><view class="lead-business-frame" :style="frame.style"><view v-if="frame.hasImage" class="lead-business-frame-mask" :style="frame.mask" /><view class="lead-business-frame-content"><CoopBusinessNavigation ref="businessRef" :appearance="settings" /></view></view></template>
+<template>
+    <view class="lead-business-frame" :style="frame.style"
+        ><view v-if="frame.hasImage" class="lead-business-frame-mask" :style="frame.mask" /><view
+            class="lead-business-frame-content"
+            ><CoopBusinessNavigation ref="businessRef" :appearance="settings" /></view
+    ></view>
+</template>
 <script setup lang="ts">
 import {computed,onMounted,ref} from 'vue'
 import useDiyStore from '@/app/stores/diy'

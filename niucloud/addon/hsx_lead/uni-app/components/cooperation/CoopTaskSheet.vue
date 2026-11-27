@@ -1,23 +1,71 @@
 <template>
     <view v-if="page && show" class="coop-sheet is-full is-page">
-        <CooperationNav :title="title" :subtitle="subtitle" :actions="actions" back :disabled="busy" @back="close" @action="runAction" />
+        <CooperationNav
+            :title="title"
+            :subtitle="subtitle"
+            :actions="actions"
+            back
+            :disabled="busy"
+            @back="close"
+            @action="runAction"
+        />
         <view v-if="$slots.filters" class="coop-sheet__filters"><slot name="filters" /></view>
         <view v-if="fixedBody" class="coop-sheet__body coop-sheet__body--fixed" @touchmove.stop><slot /></view>
-        <scroll-view v-else :scroll-y="!inactive" :scroll-into-view="scrollIntoView" :scroll-with-animation="true" class="coop-sheet__body" @touchmove.stop><slot /></scroll-view>
+        <scroll-view
+            v-else
+            :scroll-y="!inactive"
+            :scroll-into-view="scrollIntoView"
+            :scroll-with-animation="true"
+            class="coop-sheet__body"
+            @touchmove.stop
+            ><slot
+        /></scroll-view>
         <view v-if="$slots.footer" class="coop-sheet__footer"><slot name="footer" /></view>
         <view v-else class="coop-sheet__safe-end" aria-hidden="true" />
     </view>
-    <view v-else-if="!page" class="coop-popup-mount"><u-popup :show="show" mode="bottom" :round="12" :z-index="taskSheetZIndex" :safe-area-inset-bottom="false" :close-on-click-overlay="!busy" @close="close">
-        <view class="coop-sheet" :class="{ 'is-full': full }" @touchmove.prevent.stop>
-            <CooperationNav v-if="full" :title="title" :subtitle="subtitle" :actions="actions" back :disabled="busy" @back="close" @action="runAction" />
-            <view v-else class="coop-sheet__head"><view><text class="coop-sheet__title">{{ title }}</text><view v-if="subtitle" class="coop-sheet__subtitle">{{ subtitle }}</view></view><button class="coop-icon-button" :disabled="busy" aria-label="关闭当前任务" @tap="close"><u-icon name="close" size="19" color="#7a818b" /></button></view>
-            <view v-if="$slots.filters" class="coop-sheet__filters"><slot name="filters" /></view>
-            <view v-if="fixedBody" class="coop-sheet__body coop-sheet__body--fixed" @touchmove.stop><slot /></view>
-            <scroll-view v-else :scroll-y="!inactive" :scroll-into-view="scrollIntoView" :scroll-with-animation="true" class="coop-sheet__body" @touchmove.stop><slot /></scroll-view>
-            <view v-if="$slots.footer" class="coop-sheet__footer"><slot name="footer" /></view>
-            <view v-else class="coop-sheet__safe-end" aria-hidden="true" />
-        </view>
-    </u-popup></view>
+    <view v-else-if="!page" class="coop-popup-mount"
+        ><u-popup
+            :show="show"
+            mode="bottom"
+            :round="12"
+            :z-index="taskSheetZIndex"
+            :safe-area-inset-bottom="false"
+            :close-on-click-overlay="!busy"
+            @close="close"
+        >
+            <view class="coop-sheet" :class="{ 'is-full': full }" @touchmove.prevent.stop>
+                <CooperationNav
+                    v-if="full"
+                    :title="title"
+                    :subtitle="subtitle"
+                    :actions="actions"
+                    back
+                    :disabled="busy"
+                    @back="close"
+                    @action="runAction"
+                />
+                <view v-else class="coop-sheet__head"
+                    ><view
+                        ><text class="coop-sheet__title">{{ title }}</text
+                        ><view v-if="subtitle" class="coop-sheet__subtitle">{{ subtitle }}</view></view
+                    ><button class="coop-icon-button" :disabled="busy" aria-label="关闭当前任务" @tap="close"
+                        ><u-icon name="close" size="19" color="#7a818b" /></button
+                ></view>
+                <view v-if="$slots.filters" class="coop-sheet__filters"><slot name="filters" /></view>
+                <view v-if="fixedBody" class="coop-sheet__body coop-sheet__body--fixed" @touchmove.stop><slot /></view>
+                <scroll-view
+                    v-else
+                    :scroll-y="!inactive"
+                    :scroll-into-view="scrollIntoView"
+                    :scroll-with-animation="true"
+                    class="coop-sheet__body"
+                    @touchmove.stop
+                    ><slot
+                /></scroll-view>
+                <view v-if="$slots.footer" class="coop-sheet__footer"><slot name="footer" /></view>
+                <view v-else class="coop-sheet__safe-end" aria-hidden="true" />
+            </view> </u-popup
+    ></view>
 </template>
 <script lang="ts">
 // Match Vue's transparent layout in native Mini Programs: an extra custom

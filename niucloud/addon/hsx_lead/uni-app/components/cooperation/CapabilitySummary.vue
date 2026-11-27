@@ -3,10 +3,17 @@
         <text class="capability-summary__label">可交付型号</text>
         <button class="capability-summary__row" :disabled="disabled" aria-label="管理交付型号" @tap="manage">
             <view class="capability-summary__content">
-                <view class="capability-summary__total" :class="{ 'is-empty': !summary.count }"><template v-if="summary.count">已选 <text>{{ summary.count }}</text> 款型号</template><template v-else>尚未选择</template></view>
+                <view class="capability-summary__total" :class="{ 'is-empty': !summary.count }"
+                    ><template v-if="summary.count"
+                        >已选 <text>{{ summary.count }}</text> 款型号</template
+                    ><template v-else>尚未选择</template></view
+                >
                 <text class="capability-summary__detail">{{ summary.summaryText }}</text>
             </view>
-            <view class="capability-summary__action"><text>{{ summary.count ? '管理' : '选择' }}</text><u-icon name="arrow-right" size="13" color="var(--primary-color, #3478cc)" /></view>
+            <view class="capability-summary__action"
+                ><text>{{ summary.count ? '管理' : '选择' }}</text
+                ><u-icon name="arrow-right" size="13" color="var(--primary-color, #3478cc)"
+            /></view>
         </button>
     </view>
 </template>

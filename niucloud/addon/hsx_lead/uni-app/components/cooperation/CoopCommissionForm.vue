@@ -4,20 +4,75 @@
             <view class="coop-section-title">{{ lead.customer_name }}的交付</view>
             <CoopPaymentSummary v-if="locked" :amount="lead.commission_amount" order-created embedded />
             <view v-else class="coop-muted">客户货款另行结算，此处仅支付协作佣金。</view>
-            <view v-if="!locked" class="coop-amount-input"><text>¥</text><input v-model="amount" type="digit" :disabled="busy || blocked" maxlength="15" aria-label="协作佣金金额" :placeholder="snapshot.known ? minimum.toFixed(2) : '待规则核对'" /></view>
-            <view v-if="!locked" class="coop-amount-presets"><text v-for="value in presets" :key="value" role="button" :aria-disabled="busy || blocked" :class="{ active: Number(amount) === value }" @tap="!busy && !blocked && (amount = String(value))">¥{{ value }}</text></view>
-            <view class="coop-muted">{{ snapshot.known ? '成交最低付佣 ' + coopMoney(minimum) + '，金额自行填写，不设业务上限。' : '本单收费规则待核对，暂不能创建新支付单。' }}</view>
+            <view v-if="!locked" class="coop-amount-input"
+                ><text>¥</text
+                ><input
+                    v-model="amount"
+                    type="digit"
+                    :disabled="busy || blocked"
+                    maxlength="15"
+                    aria-label="协作佣金金额"
+                    :placeholder="snapshot.known ? minimum.toFixed(2) : '待规则核对'"
+            /></view>
+            <view v-if="!locked" class="coop-amount-presets"
+                ><text
+                    v-for="value in presets"
+                    :key="value"
+                    role="button"
+                    :aria-disabled="busy || blocked"
+                    :class="{ active: Number(amount) === value }"
+                    @tap="!busy && !blocked && (amount = String(value))"
+                    >¥{{ value }}</text
+                ></view
+            >
+            <view
+                class="coop-muted"
+                >{{ snapshot.known ? '成交最低付佣 ' + coopMoney(minimum) + '，金额自行填写，不设业务上限。' : '本单收费规则待核对，暂不能创建新支付单。' }}</view
+            >
         </view>
         <view class="coop-form-section">
             <view class="coop-section-title">本笔分配</view>
-            <view class="coop-detail-shop"><text>发布方预计获得</text><text>{{ net }}</text></view>
-            <view class="coop-detail-shop"><text>平台维护费</text><text>{{ fee }}</text></view>
+            <view class="coop-detail-shop"
+                ><text>发布方预计获得</text><text>{{ net }}</text></view
+            >
+            <view class="coop-detail-shop"
+                ><text>平台维护费</text><text>{{ fee }}</text></view
+            >
             <view v-if="locked" class="coop-payment-locked">已有待支付单，按原单金额继续支付。</view>
-            <u-collapse :border="false"><u-collapse-item title="查看本单收费规则" name="fee-rule"><view class="coop-muted">{{ snapshot.known ? `按本单发布时规则：佣金的 ${snapshot.percent}% ，最低 ${coopMoney(snapshot.feeMinimum)}` : '本单收费快照不完整，请联系平台核对。' }}</view></u-collapse-item></u-collapse>
+            <u-collapse :border="false"
+                ><u-collapse-item title="查看本单收费规则" name="fee-rule"
+                    ><view
+                        class="coop-muted"
+                        >{{ snapshot.known ? `按本单发布时规则：佣金的 ${snapshot.percent}% ，最低 ${coopMoney(snapshot.feeMinimum)}` : '本单收费快照不完整，请联系平台核对。' }}</view
+                    ></u-collapse-item
+                ></u-collapse
+            >
         </view>
-        <CoopPaymentHelp ref="paymentHelpRef" :active="show" :order="order || {}" :payment-issue="paymentHelpRequested" :inset="16" :spacing="12" @ready="handlePaymentHelpReady" />
-        <view v-if="localError || error" class="coop-inline-error coop-form-error" role="alert">{{ localError || error }}</view>
-        <template #footer><u-button :custom-style="cooperationButtonStyle" type="primary" shape="circle" :text="blocked ? '付款信息需核对' : locked ? '继续支付原单' : '确认金额，去支付'" :loading="busy" :disabled="busy || blocked || (!locked && !snapshot.known)" @click="submit" /></template>
+        <CoopPaymentHelp
+            ref="paymentHelpRef"
+            :active="show"
+            :order="order || {}"
+            :payment-issue="paymentHelpRequested"
+            :inset="16"
+            :spacing="12"
+            @ready="handlePaymentHelpReady"
+        />
+        <view
+            v-if="localError || error"
+            class="coop-inline-error coop-form-error"
+            role="alert"
+            >{{ localError || error }}</view
+        >
+        <template #footer
+            ><u-button
+                :custom-style="cooperationButtonStyle"
+                type="primary"
+                shape="circle"
+                :text="blocked ? '付款信息需核对' : locked ? '继续支付原单' : '确认金额，去支付'"
+                :loading="busy"
+                :disabled="busy || blocked || (!locked && !snapshot.known)"
+                @click="submit"
+        /></template>
     </CoopTaskSheet>
 </template>
 <script lang="ts">

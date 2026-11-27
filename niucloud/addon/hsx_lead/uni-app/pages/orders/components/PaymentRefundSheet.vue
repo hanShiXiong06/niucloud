@@ -1,37 +1,119 @@
 <template>
-    <CoopTaskSheet :show="show" :title="detail.can_request === true ? '申请退款' : '退款进度'" :busy="busy" @close="emit('close')">
+    <CoopTaskSheet
+        :show="show"
+        :title="detail.can_request === true ? '申请退款' : '退款进度'"
+        :busy="busy"
+        @close="emit('close')"
+    >
         <view class="refund-content">
-            <view class="refund-order"><text>{{ order.title || order.level_name || (order.purpose === 'membership' ? '会员开通 / 续费' : '成交协作付佣') }}</text><text>{{ order.order_no }}</text></view>
+            <view class="refund-order"
+                ><text
+                    >{{ order.title || order.level_name || (order.purpose === 'membership' ? '会员开通 / 续费' : '成交协作付佣') }}</text
+                ><text>{{ order.order_no }}</text></view
+            >
             <view v-if="loading" class="refund-loading">正在核对原付款与退款资料…</view>
             <template v-else-if="detail.order_id">
-                <view class="refund-amount"><text>{{ order.purpose === 'commission' ? '成交协作费退款' : detail.can_request === true ? '本次申请金额' : '申请退款金额' }}</text><text>{{ coopMoney(detail.amount) }}</text></view>
-                <view class="refund-channel">原路退回 · {{ order.payment_display_name || order.payment_type_name || '以原支付记录为准' }}</view>
-                <view v-if="detail.components && order.purpose === 'membership'" class="refund-components"><text>服务费 {{ coopMoney(detail.components.service) }}</text><text>押金 {{ coopMoney(detail.components.deposit) }}</text><text>经验费 {{ coopMoney(detail.components.experience) }}</text></view>
-                <view v-if="detail.status !== 'none'" class="refund-state" :class="'is-' + detail.status"><text>{{ detail.status_name || '退款待核对' }}</text><text v-if="detail.message">{{ detail.message }}</text></view>
+                <view class="refund-amount"
+                    ><text
+                        >{{ order.purpose === 'commission' ? '成交协作费退款' : detail.can_request === true ? '本次申请金额' : '申请退款金额' }}</text
+                    ><text>{{ coopMoney(detail.amount) }}</text></view
+                >
+                <view class="refund-channel"
+                    >原路退回 · {{ order.payment_display_name || order.payment_type_name || '以原支付记录为准' }}</view
+                >
+                <view v-if="detail.components && order.purpose === 'membership'" class="refund-components"
+                    ><text>服务费 {{ coopMoney(detail.components.service) }}</text
+                    ><text>押金 {{ coopMoney(detail.components.deposit) }}</text
+                    ><text>经验费 {{ coopMoney(detail.components.experience) }}</text></view
+                >
+                <view v-if="detail.status !== 'none'" class="refund-state" :class="'is-' + detail.status"
+                    ><text>{{ detail.status_name || '退款待核对' }}</text
+                    ><text v-if="detail.message">{{ detail.message }}</text></view
+                >
                 <template v-if="detail.can_request === true && !readRequired">
                     <u-form ref="formRef" :model="form" :rules="rules" label-position="top" error-type="message">
                         <u-form-item label="退款原因" prop="reason" required :border-bottom="false">
-                            <u-textarea v-model="form.reason" :disabled="busy" :maxlength="500" count height="100" placeholder="请说明退款原因，至少4个字" />
+                            <u-textarea
+                                v-model="form.reason"
+                                :disabled="busy"
+                                :maxlength="500"
+                                count
+                                height="100"
+                                placeholder="请说明退款原因，至少4个字"
+                            />
                         </u-form-item>
                     </u-form>
-                    <view class="refund-note">提交后由平台审核；退款完成前请保留原付款单。会员退款可能影响对应权益，已结算收益需先核对。</view>
+                    <view class="refund-note"
+                        >提交后由平台审核；退款完成前请保留原付款单。会员退款可能影响对应权益，已结算收益需先核对。</view
+                    >
                 </template>
                 <template v-else>
-                    <view v-if="detail.reason" class="refund-info"><text>申请原因</text><text>{{ detail.reason }}</text></view>
-                    <view v-if="detail.review_reason" class="refund-info"><text>平台回复</text><text>{{ detail.review_reason }}</text></view>
-                    <view v-if="detail.requested_at" class="refund-info"><text>申请时间</text><text>{{ coopDate(detail.requested_at) }}</text></view>
-                    <view v-if="detail.refund_no" class="refund-info"><text>退款编号</text><text>{{ detail.refund_no }}</text></view>
+                    <view v-if="detail.reason" class="refund-info"
+                        ><text>申请原因</text><text>{{ detail.reason }}</text></view
+                    >
+                    <view v-if="detail.review_reason" class="refund-info"
+                        ><text>平台回复</text><text>{{ detail.review_reason }}</text></view
+                    >
+                    <view v-if="detail.requested_at" class="refund-info"
+                        ><text>申请时间</text><text>{{ coopDate(detail.requested_at) }}</text></view
+                    >
+                    <view v-if="detail.refund_no" class="refund-info"
+                        ><text>退款编号</text><text>{{ detail.refund_no }}</text></view
+                    >
                     <view v-if="detail.block_reason" class="refund-note">{{ detail.block_reason }}</view>
-                    <view v-if="detail.logs?.length" class="refund-logs"><text class="refund-logs__title">处理记录</text><view v-for="(item, index) in detail.logs" :key="item.id || index" class="refund-log"><text>{{ item.action_name || item.action_label || item.message || item.action }}</text><text v-if="item.create_time || item.at">{{ item.operator_name ? item.operator_name + ' · ' : '' }}{{ coopDate(item.create_time || item.at) }}</text><text v-if="item.reason || item.detail?.reason || item.detail?.message">{{ item.reason || item.detail?.reason || item.detail?.message }}</text></view></view>
+                    <view v-if="detail.logs?.length" class="refund-logs"
+                        ><text class="refund-logs__title">处理记录</text
+                        ><view v-for="(item, index) in detail.logs" :key="item.id || index" class="refund-log"
+                            ><text>{{ item.action_name || item.action_label || item.message || item.action }}</text
+                            ><text v-if="item.create_time || item.at"
+                                >{{ item.operator_name ? item.operator_name + ' · ' : ''
+                                }}{{ coopDate(item.create_time || item.at) }}</text
+                            ><text
+                                v-if="item.reason || item.detail?.reason || item.detail?.message"
+                                >{{ item.reason || item.detail?.reason || item.detail?.message }}</text
+                            ></view
+                        ></view
+                    >
                 </template>
             </template>
             <view v-if="error" class="refund-error" role="alert">{{ error }}</view>
         </view>
         <template #footer>
             <view class="refund-actions">
-                <u-button v-if="readRequired || !detail.order_id" :custom-style="cooperationButtonStyle" :loading="loading" :disabled="busy" shape="circle" type="primary" text="重新读取原申请" @click="emit('reload')" />
-                <u-button v-else-if="detail.can_request === true" :custom-style="cooperationButtonStyle" :loading="busy" :disabled="loading" shape="circle" type="primary" text="提交退款申请" @click="submit" />
-                <template v-else><button v-if="detail.can_cancel === true" :disabled="busy || loading" @tap="emit('cancel')">撤回申请</button><u-button v-if="detail.can_refresh === true" :custom-style="cooperationButtonStyle" :loading="busy" :disabled="loading" shape="circle" type="primary" text="查询退款进度" @click="emit('refresh')" /><button v-else :disabled="busy || loading" @tap="emit('close')">返回付款单</button></template>
+                <u-button
+                    v-if="readRequired || !detail.order_id"
+                    :custom-style="cooperationButtonStyle"
+                    :loading="loading"
+                    :disabled="busy"
+                    shape="circle"
+                    type="primary"
+                    text="重新读取原申请"
+                    @click="emit('reload')"
+                />
+                <u-button
+                    v-else-if="detail.can_request === true"
+                    :custom-style="cooperationButtonStyle"
+                    :loading="busy"
+                    :disabled="loading"
+                    shape="circle"
+                    type="primary"
+                    text="提交退款申请"
+                    @click="submit"
+                />
+                <template v-else
+                    ><button v-if="detail.can_cancel === true" :disabled="busy || loading" @tap="emit('cancel')"
+                        >撤回申请</button
+                    ><u-button
+                        v-if="detail.can_refresh === true"
+                        :custom-style="cooperationButtonStyle"
+                        :loading="busy"
+                        :disabled="loading"
+                        shape="circle"
+                        type="primary"
+                        text="查询退款进度"
+                        @click="emit('refresh')"
+                    /><button v-else :disabled="busy || loading" @tap="emit('close')">返回付款单</button></template
+                >
             </view>
         </template>
     </CoopTaskSheet>

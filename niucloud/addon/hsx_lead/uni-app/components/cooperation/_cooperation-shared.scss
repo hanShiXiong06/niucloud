@@ -2,72 +2,245 @@
 // Do not import emitted business CSS from an ancestor: native miniapp components isolate WXSS.
 
 @mixin hsx-coop-form-section {
-    .coop-form-section { background: #fff; padding: 16px; margin-bottom: 12px; box-sizing: border-box; min-width: 0; }
+    .coop-form-section {
+        background: #fff;
+        padding: 16px;
+        margin-bottom: 12px;
+        box-sizing: border-box;
+        min-width: 0;
+    }
 }
 
 @mixin hsx-coop-section-title {
-    .coop-section-title { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; font-size: 15px; font-weight: 650; line-height: 1.6; color: #2d3f57; }
-    .coop-section-title>text { font-size: 12px; font-weight: 400; color: #7c899b; }
+    .coop-section-title {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 12px;
+        font-size: 15px;
+        font-weight: 650;
+        line-height: 1.6;
+        color: #2d3f57;
+    }
+    .coop-section-title > text {
+        font-size: 12px;
+        font-weight: 400;
+        color: #7c899b;
+    }
 }
 
 @mixin hsx-coop-form-row {
-    .coop-form-row { display: flex; align-items: center; gap: 12px; min-height: 48px; border-bottom: 1px solid #edf0f3; font-size: 14px; }
-    .coop-form-row>text { flex: none; width: 72px; max-width: 32%; color: #5a687b; line-height: 1.6; }
-    .coop-form-row>input { flex: 1; min-width: 0; min-height: 48px; font-size: 14px; color: #2d3f57; }
-    .coop-form-row>picker { flex: 1; min-width: 0; padding: 12px 0; text-align: right; color: #2d3f57; }
+    .coop-form-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        min-height: 48px;
+        border-bottom: 1px solid #edf0f3;
+        font-size: 14px;
+    }
+    .coop-form-row > text {
+        flex: none;
+        width: 72px;
+        max-width: 32%;
+        color: #5a687b;
+        line-height: 1.6;
+    }
+    .coop-form-row > input {
+        flex: 1;
+        min-width: 0;
+        min-height: 48px;
+        font-size: 14px;
+        color: #2d3f57;
+    }
+    .coop-form-row > picker {
+        flex: 1;
+        min-width: 0;
+        padding: 12px 0;
+        text-align: right;
+        color: #2d3f57;
+    }
 }
 
 @mixin hsx-coop-form-column {
-    .coop-form-column { display: flex; flex-direction: column; gap: 8px; padding: 12px 0; min-width: 0; }
-    .coop-form-column>text { color: #526379; font-size: 14px; line-height: 1.6; }
+    .coop-form-column {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        padding: 12px 0;
+        min-width: 0;
+    }
+    .coop-form-column > text {
+        color: #526379;
+        font-size: 14px;
+        line-height: 1.6;
+    }
 }
 
 @mixin hsx-coop-search-trigger {
-    .coop-search-trigger { display: flex; align-items: center; gap: 8px; min-height: 48px; color: #536e90; background: #f1f5fb; border: 1px solid #e1e9f4; border-radius: 8px; padding: 10px 12px; box-sizing: border-box; font-size: 14px; line-height: 1.6; }
-    .coop-search-trigger>text { flex: 1; min-width: 0; overflow-wrap: break-word; }
+    .coop-search-trigger {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 48px;
+        color: #536e90;
+        background: #f1f5fb;
+        border: 1px solid #e1e9f4;
+        border-radius: 8px;
+        padding: 10px 12px;
+        box-sizing: border-box;
+        font-size: 14px;
+        line-height: 1.6;
+    }
+    .coop-search-trigger > text {
+        flex: 1;
+        min-width: 0;
+        overflow-wrap: break-word;
+    }
 }
 
 @mixin hsx-coop-fold-title {
-    .coop-fold-title { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; box-sizing: border-box; font-size: 14px; color: #53677f; padding: 12px 0; border-top: 1px solid #eff2f5; margin-top: 12px; }
+    .coop-fold-title {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        min-height: 44px;
+        box-sizing: border-box;
+        font-size: 14px;
+        color: #53677f;
+        padding: 12px 0;
+        border-top: 1px solid #eff2f5;
+        margin-top: 12px;
+    }
 }
 
 @mixin hsx-coop-consent {
-    .coop-consent { display: flex; gap: 8px; align-items: flex-start; min-height: 44px; margin: 12px 16px; font-size: 12px; line-height: 1.8; color: #6c7d92; }
-    .coop-consent>text { flex: 1; min-width: 0; }
+    .coop-consent {
+        display: flex;
+        gap: 8px;
+        align-items: flex-start;
+        min-height: 44px;
+        margin: 12px 16px;
+        font-size: 12px;
+        line-height: 1.8;
+        color: #6c7d92;
+    }
+    .coop-consent > text {
+        flex: 1;
+        min-width: 0;
+    }
 }
 
 @mixin hsx-coop-inline-error {
-    .coop-inline-error { font-size: 13px; line-height: 1.7; color: #ad4e43; overflow-wrap: break-word; }
+    .coop-inline-error {
+        font-size: 13px;
+        line-height: 1.7;
+        color: #ad4e43;
+        overflow-wrap: break-word;
+    }
 }
 
 @mixin hsx-coop-form-error {
     @include hsx-coop-inline-error;
-    .coop-form-error { margin: 12px 16px; padding: 12px; background: #fff0ed; border-radius: 8px; }
+    .coop-form-error {
+        margin: 12px 16px;
+        padding: 12px;
+        background: #fff0ed;
+        border-radius: 8px;
+    }
 }
 
 @mixin hsx-coop-muted {
-    .coop-muted { font-size: 12px; color: #76869a; line-height: 1.8; word-break: break-word; }
+    .coop-muted {
+        font-size: 12px;
+        color: #76869a;
+        line-height: 1.8;
+        word-break: break-word;
+    }
 }
 
 @mixin hsx-coop-detail-shop {
-    .coop-detail-shop { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; padding: 8px 0; font-size: 14px; line-height: 1.7; }
-    .coop-detail-shop>text:first-child { color: #7b899b; flex: 0 0 auto; max-width: 45%; }
-    .coop-detail-shop>text:last-child { min-width: 0; text-align: right; overflow-wrap: anywhere; }
+    .coop-detail-shop {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        align-items: flex-start;
+        padding: 8px 0;
+        font-size: 14px;
+        line-height: 1.7;
+    }
+    .coop-detail-shop > text:first-child {
+        color: #7b899b;
+        flex: 0 0 auto;
+        max-width: 45%;
+    }
+    .coop-detail-shop > text:last-child {
+        min-width: 0;
+        text-align: right;
+        overflow-wrap: anywhere;
+    }
 }
 
 @mixin hsx-coop-task-rule {
-    .coop-task-rule { font-size: 12px; color: #9a7252; line-height: 1.8; padding: 12px 16px; margin: 0 12px 12px; border-radius: 8px; background: #fff6ee; overflow-wrap: break-word; }
+    .coop-task-rule {
+        font-size: 12px;
+        color: #9a7252;
+        line-height: 1.8;
+        padding: 12px 16px;
+        margin: 0 12px 12px;
+        border-radius: 8px;
+        background: #fff6ee;
+        overflow-wrap: break-word;
+    }
 }
 
 @mixin hsx-coop-picker-field {
-    .coop-picker-field { background: #f3f6fa; border: 1px solid #e5ebf3; border-radius: 8px; min-height: 48px; box-sizing: border-box; line-height: 1.6; font-size: 14px; color: #526b89; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px; overflow-wrap: break-word; }
+    .coop-picker-field {
+        background: #f3f6fa;
+        border: 1px solid #e5ebf3;
+        border-radius: 8px;
+        min-height: 48px;
+        box-sizing: border-box;
+        line-height: 1.6;
+        font-size: 14px;
+        color: #526b89;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 12px;
+        overflow-wrap: break-word;
+    }
 }
 
 @mixin hsx-coop-menu-row {
-    .coop-menu-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 48px; font-size: 14px; color: #52657d; border-top: 1px solid #edf0f3; }
-    .coop-menu-row>text:last-child { font-size: 12px; color: #8492a4; }
+    .coop-menu-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        min-height: 48px;
+        font-size: 14px;
+        color: #52657d;
+        border-top: 1px solid #edf0f3;
+    }
+    .coop-menu-row > text:last-child {
+        font-size: 12px;
+        color: #8492a4;
+    }
 }
 
 @mixin hsx-coop-loadmore {
-    .coop-loadmore { display: flex; align-items: center; justify-content: center; min-height: 44px; padding: 12px 0; box-sizing: border-box; text-align: center; color: #73859d; font-size: 12px; }
+    .coop-loadmore {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 44px;
+        padding: 12px 0;
+        box-sizing: border-box;
+        text-align: center;
+        color: #73859d;
+        font-size: 12px;
+    }
 }

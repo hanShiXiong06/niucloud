@@ -1,64 +1,377 @@
 <template>
     <view class="membership-page" :style="themeColor()">
-        <CoopTaskSheet page :show="true" title="门店会员" :actions="[{ key: 'orders', label: '付款单', ariaLabel: '查看我的付款订单' }]" :busy="state.busy.value" full @close="backCooperationTask" @action="openPaymentOrders">
-            <CoopState v-if="state.loading.value && !state.ready.value" loading :loading-text="membershipReadLoadingText" />
-            <view v-else-if="state.error.value" class="membership-content"><CoopState :error="membershipReadError" :hint="membershipReadHint" @retry="refresh" /></view>
+        <CoopTaskSheet
+            page
+            :show="true"
+            title="门店会员"
+            :actions="[{ key: 'orders', label: '付款单', ariaLabel: '查看我的付款订单' }]"
+            :busy="state.busy.value"
+            full
+            @close="backCooperationTask"
+            @action="openPaymentOrders"
+        >
+            <CoopState
+                v-if="state.loading.value && !state.ready.value"
+                loading
+                :loading-text="membershipReadLoadingText"
+            />
+            <view v-else-if="state.error.value" class="membership-content"
+                ><CoopState :error="membershipReadError" :hint="membershipReadHint" @retry="refresh"
+            /></view>
             <view v-else-if="state.ready.value" class="membership-content">
                 <view class="membership-current" :style="currentSkinStyle">
                     <view class="membership-current__hero">
-                        <image v-if="currentSkin.cardImage" class="membership-card-art" :src="img(currentSkin.cardImage)" mode="aspectFill" aria-hidden="true" />
-                        <view class="membership-current__head"><view class="membership-current__identity"><text class="membership-eyebrow">当前门店会员</text><text class="membership-current__title">{{ summary.level_name || '普通会员' }}</text><text class="membership-current__expiry">{{ currentMembershipCaption }}</text></view><CoopLevelBadge v-if="membershipBadgeRank(summary)>0" :level="membershipBadgeRank(summary)" :appearance="summary.level_visual" :state="depositFrozen || cooperationExited ? 'locked' : membershipState(summary)" variant="emblem" size="small" /></view>
+                        <image
+                            v-if="currentSkin.cardImage"
+                            class="membership-card-art"
+                            :src="img(currentSkin.cardImage)"
+                            mode="aspectFill"
+                            aria-hidden="true"
+                        />
+                        <view class="membership-current__head"
+                            ><view class="membership-current__identity"
+                                ><text class="membership-eyebrow">当前门店会员</text
+                                ><text class="membership-current__title">{{ summary.level_name || '普通会员' }}</text
+                                ><text class="membership-current__expiry">{{ currentMembershipCaption }}</text></view
+                            ><CoopLevelBadge
+                                v-if="membershipBadgeRank(summary)>0"
+                                :level="membershipBadgeRank(summary)"
+                                :appearance="summary.level_visual"
+                                :state="depositFrozen || cooperationExited ? 'locked' : membershipState(summary)"
+                                variant="emblem"
+                                size="small"
+                        /></view>
                     </view>
-                    <view v-if="summary.experience && showExperienceGrowth" class="membership-current__growth"><CoopExperienceProgress :experience="summary.experience" :next-level="summary.next_level" :maxed="experienceMaxed" :color="summary.level_color" /></view>
+                    <view v-if="summary.experience && showExperienceGrowth" class="membership-current__growth"
+                        ><CoopExperienceProgress
+                            :experience="summary.experience"
+                            :next-level="summary.next_level"
+                            :maxed="experienceMaxed"
+                            :color="summary.level_color"
+                    /></view>
                     <view class="membership-current__tools">
-                        <button class="membership-team-entry" :aria-label="summary.can_manage ? '管理门店成员' : '查看门店成员'" @tap="openTeam"><text>门店账号 <text class="membership-team-entry__count">{{ summary.used_accounts ?? '—' }} / {{ entityAccounts(summary) }}</text></text><view><text>{{ summary.can_manage ? '管理成员' : '查看成员' }}</text><u-icon name="arrow-right" size="12" color="#7b8795" /></view></button>
+                        <button
+                            class="membership-team-entry"
+                            :aria-label="summary.can_manage ? '管理门店成员' : '查看门店成员'"
+                            @tap="openTeam"
+                            ><text
+                                >门店账号
+                                <text class="membership-team-entry__count"
+                                    >{{ summary.used_accounts ?? '—' }} / {{ entityAccounts(summary) }}</text
+                                ></text
+                            ><view
+                                ><text>{{ summary.can_manage ? '管理成员' : '查看成员' }}</text
+                                ><u-icon name="arrow-right" size="12" color="#7b8795" /></view
+                        ></button>
                     </view>
                 </view>
-                <view v-if="order.id" class="membership-section membership-payment-card" :class="'is-' + orderPresentation.tone">
-                    <view class="membership-payment-card__head"><text>{{ orderReadFailed ? '付款状态暂未确认' : orderPresentation.title }}</text><text>{{ coopMoney(order.amount) }}</text></view>
-                    <view class="membership-payment-card__plan">{{ order.level_name || order.level_code || '会员开通' }}<text v-if="order.cycle_name"> · {{ order.cycle_name }}</text></view>
-                    <view v-if="displayedCosts" class="membership-cost-summary"><text>服务费 {{ coopMoney(displayedCosts.service) }}</text><text>押金 {{ coopMoney(displayedCosts.deposit) }}</text><text v-if="displayedCosts.bought || Number(displayedCosts.experience) > 0">经验费 {{ coopMoney(displayedCosts.experience) }}</text></view>
-                    <view class="membership-payment-message" :class="{ 'is-error': !!order.requires_manual_review || orderReadFailed }" role="status">{{ checking || recovering ? '正在核对付款结果…' : openingCashier ? '正在加载收银台…' : paymentMessage || orderPresentation.hint }}</view>
-                    <view v-if="differentPendingPlan" class="membership-browse-hint">可以继续比较其他套餐，处理完这笔付款后再购买。</view>
+                <view
+                    v-if="order.id"
+                    class="membership-section membership-payment-card"
+                    :class="'is-' + orderPresentation.tone"
+                >
+                    <view class="membership-payment-card__head"
+                        ><text>{{ orderReadFailed ? '付款状态暂未确认' : orderPresentation.title }}</text
+                        ><text>{{ coopMoney(order.amount) }}</text></view
+                    >
+                    <view class="membership-payment-card__plan"
+                        >{{ order.level_name || order.level_code || '会员开通'
+                        }}<text v-if="order.cycle_name"> · {{ order.cycle_name }}</text></view
+                    >
+                    <view v-if="displayedCosts" class="membership-cost-summary"
+                        ><text>服务费 {{ coopMoney(displayedCosts.service) }}</text
+                        ><text>押金 {{ coopMoney(displayedCosts.deposit) }}</text
+                        ><text v-if="displayedCosts.bought || Number(displayedCosts.experience) > 0"
+                            >经验费 {{ coopMoney(displayedCosts.experience) }}</text
+                        ></view
+                    >
+                    <view
+                        class="membership-payment-message"
+                        :class="{ 'is-error': !!order.requires_manual_review || orderReadFailed }"
+                        role="status"
+                        >{{ checking || recovering ? '正在核对付款结果…' : openingCashier ? '正在加载收银台…' : paymentMessage || orderPresentation.hint }}</view
+                    >
+                    <view v-if="differentPendingPlan" class="membership-browse-hint"
+                        >可以继续比较其他套餐，处理完这笔付款后再购买。</view
+                    >
                     <view class="membership-payment-card__actions">
-                        <button v-if="canContinuePayment && !differentPendingPlan" class="membership-refresh-payment" :loading="checking || recovering" :disabled="paymentLoading" @tap="retryPaymentOrder">{{ checking || recovering ? '核对中…' : '核对付款结果' }}</button>
-                        <button v-if="canCancelPaymentOrder" class="membership-cancel-payment" :loading="closing" :disabled="paymentLoading" @tap="closeOrder">{{ closing ? '核对中…' : '取消订单' }}</button>
-                        <button v-if="!paymentLocked" class="membership-refresh-payment" :disabled="paymentLoading" @tap="browsePlans">继续选择套餐</button>
-                        <button v-if="paymentHelpReady && (order.status === 'unpaid' || orderReadFailed || order.requires_manual_review || order.payment_state === 'paid_pending')" class="membership-contact-admin" :disabled="paymentLoading" @tap="contactPaymentAdmin">联系管理员</button>
+                        <button
+                            v-if="canContinuePayment && !differentPendingPlan"
+                            class="membership-refresh-payment"
+                            :loading="checking || recovering"
+                            :disabled="paymentLoading"
+                            @tap="retryPaymentOrder"
+                            >{{ checking || recovering ? '核对中…' : '核对付款结果' }}</button
+                        >
+                        <button
+                            v-if="canCancelPaymentOrder"
+                            class="membership-cancel-payment"
+                            :loading="closing"
+                            :disabled="paymentLoading"
+                            @tap="closeOrder"
+                            >{{ closing ? '核对中…' : '取消订单' }}</button
+                        >
+                        <button
+                            v-if="!paymentLocked"
+                            class="membership-refresh-payment"
+                            :disabled="paymentLoading"
+                            @tap="browsePlans"
+                            >继续选择套餐</button
+                        >
+                        <button
+                            v-if="paymentHelpReady && (order.status === 'unpaid' || orderReadFailed || order.requires_manual_review || order.payment_state === 'paid_pending')"
+                            class="membership-contact-admin"
+                            :disabled="paymentLoading"
+                            @tap="contactPaymentAdmin"
+                            >联系管理员</button
+                        >
                     </view>
                 </view>
-                <view v-if="summary.cost_review_required" class="membership-error" role="alert"><text>{{ summary.cost_review_message || '存在尚未核对的付款，请联系平台核实原单，暂不重复付款或申请退押金。' }}</text><button class="membership-refresh-payment" :loading="state.loading.value || checking || recovering" :disabled="state.loading.value || paymentLoading || depositConfirming" @tap="refresh">{{ state.loading.value || checking || recovering ? '正在核对付款与权益' : '重新核对付款与权益' }}</button></view>
-                <CoopMembershipPlans v-if="tiers.length" :tiers="tiers" :selected="selected" :cycle="cycle" :current-code="summary.level_code" :current-active="summary.active === true" :busy="planSelectionBusy" @select="selectPlan" @cycle="selectCycle" />
+                <view v-if="summary.cost_review_required" class="membership-error" role="alert"
+                    ><text
+                        >{{ summary.cost_review_message || '存在尚未核对的付款，请联系平台核实原单，暂不重复付款或申请退押金。' }}</text
+                    ><button
+                        class="membership-refresh-payment"
+                        :loading="state.loading.value || checking || recovering"
+                        :disabled="state.loading.value || paymentLoading || depositConfirming"
+                        @tap="refresh"
+                        >{{ state.loading.value || checking || recovering ? '正在核对付款与权益' : '重新核对付款与权益' }}</button
+                    ></view
+                >
+                <CoopMembershipPlans
+                    v-if="tiers.length"
+                    :tiers="tiers"
+                    :selected="selected"
+                    :cycle="cycle"
+                    :current-code="summary.level_code"
+                    :current-active="summary.active === true"
+                    :busy="planSelectionBusy"
+                    @select="selectPlan"
+                    @cycle="selectCycle"
+                />
                 <CoopState v-else title="暂未开放会员等级" hint="请联系平台核对配置，当前不会创建付款单" />
-                <view v-if="experienceOffer && summary.can_manage && !order.id" class="membership-experience-offer"><view class="membership-experience-offer__row"><view><text>补足当前等级经验</text><text>还差 {{ experienceText(chosen?.experience_remaining) }} 经验 · {{ coopMoney(chosen?.experience_unit_price) }}/经验</text></view><u-switch :model-value="buyExperience" :disabled="quoting || state.busy.value || recovering" @change="selectExperience" /></view><view class="membership-experience-offer__hint">自主选择，不默认购买；补足经验不计入实际成交与交付单数。</view></view>
+                <view v-if="experienceOffer && summary.can_manage && !order.id" class="membership-experience-offer"
+                    ><view class="membership-experience-offer__row"
+                        ><view
+                            ><text>补足当前等级经验</text
+                            ><text
+                                >还差 {{ experienceText(chosen?.experience_remaining) }} 经验 ·
+                                {{ coopMoney(chosen?.experience_unit_price) }}/经验</text
+                            ></view
+                        ><u-switch
+                            :model-value="buyExperience"
+                            :disabled="quoting || state.busy.value || recovering"
+                            @change="selectExperience" /></view
+                    ><view class="membership-experience-offer__hint"
+                        >自主选择，不默认购买；补足经验不计入实际成交与交付单数。</view
+                    ></view
+                >
                 <view v-if="chosen && summary.can_manage && !order.id" class="membership-section membership-costs">
                     <CoopState v-if="quoting" loading />
                     <template v-else-if="quote.can_purchase && displayedCosts">
-                        <button class="membership-disclosure" :aria-expanded="costDetailsExpanded" @tap="costDetailsExpanded = !costDetailsExpanded"><text>本次费用</text><view><text>{{ costDetailsExpanded ? '收起明细' : '费用明细' }}</text><u-icon :name="costDetailsExpanded ? 'arrow-up' : 'arrow-down'" size="11" color="#7b8795" /></view></button>
-                        <view class="membership-cost-summary"><text>服务费 {{ coopMoney(displayedCosts.service) }}</text><text>押金 {{ coopMoney(displayedCosts.deposit) }}</text><text v-if="displayedCosts.bought || Number(displayedCosts.experience) > 0">经验费 {{ coopMoney(displayedCosts.experience) }}</text></view>
-                        <view v-if="Number(quote.service_credit_amount) > 0" class="membership-cost-credit">服务费已抵扣 {{ coopMoney(quote.service_credit_amount) }}</view>
+                        <button
+                            class="membership-disclosure"
+                            :aria-expanded="costDetailsExpanded"
+                            @tap="costDetailsExpanded = !costDetailsExpanded"
+                            ><text>本次费用</text
+                            ><view
+                                ><text>{{ costDetailsExpanded ? '收起明细' : '费用明细' }}</text
+                                ><u-icon
+                                    :name="costDetailsExpanded ? 'arrow-up' : 'arrow-down'"
+                                    size="11"
+                                    color="#7b8795" /></view
+                        ></button>
+                        <view class="membership-cost-summary"
+                            ><text>服务费 {{ coopMoney(displayedCosts.service) }}</text
+                            ><text>押金 {{ coopMoney(displayedCosts.deposit) }}</text
+                            ><text v-if="displayedCosts.bought || Number(displayedCosts.experience) > 0"
+                                >经验费 {{ coopMoney(displayedCosts.experience) }}</text
+                            ></view
+                        >
+                        <view v-if="Number(quote.service_credit_amount) > 0" class="membership-cost-credit"
+                            >服务费已抵扣 {{ coopMoney(quote.service_credit_amount) }}</view
+                        >
                         <view v-if="costDetailsExpanded" class="membership-cost-detail">
-                            <view class="membership-money-row"><text>本次押金</text><text>{{ coopMoney(displayedCosts.deposit) }}</text></view><view class="membership-money-row"><text>本期服务费</text><text>{{ coopMoney(displayedCosts.service) }}</text></view><view v-if="Number(quote.service_credit_amount) > 0" class="membership-muted">服务费原价 {{ coopMoney(quote.service_full_amount) }}</view><view v-if="displayedCosts.bought || Number(displayedCosts.experience) > 0" class="membership-money-row"><text>补足经验<text v-if="displayedCosts.bought">（{{ experienceText(displayedCosts.quantity) }}）</text></text><text>{{ coopMoney(displayedCosts.experience) }}</text></view><view class="membership-money-row membership-money-row--total"><text>合计实付</text><text class="membership-money-row__total">{{ coopMoney(displayedCosts.total) }}</text></view>
+                            <view class="membership-money-row"
+                                ><text>本次押金</text><text>{{ coopMoney(displayedCosts.deposit) }}</text></view
+                            ><view class="membership-money-row"
+                                ><text>本期服务费</text><text>{{ coopMoney(displayedCosts.service) }}</text></view
+                            ><view v-if="Number(quote.service_credit_amount) > 0" class="membership-muted"
+                                >服务费原价 {{ coopMoney(quote.service_full_amount) }}</view
+                            ><view
+                                v-if="displayedCosts.bought || Number(displayedCosts.experience) > 0"
+                                class="membership-money-row"
+                                ><text
+                                    >补足经验<text v-if="displayedCosts.bought"
+                                        >（{{ experienceText(displayedCosts.quantity) }}）</text
+                                    ></text
+                                ><text>{{ coopMoney(displayedCosts.experience) }}</text></view
+                            ><view class="membership-money-row membership-money-row--total"
+                                ><text>合计实付</text
+                                ><text
+                                    class="membership-money-row__total"
+                                    >{{ coopMoney(displayedCosts.total) }}</text
+                                ></view
+                            >
                         </view>
-                        <view class="membership-quote-period">{{ entityExpiry(quote.period_start_at) }} 至 {{ entityExpiry(quote.period_end_at) }}</view>
+                        <view class="membership-quote-period"
+                            >{{ entityExpiry(quote.period_start_at) }} 至 {{ entityExpiry(quote.period_end_at) }}</view
+                        >
                     </template>
-                    <view v-else class="membership-muted">{{ quoteError || quote.reason || '正在核对当前套餐费用' }}</view>
+                    <view
+                        v-else
+                        class="membership-muted"
+                        >{{ quoteError || quote.reason || '正在核对当前套餐费用' }}</view
+                    >
                 </view>
-                <view v-if="quoteError && !order.id" class="membership-error" role="alert">{{ quoteError }}<button class="membership-refresh-payment" :loading="quoting" :disabled="paymentLoading" @tap="loadQuote">重新核对费用</button></view>
-                <view v-if="state.writeError.value" class="membership-error" role="alert">{{ state.writeError.value }}</view>
-                <view class="membership-section membership-deposit-exit"><u-collapse :border="false" @change="toggleDeposit"><u-collapse-item title="退出与押金" name="exit"><view class="membership-muted">申请后暂停新的接单和发单。本次退出申请仅处理押金，不包含服务费和补足经验费用；订单退款按实际支付渠道规则处理。实际退款需平台审核与支付渠道确认。</view><CoopState v-if="depositLoading && !depositLoaded" loading /><template v-if="depositLoaded"><view class="membership-money-row"><text>已缴押金（未退）</text><text>{{ coopMoney(depositInfo.balance) }}</text></view><view v-if="visibleDepositRequest" class="membership-deposit-status"><text>{{ visibleDepositRequest.status_name || '状态待核对' }}</text><text>申请金额 {{ coopMoney(visibleDepositRequest.amount) }}</text><text v-if="visibleDepositRequest.review_reason">{{ visibleDepositRequest.review_reason }}</text><view v-if="visibleDepositRequest.sources?.length" class="membership-refund-sources"><view v-for="source in visibleDepositRequest.sources" :key="source.order_id"><text>{{ coopMoney(source.amount) }}</text><text>{{ source.status_label || source.status_name || '待核对' }}</text></view></view></view><view v-if="depositInfo.request && !visibleDepositRequest" class="membership-muted">押金状态已更新，请刷新明细核对。</view><view v-if="depositInfo.blocking_reasons?.length" class="membership-deposit-blocking"><view v-for="reason in depositInfo.blocking_reasons" :key="reason.key">{{ reason.title }}<text v-if="Number(reason.count)>0"> · {{ reason.count }} 项</text></view></view><template v-if="depositInfo.is_owner && depositInfo.can_apply && !depositUncertain"><u-textarea v-model="depositReason" maxlength="200" placeholder="申请说明（选填）" :disabled="state.busy.value || depositConfirming" /><button class="membership-deposit-apply" :disabled="summary.cost_review_required === true || state.busy.value || depositLoading || depositConfirming || !!depositError" @tap="applyDeposit">{{ depositConfirming ? '处理中…' : '申请退出并退回押金' }}</button></template><view v-if="!depositInfo.is_owner" class="membership-muted">由门店负责人申请与核对</view><view v-if="cooperationExited" class="membership-muted">已退出协作，可重新开通；历史记录保留</view></template><view v-if="depositUncertain" class="membership-error">申请结果尚未确认，请先刷新核对，不要重复申请。</view><view v-if="depositError" class="membership-error">{{ depositError }}</view><button class="membership-refresh-payment" :disabled="depositLoading || state.busy.value || depositConfirming" @tap="loadDeposit">{{ depositLoading ? '核对中…' : '刷新押金状态' }}</button></u-collapse-item></u-collapse></view>
-                <view class="membership-section membership-help"><u-collapse :border="false"><u-collapse-item title="付款与退款说明" name="payment"><view>购买前请确认套餐及有效期。通过 Apple 付款的 iPhone 订单，退款需向 Apple 申请，结果以其审核为准。已扣款但未开通，请勿重复付款，可在原付款单中核对付款结果。押金退回按页面展示的押金规则处理。</view></u-collapse-item><u-collapse-item v-if="showExperienceGrowth" title="经验怎么累计、怎么升级？" name="experience"><view>已确认的协作佣金按每实付 1 元累计 1 点真实付佣经验，退款后相应扣回。仅设置经验门槛的等级需在开通、升级、续费时核验；无门槛的等级可直接付费开通。平台允许时可自选补足经验，不代表实际交付；押金与服务费不计入经验。</view></u-collapse-item><u-collapse-item title="账号与会员如何共用？" name="account"><view>会员归属于当前门店，不需要每位同事重复购买。总账号数包含负责人；同事加入需负责人确认。</view></u-collapse-item><u-collapse-item title="到期或人数超过上限怎么办？" name="expiry"><view>到期不会删除成员或历史业务。新增成员和新业务按当前有效权益控制，已有记录仍可核对处理。</view></u-collapse-item></u-collapse></view>
-                <CoopPaymentHelp ref="paymentHelpRef" :order="order" :spacing="12" :payment-issue="paymentHelpRequested" @ready="paymentHelpReady = $event" />
+                <view v-if="quoteError && !order.id" class="membership-error" role="alert"
+                    >{{ quoteError
+                    }}<button
+                        class="membership-refresh-payment"
+                        :loading="quoting"
+                        :disabled="paymentLoading"
+                        @tap="loadQuote"
+                        >重新核对费用</button
+                    ></view
+                >
+                <view
+                    v-if="state.writeError.value"
+                    class="membership-error"
+                    role="alert"
+                    >{{ state.writeError.value }}</view
+                >
+                <view class="membership-section membership-deposit-exit"
+                    ><u-collapse :border="false" @change="toggleDeposit"
+                        ><u-collapse-item title="退出与押金" name="exit"
+                            ><view class="membership-muted"
+                                >申请后暂停新的接单和发单。本次退出申请仅处理押金，不包含服务费和补足经验费用；订单退款按实际支付渠道规则处理。实际退款需平台审核与支付渠道确认。</view
+                            ><CoopState v-if="depositLoading && !depositLoaded" loading /><template v-if="depositLoaded"
+                                ><view class="membership-money-row"
+                                    ><text>已缴押金（未退）</text
+                                    ><text>{{ coopMoney(depositInfo.balance) }}</text></view
+                                ><view v-if="visibleDepositRequest" class="membership-deposit-status"
+                                    ><text>{{ visibleDepositRequest.status_name || '状态待核对' }}</text
+                                    ><text>申请金额 {{ coopMoney(visibleDepositRequest.amount) }}</text
+                                    ><text
+                                        v-if="visibleDepositRequest.review_reason"
+                                        >{{ visibleDepositRequest.review_reason }}</text
+                                    ><view
+                                        v-if="visibleDepositRequest.sources?.length"
+                                        class="membership-refund-sources"
+                                        ><view v-for="source in visibleDepositRequest.sources" :key="source.order_id"
+                                            ><text>{{ coopMoney(source.amount) }}</text
+                                            ><text
+                                                >{{ source.status_label || source.status_name || '待核对' }}</text
+                                            ></view
+                                        ></view
+                                    ></view
+                                ><view v-if="depositInfo.request && !visibleDepositRequest" class="membership-muted"
+                                    >押金状态已更新，请刷新明细核对。</view
+                                ><view v-if="depositInfo.blocking_reasons?.length" class="membership-deposit-blocking"
+                                    ><view v-for="reason in depositInfo.blocking_reasons" :key="reason.key"
+                                        >{{ reason.title
+                                        }}<text v-if="Number(reason.count)>0"> · {{ reason.count }} 项</text></view
+                                    ></view
+                                ><template v-if="depositInfo.is_owner && depositInfo.can_apply && !depositUncertain"
+                                    ><u-textarea
+                                        v-model="depositReason"
+                                        maxlength="200"
+                                        placeholder="申请说明（选填）"
+                                        :disabled="state.busy.value || depositConfirming"
+                                    /><button
+                                        class="membership-deposit-apply"
+                                        :disabled="summary.cost_review_required === true || state.busy.value || depositLoading || depositConfirming || !!depositError"
+                                        @tap="applyDeposit"
+                                        >{{ depositConfirming ? '处理中…' : '申请退出并退回押金' }}</button
+                                    ></template
+                                ><view v-if="!depositInfo.is_owner" class="membership-muted"
+                                    >由门店负责人申请与核对</view
+                                ><view v-if="cooperationExited" class="membership-muted"
+                                    >已退出协作，可重新开通；历史记录保留</view
+                                ></template
+                            ><view v-if="depositUncertain" class="membership-error"
+                                >申请结果尚未确认，请先刷新核对，不要重复申请。</view
+                            ><view v-if="depositError" class="membership-error">{{ depositError }}</view
+                            ><button
+                                class="membership-refresh-payment"
+                                :disabled="depositLoading || state.busy.value || depositConfirming"
+                                @tap="loadDeposit"
+                                >{{ depositLoading ? '核对中…' : '刷新押金状态' }}</button
+                            ></u-collapse-item
+                        ></u-collapse
+                    ></view
+                >
+                <view class="membership-section membership-help"
+                    ><u-collapse :border="false"
+                        ><u-collapse-item title="付款与退款说明" name="payment"
+                            ><view
+                                >购买前请确认套餐及有效期。通过 Apple 付款的 iPhone 订单，退款需向 Apple
+                                申请，结果以其审核为准。已扣款但未开通，请勿重复付款，可在原付款单中核对付款结果。押金退回按页面展示的押金规则处理。</view
+                            ></u-collapse-item
+                        ><u-collapse-item v-if="showExperienceGrowth" title="经验怎么累计、怎么升级？" name="experience"
+                            ><view
+                                >已确认的协作佣金按每实付 1 元累计 1
+                                点真实付佣经验，退款后相应扣回。仅设置经验门槛的等级需在开通、升级、续费时核验；无门槛的等级可直接付费开通。平台允许时可自选补足经验，不代表实际交付；押金与服务费不计入经验。</view
+                            ></u-collapse-item
+                        ><u-collapse-item title="账号与会员如何共用？" name="account"
+                            ><view
+                                >会员归属于当前门店，不需要每位同事重复购买。总账号数包含负责人；同事加入需负责人确认。</view
+                            ></u-collapse-item
+                        ><u-collapse-item title="到期或人数超过上限怎么办？" name="expiry"
+                            ><view
+                                >到期不会删除成员或历史业务。新增成员和新业务按当前有效权益控制，已有记录仍可核对处理。</view
+                            ></u-collapse-item
+                        ></u-collapse
+                    ></view
+                >
+                <CoopPaymentHelp
+                    ref="paymentHelpRef"
+                    :order="order"
+                    :spacing="12"
+                    :payment-issue="paymentHelpRequested"
+                    @ready="paymentHelpReady = $event"
+                />
             </view>
             <template v-if="state.ready.value && !state.error.value" #footer>
                 <view v-if="!summary.can_manage" class="membership-footer-note">会员由门店负责人统一开通或续费</view>
                 <view v-else>
-                    <view v-if="!order.id && quote.can_purchase && displayedCosts" class="membership-footer-total"><view><text>{{ chosen?.name }} · {{ cycleFor(chosen || {})?.name }}</text><text>本次实付</text></view><text>{{ coopMoney(displayedCosts.total) }}</text></view>
-                    <u-button type="primary" shape="circle" :custom-style="cooperationButtonStyle" :text="mainLabel" :loading="paymentLoading" :disabled="summary.cost_review_required === true || paymentLoading || depositConfirming || (depositFrozen && !order.id) || (!chosen && !order.id) || (!order.id && !quote.can_purchase) || !!order.requires_manual_review" @click="submitMembershipPayment" />
+                    <view v-if="!order.id && quote.can_purchase && displayedCosts" class="membership-footer-total"
+                        ><view
+                            ><text>{{ chosen?.name }} · {{ cycleFor(chosen || {})?.name }}</text
+                            ><text>本次实付</text></view
+                        ><text>{{ coopMoney(displayedCosts.total) }}</text></view
+                    >
+                    <u-button
+                        type="primary"
+                        shape="circle"
+                        :custom-style="cooperationButtonStyle"
+                        :text="mainLabel"
+                        :loading="paymentLoading"
+                        :disabled="summary.cost_review_required === true || paymentLoading || depositConfirming || (depositFrozen && !order.id) || (!chosen && !order.id) || (!order.id && !quote.can_purchase) || !!order.requires_manual_review"
+                        @click="submitMembershipPayment"
+                    />
                 </view>
             </template>
         </CoopTaskSheet>
-        <view class="membership-cashier"><Pay ref="payRef" :ignore-pay="['friendspay']" :reformat="cashierReturn" @confirm="onCashierReturned" @close="onCashierReturned" @check="onCashierNeedsCheck"><template #help="{ busy }"><button v-if="paymentHelpReady" class="membership-cashier-help" :disabled="busy" @tap.stop="contactPaymentAdmin"><text>支付遇到问题？</text><text>联系管理员 ›</text></button></template></Pay></view>
+        <view class="membership-cashier"
+            ><Pay
+                ref="payRef"
+                :ignore-pay="['friendspay']"
+                :reformat="cashierReturn"
+                @confirm="onCashierReturned"
+                @close="onCashierReturned"
+                @check="onCashierNeedsCheck"
+                ><template #help="{ busy }"
+                    ><button
+                        v-if="paymentHelpReady"
+                        class="membership-cashier-help"
+                        :disabled="busy"
+                        @tap.stop="contactPaymentAdmin"
+                        ><text>支付遇到问题？</text><text>联系管理员 ›</text></button
+                    ></template
+                ></Pay
+            ></view
+        >
     </view>
 </template>
 <script setup lang="ts">

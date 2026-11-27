@@ -1,14 +1,47 @@
 <template>
-    <view class="coop-merchant-avatar" :class="['is-' + size, { 'is-member': showMember, 'is-highlighted': showHighlight, 'is-emphasized': showEmphasis, 'has-effect': showEffect }]" :style="skinStyle" role="img" :aria-label="`${name || '合作门店'}头像`">
-        <view v-if="showHighlight" class="coop-merchant-avatar__wing coop-merchant-avatar__wing--left" aria-hidden="true"><view class="coop-merchant-avatar__feather is-feather-one" /><view class="coop-merchant-avatar__feather is-feather-two" /><view class="coop-merchant-avatar__feather is-feather-three" /><image class="coop-merchant-avatar__wing-art" :src="wingImage" mode="aspectFit" /></view>
-        <view v-if="showHighlight" class="coop-merchant-avatar__wing coop-merchant-avatar__wing--right" aria-hidden="true"><view class="coop-merchant-avatar__feather is-feather-one" /><view class="coop-merchant-avatar__feather is-feather-two" /><view class="coop-merchant-avatar__feather is-feather-three" /><image class="coop-merchant-avatar__wing-art" :src="wingImage" mode="aspectFit" /></view>
+    <view
+        class="coop-merchant-avatar"
+        :class="['is-' + size, { 'is-member': showMember, 'is-highlighted': showHighlight, 'is-emphasized': showEmphasis, 'has-effect': showEffect }]"
+        :style="skinStyle"
+        role="img"
+        :aria-label="`${name || '合作门店'}头像`"
+    >
+        <view
+            v-if="showHighlight"
+            class="coop-merchant-avatar__wing coop-merchant-avatar__wing--left"
+            aria-hidden="true"
+            ><view class="coop-merchant-avatar__feather is-feather-one" /><view
+                class="coop-merchant-avatar__feather is-feather-two" /><view
+                class="coop-merchant-avatar__feather is-feather-three" /><image
+                class="coop-merchant-avatar__wing-art"
+                :src="wingImage"
+                mode="aspectFit"
+        /></view>
+        <view
+            v-if="showHighlight"
+            class="coop-merchant-avatar__wing coop-merchant-avatar__wing--right"
+            aria-hidden="true"
+            ><view class="coop-merchant-avatar__feather is-feather-one" /><view
+                class="coop-merchant-avatar__feather is-feather-two" /><view
+                class="coop-merchant-avatar__feather is-feather-three" /><image
+                class="coop-merchant-avatar__wing-art"
+                :src="wingImage"
+                mode="aspectFit"
+        /></view>
         <view v-if="showEffect" class="coop-merchant-avatar__halo" aria-hidden="true" />
         <view class="coop-merchant-avatar__photo">
-            <image v-if="source && !failed" class="coop-merchant-avatar__image" :src="source" mode="aspectFill" @error="failed = true" />
-            <view v-else class="coop-merchant-avatar__fallback"><u-icon name="home" :size="size === 'large' ? '30' : size === 'small' ? '17' : '25'" color="#8593a2" /></view>
+            <image
+                v-if="source && !failed"
+                class="coop-merchant-avatar__image"
+                :src="source"
+                mode="aspectFill"
+                @error="failed = true"
+            />
+            <view v-else class="coop-merchant-avatar__fallback"
+                ><u-icon name="home" :size="size === 'large' ? '30' : size === 'small' ? '17' : '25'" color="#8593a2"
+            /></view>
             <view v-if="showEffect" class="coop-merchant-avatar__glint" />
         </view>
-
     </view>
 </template>
 <script setup lang="ts">

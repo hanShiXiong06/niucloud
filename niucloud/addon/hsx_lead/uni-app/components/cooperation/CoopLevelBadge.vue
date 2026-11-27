@@ -1,10 +1,19 @@
 <template>
-    <view class="coop-level-badge" :class="['level-' + badge.level, 'state-' + badge.state, 'size-' + badge.size, 'variant-' + badge.variant, { 'has-skin': hasSkin, 'is-glowing': showEdgeLight, 'is-animated': showEdgeLight }]" :style="skinStyle" role="img" :aria-label="badge.ariaLabel">
+    <view
+        class="coop-level-badge"
+        :class="['level-' + badge.level, 'state-' + badge.state, 'size-' + badge.size, 'variant-' + badge.variant, { 'has-skin': hasSkin, 'is-glowing': showEdgeLight, 'is-animated': showEdgeLight }]"
+        :style="skinStyle"
+        role="img"
+        :aria-label="badge.ariaLabel"
+    >
         <view class="coop-level-badge__surface" aria-hidden="true">
             <text class="coop-level-badge__mark">{{ mark }}</text>
             <view v-if="showEdgeLight" class="coop-level-badge__edge" />
         </view>
-        <view v-if="badge.variant === 'emblem' && (showLabel || badge.stateLabel)" class="coop-level-badge__caption"><text v-if="showLabel" class="coop-level-badge__name">{{ badge.name }}</text><text v-if="badge.stateLabel" class="coop-level-badge__state">{{ badge.stateLabel }}</text></view>
+        <view v-if="badge.variant === 'emblem' && (showLabel || badge.stateLabel)" class="coop-level-badge__caption"
+            ><text v-if="showLabel" class="coop-level-badge__name">{{ badge.name }}</text
+            ><text v-if="badge.stateLabel" class="coop-level-badge__state">{{ badge.stateLabel }}</text></view
+        >
         <text v-else-if="badge.stateLabel" class="coop-level-badge__state">{{ badge.stateLabel }}</text>
     </view>
 </template>

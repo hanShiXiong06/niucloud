@@ -1,34 +1,213 @@
 <template>
     <view class="payment-orders-page" :style="themeColor()">
-        <CoopTaskSheet page :show="true" title="我的付款单" :actions="[{ key: 'membership', label: '会员权益', ariaLabel: '查看会员权益与套餐' }]" fixed-body :busy="!!busyId" @close="backCooperationTask" @action="openMembership">
-            <template #filters><view class="order-filters"><view class="order-filters__inner"><button v-for="item in cooperationPaymentOrderStatuses" :key="item.value" :class="{ 'is-active': status === item.value }" :disabled="!!busyId" @tap="filter(item.value)">{{ item.label }}</button></view></view><CoopPaymentHelp :active="active && loggedIn" :inset="12" :spacing="12" /></template>
-            <z-paging v-if="active && loggedIn" :key="revision" ref="pagingRef" :model-value="rows" class="orders-pager" :fixed="false" height="100%" :auto="true" :concat="false" :scrollable="!busyId" :refresher-enabled="!busyId" :default-page-size="20" :auto-clean-list-when-reload="false" :safe-area-inset-bottom="false" :call-network-reject="false" :show-loading-more-no-more-line="false" loading-more-fail-text="读取失败，点击重试" loading-more-no-more-text="已显示全部付款单" @query="pagingQuery">
+        <CoopTaskSheet
+            page
+            :show="true"
+            title="我的付款单"
+            :actions="[{ key: 'membership', label: '会员权益', ariaLabel: '查看会员权益与套餐' }]"
+            fixed-body
+            :busy="!!busyId"
+            @close="backCooperationTask"
+            @action="openMembership"
+        >
+            <template #filters
+                ><view class="order-filters"
+                    ><view class="order-filters__inner"
+                        ><button
+                            v-for="item in cooperationPaymentOrderStatuses"
+                            :key="item.value"
+                            :class="{ 'is-active': status === item.value }"
+                            :disabled="!!busyId"
+                            @tap="filter(item.value)"
+                            >{{ item.label }}</button
+                        ></view
+                    ></view
+                ><CoopPaymentHelp :active="active && loggedIn" :inset="12" :spacing="12"
+            /></template>
+            <z-paging
+                v-if="active && loggedIn"
+                :key="revision"
+                ref="pagingRef"
+                :model-value="rows"
+                class="orders-pager"
+                :fixed="false"
+                height="100%"
+                :auto="true"
+                :concat="false"
+                :scrollable="!busyId"
+                :refresher-enabled="!busyId"
+                :default-page-size="20"
+                :auto-clean-list-when-reload="false"
+                :safe-area-inset-bottom="false"
+                :call-network-reject="false"
+                :show-loading-more-no-more-line="false"
+                loading-more-fail-text="读取失败，点击重试"
+                loading-more-no-more-text="已显示全部付款单"
+                @query="pagingQuery"
+            >
                 <view v-if="error && rows.length" class="order-error" role="alert">{{ error }}</view>
                 <view v-for="row in rows" :key="row.id" class="payment-order">
-                    <view class="payment-order__head"><view class="payment-order__identity"><view class="payment-order__title">{{ row.title || row.level_name || (row.purpose === 'membership' ? '会员开通 / 续费' : '成交协作付佣') }}</view><text class="payment-order__caption">{{ paymentOrderPlanCaption(row) }}</text></view><text class="payment-order__status" :class="'is-' + paymentOrderPresentation(row).tone">{{ paymentOrderPresentation(row).title }}</text></view>
-                    <view class="payment-order__amount"><text>{{ paymentOrderPresentation(row).amountLabel }}</text><text>{{ coopMoney(row.amount) }}</text></view>
-                    <view class="payment-order__next" :class="'is-' + paymentOrderPresentation(row).tone" role="status"><text>{{ paymentOrderPresentation(row).hint }}</text></view>
-                    <view v-if="actionErrors[Number(row.id)]" class="payment-order__action-error" role="alert">{{ actionErrors[Number(row.id)] }}</view>
-                    <button class="payment-order__detail-toggle" :aria-expanded="detailOrderId === Number(row.id)" @tap="detailOrderId = detailOrderId === Number(row.id) ? 0 : Number(row.id)"><text>{{ coopDate(row.create_time) }}</text><view><text>{{ detailOrderId === Number(row.id) ? '收起明细' : '订单明细' }}</text><u-icon :name="detailOrderId === Number(row.id) ? 'arrow-up' : 'arrow-down'" size="11" color="#7b8795" /></view></button>
+                    <view class="payment-order__head"
+                        ><view class="payment-order__identity"
+                            ><view
+                                class="payment-order__title"
+                                >{{ row.title || row.level_name || (row.purpose === 'membership' ? '会员开通 / 续费' : '成交协作付佣') }}</view
+                            ><text class="payment-order__caption">{{ paymentOrderPlanCaption(row) }}</text></view
+                        ><text
+                            class="payment-order__status"
+                            :class="'is-' + paymentOrderPresentation(row).tone"
+                            >{{ paymentOrderPresentation(row).title }}</text
+                        ></view
+                    >
+                    <view class="payment-order__amount"
+                        ><text>{{ paymentOrderPresentation(row).amountLabel }}</text
+                        ><text>{{ coopMoney(row.amount) }}</text></view
+                    >
+                    <view class="payment-order__next" :class="'is-' + paymentOrderPresentation(row).tone" role="status"
+                        ><text>{{ paymentOrderPresentation(row).hint }}</text></view
+                    >
+                    <view
+                        v-if="actionErrors[Number(row.id)]"
+                        class="payment-order__action-error"
+                        role="alert"
+                        >{{ actionErrors[Number(row.id)] }}</view
+                    >
+                    <button
+                        class="payment-order__detail-toggle"
+                        :aria-expanded="detailOrderId === Number(row.id)"
+                        @tap="detailOrderId = detailOrderId === Number(row.id) ? 0 : Number(row.id)"
+                        ><text>{{ coopDate(row.create_time) }}</text
+                        ><view
+                            ><text>{{ detailOrderId === Number(row.id) ? '收起明细' : '订单明细' }}</text
+                            ><u-icon
+                                :name="detailOrderId === Number(row.id) ? 'arrow-up' : 'arrow-down'"
+                                size="11"
+                                color="#7b8795" /></view
+                    ></button>
                     <view v-if="detailOrderId === Number(row.id)" class="payment-order__details">
-                        <view class="payment-order__number"><text>订单编号</text><text selectable>{{ row.order_no }}</text><button :disabled="!!busyId" @tap="copyOrderNumber(row)">复制</button></view>
-                        <view v-if="row.purpose === 'membership' && row.cost_schema" class="payment-order__costs"><view><text>服务费</text><text>{{ coopMoney(row.service_amount) }}</text></view><view><text>押金</text><text>{{ coopMoney(row.deposit_amount) }}</text></view><view><text>经验费</text><text>{{ coopMoney(row.experience_amount) }}</text></view></view>
-                        <view class="payment-order__payment"><text>{{ cooperationPaymentOrderIsVirtual(row) ? row.payment_type_name || '微信虚拟支付' : row.payment_display_name || row.payment_type_name || (row.status === 'paid' ? '支付方式待核对' : '尚未支付') }}</text><text v-if="row.payment_channel_name">{{ row.payment_channel_name }}</text></view>
-                        <view v-if="cooperationPaymentOrderIsVirtual(row)" class="payment-order__help"><text>通过 Apple 完成的购买，请在 Apple 购买记录查询；已扣款但尚未开通时，请核对原付款结果，勿重复付款。</text></view>
-                        <view v-if="row.pay_time" class="payment-order__time">支付时间 {{ coopDate(row.pay_time) }}</view>
+                        <view class="payment-order__number"
+                            ><text>订单编号</text><text selectable>{{ row.order_no }}</text
+                            ><button :disabled="!!busyId" @tap="copyOrderNumber(row)">复制</button></view
+                        >
+                        <view v-if="row.purpose === 'membership' && row.cost_schema" class="payment-order__costs"
+                            ><view
+                                ><text>服务费</text><text>{{ coopMoney(row.service_amount) }}</text></view
+                            ><view
+                                ><text>押金</text><text>{{ coopMoney(row.deposit_amount) }}</text></view
+                            ><view
+                                ><text>经验费</text><text>{{ coopMoney(row.experience_amount) }}</text></view
+                            ></view
+                        >
+                        <view class="payment-order__payment"
+                            ><text
+                                >{{ cooperationPaymentOrderIsVirtual(row) ? row.payment_type_name || '微信虚拟支付' : row.payment_display_name || row.payment_type_name || (row.status === 'paid' ? '支付方式待核对' : '尚未支付') }}</text
+                            ><text v-if="row.payment_channel_name">{{ row.payment_channel_name }}</text></view
+                        >
+                        <view v-if="cooperationPaymentOrderIsVirtual(row)" class="payment-order__help"
+                            ><text
+                                >通过 Apple 完成的购买，请在 Apple
+                                购买记录查询；已扣款但尚未开通时，请核对原付款结果，勿重复付款。</text
+                            ></view
+                        >
+                        <view v-if="row.pay_time" class="payment-order__time"
+                            >支付时间 {{ coopDate(row.pay_time) }}</view
+                        >
                     </view>
-                    <view v-if="row.refund_status && row.refund_status !== 'none'" class="payment-order__refund"><text>{{ row.refund_status_name || '退款待核对' }}</text><text v-if="Number(row.refunded_amount) > 0">已退 {{ coopMoney(row.refunded_amount) }}</text></view>
-                    <view v-if="row.status === 'unpaid' && row.can_pay === true && row.expires_at && row.payment_check_required !== true" class="payment-order__expires">请于 {{ coopDate(row.expires_at) }} 前支付</view>
-                    <view v-if="row.status === 'paid' && row.can_request_refund !== true && row.refund_block_reason" class="payment-order__review">{{ row.refund_block_reason }}</view>
-                    <view v-if="row.pricing_reason" class="payment-order__review">平台调价：{{ row.pricing_reason }}</view>
-                    <view v-if="row.status === 'unpaid' || row.payment_check_required === true || cooperationPaymentReplacementId(row)" class="payment-order__actions"><button v-if="row.status === 'unpaid' && row.can_close === true" :disabled="!!busyId" :loading="busyId === Number(row.id) && busyAction === 'cancel'" @tap="cancelOrder(row)">{{ row.close_action_label || '取消付款单' }}</button><button v-if="cooperationPaymentOrderCheckUrl(row) || cooperationPaymentOrderResumeUrl(row) || cooperationPaymentReplacementId(row)" class="is-primary" :disabled="!!busyId" :loading="busyId === Number(row.id) && busyAction === 'check'" @tap="continuePayment(row)">{{ busyId === Number(row.id) && busyAction === 'check' ? '核对中…' : cooperationPaymentReplacementId(row) ? '查看调整后付款单' : cooperationPaymentOrderResumeUrl(row) ? '继续支付' : row.payment_state === 'paid_pending' ? '核对开通结果' : '核对付款结果' }}</button><button v-if="!cooperationPaymentOrderCheckUrl(row) && row.can_close !== true && !cooperationPaymentOrderResumeUrl(row) && !cooperationPaymentReplacementId(row)" :disabled="!!busyId" @tap="refresh">重新读取订单</button></view>
-                    <view v-else-if="row.purpose === 'membership' || row.can_request_refund === true || row.refund_status && row.refund_status !== 'none'" class="payment-order__actions"><button v-if="row.can_request_refund === true || row.refund_status && row.refund_status !== 'none'" :disabled="!!busyId" @tap="openRefund(row)">{{ row.can_request_refund === true ? '申请退款' : '查看退款进度' }}</button><button v-if="row.purpose === 'membership'" class="is-primary" :disabled="!!busyId" @tap="openMembership">{{ row.status === 'closed' ? '重新选套餐' : '查看当前权益' }}</button></view>
+                    <view v-if="row.refund_status && row.refund_status !== 'none'" class="payment-order__refund"
+                        ><text>{{ row.refund_status_name || '退款待核对' }}</text
+                        ><text v-if="Number(row.refunded_amount) > 0"
+                            >已退 {{ coopMoney(row.refunded_amount) }}</text
+                        ></view
+                    >
+                    <view
+                        v-if="row.status === 'unpaid' && row.can_pay === true && row.expires_at && row.payment_check_required !== true"
+                        class="payment-order__expires"
+                        >请于 {{ coopDate(row.expires_at) }} 前支付</view
+                    >
+                    <view
+                        v-if="row.status === 'paid' && row.can_request_refund !== true && row.refund_block_reason"
+                        class="payment-order__review"
+                        >{{ row.refund_block_reason }}</view
+                    >
+                    <view v-if="row.pricing_reason" class="payment-order__review"
+                        >平台调价：{{ row.pricing_reason }}</view
+                    >
+                    <view
+                        v-if="row.status === 'unpaid' || row.payment_check_required === true || cooperationPaymentReplacementId(row)"
+                        class="payment-order__actions"
+                        ><button
+                            v-if="row.status === 'unpaid' && row.can_close === true"
+                            :disabled="!!busyId"
+                            :loading="busyId === Number(row.id) && busyAction === 'cancel'"
+                            @tap="cancelOrder(row)"
+                            >{{ row.close_action_label || '取消付款单' }}</button
+                        ><button
+                            v-if="cooperationPaymentOrderCheckUrl(row) || cooperationPaymentOrderResumeUrl(row) || cooperationPaymentReplacementId(row)"
+                            class="is-primary"
+                            :disabled="!!busyId"
+                            :loading="busyId === Number(row.id) && busyAction === 'check'"
+                            @tap="continuePayment(row)"
+                            >{{ busyId === Number(row.id) && busyAction === 'check' ? '核对中…' : cooperationPaymentReplacementId(row) ? '查看调整后付款单' : cooperationPaymentOrderResumeUrl(row) ? '继续支付' : row.payment_state === 'paid_pending' ? '核对开通结果' : '核对付款结果' }}</button
+                        ><button
+                            v-if="!cooperationPaymentOrderCheckUrl(row) && row.can_close !== true && !cooperationPaymentOrderResumeUrl(row) && !cooperationPaymentReplacementId(row)"
+                            :disabled="!!busyId"
+                            @tap="refresh"
+                            >重新读取订单</button
+                        ></view
+                    >
+                    <view
+                        v-else-if="row.purpose === 'membership' || row.can_request_refund === true || row.refund_status && row.refund_status !== 'none'"
+                        class="payment-order__actions"
+                        ><button
+                            v-if="row.can_request_refund === true || row.refund_status && row.refund_status !== 'none'"
+                            :disabled="!!busyId"
+                            @tap="openRefund(row)"
+                            >{{ row.can_request_refund === true ? '申请退款' : '查看退款进度' }}</button
+                        ><button
+                            v-if="row.purpose === 'membership'"
+                            class="is-primary"
+                            :disabled="!!busyId"
+                            @tap="openMembership"
+                            >{{ row.status === 'closed' ? '重新选套餐' : '查看当前权益' }}</button
+                        ></view
+                    >
                 </view>
-                <template #empty="{ isLoadFailed }"><view class="orders-empty"><CoopState :error="isLoadFailed ? error || '付款单读取失败，请重试' : ''" :title="'暂无' + orderStatusLabel(status) + '订单'" icon="order" @retry="refresh" /><button v-if="!isLoadFailed" class="orders-empty__action" @tap="openMembership">查看会员套餐</button></view></template>
+                <template #empty="{ isLoadFailed }"
+                    ><view class="orders-empty"
+                        ><CoopState
+                            :error="isLoadFailed ? error || '付款单读取失败，请重试' : ''"
+                            :title="'暂无' + orderStatusLabel(status) + '订单'"
+                            icon="order"
+                            @retry="refresh"
+                        /><button v-if="!isLoadFailed" class="orders-empty__action" @tap="openMembership"
+                            >查看会员套餐</button
+                        ></view
+                    ></template
+                >
             </z-paging>
-            <view v-else-if="!loggedIn" class="orders-empty"><CoopState title="登录后查看付款单" icon="account" /><u-button :custom-style="cooperationButtonStyle" type="primary" shape="circle" text="登录" @click="login" /></view>
+            <view v-else-if="!loggedIn" class="orders-empty"
+                ><CoopState title="登录后查看付款单" icon="account" /><u-button
+                    :custom-style="cooperationButtonStyle"
+                    type="primary"
+                    shape="circle"
+                    text="登录"
+                    @click="login"
+            /></view>
         </CoopTaskSheet>
-        <PaymentRefundSheet :show="refundVisible" :order="refundOrder" :detail="refundDetail" :loading="refundLoading" :busy="refundBusy" :error="refundError" :read-required="refundReadRequired" @close="closeRefund" @reload="readRefund" @refresh="refreshRefund" @cancel="withdrawRefund" @submit="submitRefund" />
+        <PaymentRefundSheet
+            :show="refundVisible"
+            :order="refundOrder"
+            :detail="refundDetail"
+            :loading="refundLoading"
+            :busy="refundBusy"
+            :error="refundError"
+            :read-required="refundReadRequired"
+            @close="closeRefund"
+            @reload="readRefund"
+            @refresh="refreshRefund"
+            @cancel="withdrawRefund"
+            @submit="submitRefund"
+        />
     </view>
 </template>
 <script setup lang="ts">

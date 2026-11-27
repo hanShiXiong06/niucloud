@@ -1,3 +1,9 @@
-<template><view class="coop-selection-mark" :class="{ selected }" aria-hidden="true"><text v-if="selected">✓</text></view></template>
-<script setup lang="ts">withDefaults(defineProps<{ selected?: boolean }>(), { selected: false })</script>
-<style scoped lang="scss">.coop-selection-mark { width: 38rpx; height: 38rpx; box-sizing: border-box; border: 2rpx solid #cbd3de; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff; flex: none; line-height: 1; }.coop-selection-mark.selected { background: var(--primary-color, #d93833); border-color: var(--primary-color, #d93833); }.coop-selection-mark>text { font-size: 23rpx; font-weight: 650; line-height: 1; }</style>
+<template>
+    <view class="coop-selection-mark" :class="{ selected }" aria-hidden="true"><text v-if="selected">✓</text></view>
+</template>
+<script setup lang="ts">
+withDefaults(defineProps<{ selected?: boolean }>(), { selected: false })
+</script>
+<style scoped lang="scss">
+.coop-selection-mark { width: 38rpx; height: 38rpx; box-sizing: border-box; border: 2rpx solid #cbd3de; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff; flex: none; line-height: 1; }.coop-selection-mark.selected { background: var(--primary-color, #d93833); border-color: var(--primary-color, #d93833); }.coop-selection-mark>text { font-size: 23rpx; font-weight: 650; line-height: 1; }
+</style>

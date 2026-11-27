@@ -1,4 +1,17 @@
-<template><view class="lead-cooperation-hero" :style="heroStyle"><view v-if="frame.hasImage" class="lead-cooperation-hero__mask" :style="frame.mask" /><view class="lead-cooperation-hero__content"><text v-if="settings.caption" class="lead-cooperation-hero__caption">{{ settings.caption }}</text><text v-if="settings.title" class="lead-cooperation-hero__title">{{ settings.title }}</text><view v-if="shown(settings.showAccent)" class="lead-cooperation-hero__accent" :style="accentStyle" /><text v-if="settings.subtitle" class="lead-cooperation-hero__subtitle">{{ settings.subtitle }}</text></view></view></template>
+<template>
+    <view class="lead-cooperation-hero" :style="heroStyle"
+        ><view v-if="frame.hasImage" class="lead-cooperation-hero__mask" :style="frame.mask" /><view
+            class="lead-cooperation-hero__content"
+            ><text v-if="settings.caption" class="lead-cooperation-hero__caption">{{ settings.caption }}</text
+            ><text v-if="settings.title" class="lead-cooperation-hero__title">{{ settings.title }}</text
+            ><view v-if="shown(settings.showAccent)" class="lead-cooperation-hero__accent" :style="accentStyle" /><text
+                v-if="settings.subtitle"
+                class="lead-cooperation-hero__subtitle"
+                >{{ settings.subtitle }}</text
+            ></view
+        ></view
+    >
+</template>
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
 import useDiyStore from '@/app/stores/diy'

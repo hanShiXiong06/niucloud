@@ -1,31 +1,138 @@
 <template>
     <view class="member-plans">
-        <view class="member-plans__heading"><text>选择适合你的会员</text><button :aria-expanded="comparing" @tap="comparing = !comparing">{{ comparing ? '收起对比' : '权益对比' }}<u-icon :name="comparing ? 'arrow-up' : 'arrow-down'" size="11" color="var(--primary-color,#007aff)" /></button></view>
-        <scroll-view scroll-x :show-scrollbar="false" :scroll-into-view="'member-plan-' + selected" scroll-with-animation class="member-plans__tabs">
-            <view class="member-plans__tab-track"><button v-for="tier in tiers" :id="'member-plan-' + tier.code" :key="tier.code" :disabled="busy" :class="{ 'is-selected': selected === tier.code }" :aria-label="'查看' + tier.name + '套餐'" @tap="emit('select', tier.code)">{{ tier.name }}<text v-if="currentActive && currentCode === tier.code">使用中</text></button></view>
+        <view class="member-plans__heading"
+            ><text>选择适合你的会员</text
+            ><button :aria-expanded="comparing" @tap="comparing = !comparing"
+                >{{ comparing ? '收起对比' : '权益对比'
+                }}<u-icon
+                    :name="comparing ? 'arrow-up' : 'arrow-down'"
+                    size="11"
+                    color="var(--primary-color,#007aff)" /></button
+        ></view>
+        <scroll-view
+            scroll-x
+            :show-scrollbar="false"
+            :scroll-into-view="'member-plan-' + selected"
+            scroll-with-animation
+            class="member-plans__tabs"
+        >
+            <view class="member-plans__tab-track"
+                ><button
+                    v-for="tier in tiers"
+                    :id="'member-plan-' + tier.code"
+                    :key="tier.code"
+                    :disabled="busy"
+                    :class="{ 'is-selected': selected === tier.code }"
+                    :aria-label="'查看' + tier.name + '套餐'"
+                    @tap="emit('select', tier.code)"
+                    >{{ tier.name }}<text v-if="currentActive && currentCode === tier.code">使用中</text></button
+                ></view
+            >
         </scroll-view>
         <view v-if="chosen" class="member-plans__card" :style="skinStyle">
-            <image v-if="skin.cardImage" class="member-plans__art" :src="img(skin.cardImage)" mode="aspectFill" aria-hidden="true" />
+            <image
+                v-if="skin.cardImage"
+                class="member-plans__art"
+                :src="img(skin.cardImage)"
+                mode="aspectFill"
+                aria-hidden="true"
+            />
             <view class="member-plans__card-content">
-                <view class="member-plans__identity"><view><text class="member-plans__name">{{ chosen.name }}</text><text class="member-plans__caption">{{ entityAccounts(chosen) }}共同使用 · 含负责人</text></view><CoopLevelBadge :level="membershipBadgeRank(chosen)" :appearance="chosen.level_visual" :state="currentActive && currentCode === chosen.code ? 'active' : 'locked'" variant="emblem" size="small" /></view>
-                <view v-if="period" class="member-plans__price"><text>{{ membershipOfferMoney(period.price) }}</text><text>服务费 / {{ period.name }}</text></view><text v-else class="member-plans__unavailable">暂未开放购买</text>
-                <view class="member-plans__conditions"><text>等级押金 {{ membershipOfferMoney(chosen.deposit_amount) }}</text><text>{{ qualification }}</text></view>
+                <view class="member-plans__identity"
+                    ><view
+                        ><text class="member-plans__name">{{ chosen.name }}</text
+                        ><text class="member-plans__caption"
+                            >{{ entityAccounts(chosen) }}共同使用 · 含负责人</text
+                        ></view
+                    ><CoopLevelBadge
+                        :level="membershipBadgeRank(chosen)"
+                        :appearance="chosen.level_visual"
+                        :state="currentActive && currentCode === chosen.code ? 'active' : 'locked'"
+                        variant="emblem"
+                        size="small"
+                /></view>
+                <view v-if="period" class="member-plans__price"
+                    ><text>{{ membershipOfferMoney(period.price) }}</text
+                    ><text>服务费 / {{ period.name }}</text></view
+                ><text v-else class="member-plans__unavailable">暂未开放购买</text>
+                <view class="member-plans__conditions"
+                    ><text>等级押金 {{ membershipOfferMoney(chosen.deposit_amount) }}</text
+                    ><text>{{ qualification }}</text></view
+                >
             </view>
         </view>
-        <view v-if="periods.length > 1" class="member-plans__periods"><button v-for="item in periods" :key="item.key" :disabled="busy" :class="{ 'is-selected': cycle === item.key }" @tap="emit('cycle', item.key)"><text>{{ item.name }}</text><text>{{ membershipOfferMoney(item.price) }}</text></button></view>
+        <view v-if="periods.length > 1" class="member-plans__periods"
+            ><button
+                v-for="item in periods"
+                :key="item.key"
+                :disabled="busy"
+                :class="{ 'is-selected': cycle === item.key }"
+                @tap="emit('cycle', item.key)"
+                ><text>{{ item.name }}</text
+                ><text>{{ membershipOfferMoney(item.price) }}</text></button
+            ></view
+        >
         <view v-if="comparing" class="member-plans__comparison">
-            <view class="member-plans__compare-caption"><text>各等级权益</text><text>左右滑动 · 点套餐名称选择</text></view>
+            <view class="member-plans__compare-caption"
+                ><text>各等级权益</text><text>左右滑动 · 点套餐名称选择</text></view
+            >
             <scroll-view scroll-x :show-scrollbar="true" class="member-plans__table-scroll">
                 <view class="member-plans__table" :style="{ width: (100 + tiers.length * 132) + 'px' }">
-                    <view class="member-plans__row member-plans__row--head"><view class="member-plans__label">权益项目</view><button v-for="tier in tiers" :key="tier.code" class="member-plans__cell" :class="{ 'is-selected': selected === tier.code }" :disabled="busy" @tap="emit('select', tier.code)"><text>{{ tier.name }}</text><text class="member-plans__selection">{{ selected === tier.code ? '已选套餐' : '选择套餐' }}</text></button></view>
-                    <view v-for="row in comparison" :key="row.key" class="member-plans__row"><view class="member-plans__label">{{ row.title }}</view><view v-for="(cell, index) in row.cells" :key="tiers[index].code" class="member-plans__cell" :class="{ 'is-selected': selected === tiers[index].code }"><u-icon v-if="cell.included !== null" :name="cell.included ? 'checkmark' : 'close'" :color="cell.included ? 'var(--primary-color,#007aff)' : '#9aa2ad'" size="17" /><text :class="{ 'is-muted': cell.included === false }">{{ cell.text }}</text></view></view>
+                    <view class="member-plans__row member-plans__row--head"
+                        ><view class="member-plans__label">权益项目</view
+                        ><button
+                            v-for="tier in tiers"
+                            :key="tier.code"
+                            class="member-plans__cell"
+                            :class="{ 'is-selected': selected === tier.code }"
+                            :disabled="busy"
+                            @tap="emit('select', tier.code)"
+                            ><text>{{ tier.name }}</text
+                            ><text
+                                class="member-plans__selection"
+                                >{{ selected === tier.code ? '已选套餐' : '选择套餐' }}</text
+                            ></button
+                        ></view
+                    >
+                    <view v-for="row in comparison" :key="row.key" class="member-plans__row"
+                        ><view class="member-plans__label">{{ row.title }}</view
+                        ><view
+                            v-for="(cell, index) in row.cells"
+                            :key="tiers[index].code"
+                            class="member-plans__cell"
+                            :class="{ 'is-selected': selected === tiers[index].code }"
+                            ><u-icon
+                                v-if="cell.included !== null"
+                                :name="cell.included ? 'checkmark' : 'close'"
+                                :color="cell.included ? 'var(--primary-color,#007aff)' : '#9aa2ad'"
+                                size="17"
+                            /><text :class="{ 'is-muted': cell.included === false }">{{ cell.text }}</text></view
+                        ></view
+                    >
                 </view>
             </scroll-view>
             <text class="member-plans__table-note">账号名额包含负责人。实际支付金额以本次费用核对为准。</text>
         </view>
         <view v-if="benefits.length" class="member-plans__benefits">
-            <button class="member-plans__benefit-heading" :aria-expanded="benefitsExpanded" @tap="benefitsExpanded = !benefitsExpanded"><text>{{ chosen?.name }} · 套餐权益</text><view><text>{{ benefitsExpanded ? '收起' : '全部 ' + benefits.length + ' 项' }}</text><u-icon :name="benefitsExpanded ? 'arrow-up' : 'arrow-down'" size="11" color="#7b8795" /></view></button>
-            <view v-for="benefit in visibleBenefits" :key="benefit.key" class="member-plans__benefit"><u-icon :name="benefit.enabled ? 'checkmark-circle-fill' : 'close-circle'" size="16" :color="benefit.enabled ? 'var(--primary-color,#007aff)' : '#a0a7b1'" /><view><text>{{ benefit.title }}</text><text v-if="benefitsExpanded && benefit.enabled && benefit.desc">{{ benefit.desc }}</text></view><text v-if="!benefit.enabled" class="member-plans__excluded">不包含</text></view>
+            <button
+                class="member-plans__benefit-heading"
+                :aria-expanded="benefitsExpanded"
+                @tap="benefitsExpanded = !benefitsExpanded"
+                ><text>{{ chosen?.name }} · 套餐权益</text
+                ><view
+                    ><text>{{ benefitsExpanded ? '收起' : '全部 ' + benefits.length + ' 项' }}</text
+                    ><u-icon :name="benefitsExpanded ? 'arrow-up' : 'arrow-down'" size="11" color="#7b8795" /></view
+            ></button>
+            <view v-for="benefit in visibleBenefits" :key="benefit.key" class="member-plans__benefit"
+                ><u-icon
+                    :name="benefit.enabled ? 'checkmark-circle-fill' : 'close-circle'"
+                    size="16"
+                    :color="benefit.enabled ? 'var(--primary-color,#007aff)' : '#a0a7b1'"
+                /><view
+                    ><text>{{ benefit.title }}</text
+                    ><text v-if="benefitsExpanded && benefit.enabled && benefit.desc">{{ benefit.desc }}</text></view
+                ><text v-if="!benefit.enabled" class="member-plans__excluded">不包含</text></view
+            >
         </view>
     </view>
 </template>

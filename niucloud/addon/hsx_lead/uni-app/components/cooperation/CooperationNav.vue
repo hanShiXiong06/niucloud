@@ -1,8 +1,24 @@
 <template>
     <view class="cooperation-nav" :style="{ background }">
-        <u-navbar :fixed="false" :placeholder="false" :safe-area-inset-top="safeAreaInsetTop" :auto-back="false" :height="navHeight" bg-color="transparent" left-icon="" @left-click="goBack">
+        <u-navbar
+            :fixed="false"
+            :placeholder="false"
+            :safe-area-inset-top="safeAreaInsetTop"
+            :auto-back="false"
+            :height="navHeight"
+            bg-color="transparent"
+            left-icon=""
+            @left-click="goBack"
+        >
             <template #left>
-                <view v-if="back" class="cooperation-nav__back" :class="{ 'is-disabled': disabled }" role="button" :aria-label="backLabel" :aria-disabled="disabled">
+                <view
+                    v-if="back"
+                    class="cooperation-nav__back"
+                    :class="{ 'is-disabled': disabled }"
+                    role="button"
+                    :aria-label="backLabel"
+                    :aria-disabled="disabled"
+                >
                     <u-icon name="arrow-left" size="19" color="var(--lead-nav-text,#202124)" />
                 </view>
             </template>
@@ -15,9 +31,22 @@
             <template #right>
                 <view class="cooperation-nav__actions" :style="{ marginRight: capsuleSpace + 'px' }">
                     <slot name="actions" :disabled="disabled">
-                        <button v-for="item in actions" :key="item.key" class="cooperation-nav__action" :class="{ 'has-label': !!item.label }" :disabled="disabled || item.disabled || item.loading" :aria-label="item.ariaLabel || item.label || item.key" @tap.stop="runAction(item)">
+                        <button
+                            v-for="item in actions"
+                            :key="item.key"
+                            class="cooperation-nav__action"
+                            :class="{ 'has-label': !!item.label }"
+                            :disabled="disabled || item.disabled || item.loading"
+                            :aria-label="item.ariaLabel || item.label || item.key"
+                            @tap.stop="runAction(item)"
+                        >
                             <u-loading-icon v-if="item.loading" size="18" color="var(--lead-nav-text,#333)" />
-                            <u-icon v-else-if="item.icon" :name="item.icon" size="19" color="var(--lead-nav-text,#333)" />
+                            <u-icon
+                                v-else-if="item.icon"
+                                :name="item.icon"
+                                size="19"
+                                color="var(--lead-nav-text,#333)"
+                            />
                             <text v-if="item.label" class="cooperation-nav__action-label">{{ item.label }}</text>
                         </button>
                     </slot>

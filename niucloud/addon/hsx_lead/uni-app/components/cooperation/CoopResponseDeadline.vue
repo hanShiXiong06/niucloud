@@ -1,8 +1,31 @@
 <template>
-    <view v-if="clock.visible.value" class="coop-response-deadline" :class="{ 'is-compact':compact, 'is-overdue':clock.overdue.value }">
-        <view class="coop-response-deadline__line"><u-icon name="clock" :size="compact ? '12' : '16'" :color="clock.overdue.value ? '#a66a32' : '#758293'" /><text>{{ clock.overdue.value ? '接单提醒时间已到' : '接单提醒倒计时' }}</text><text v-if="!clock.overdue.value && clock.formatted.value" class="coop-response-deadline__digits">{{ clock.formatted.value }}</text><text v-else-if="!clock.overdue.value" class="coop-response-deadline__waiting">等待确认</text></view>
-        <text v-if="!compact" class="coop-response-deadline__hint">{{ isPublisher ? clock.overdue.value ? '原门店仍可接单。需要调整时，可重新选择门店。' : '提醒时间到后仍保留原交付，不会自动更换门店。' : clock.overdue.value ? '仍可接受本次交付；发布方重新选店后将不可再接单。' : '请及时确认，提醒时间到后仍可接单。' }}</text>
-        <text v-else-if="clock.overdue.value" class="coop-response-deadline__hint">{{ isPublisher ? '仍保留原门店' : '仍可接单' }}</text>
+    <view
+        v-if="clock.visible.value"
+        class="coop-response-deadline"
+        :class="{ 'is-compact':compact, 'is-overdue':clock.overdue.value }"
+    >
+        <view class="coop-response-deadline__line"
+            ><u-icon
+                name="clock"
+                :size="compact ? '12' : '16'"
+                :color="clock.overdue.value ? '#a66a32' : '#758293'"
+            /><text>{{ clock.overdue.value ? '接单提醒时间已到' : '接单提醒倒计时' }}</text
+            ><text
+                v-if="!clock.overdue.value && clock.formatted.value"
+                class="coop-response-deadline__digits"
+                >{{ clock.formatted.value }}</text
+            ><text v-else-if="!clock.overdue.value" class="coop-response-deadline__waiting">等待确认</text></view
+        >
+        <text
+            v-if="!compact"
+            class="coop-response-deadline__hint"
+            >{{ isPublisher ? clock.overdue.value ? '原门店仍可接单。需要调整时，可重新选择门店。' : '提醒时间到后仍保留原交付，不会自动更换门店。' : clock.overdue.value ? '仍可接受本次交付；发布方重新选店后将不可再接单。' : '请及时确认，提醒时间到后仍可接单。' }}</text
+        >
+        <text
+            v-else-if="clock.overdue.value"
+            class="coop-response-deadline__hint"
+            >{{ isPublisher ? '仍保留原门店' : '仍可接单' }}</text
+        >
     </view>
 </template>
 <script setup lang="ts">

@@ -1,19 +1,75 @@
 <template>
     <view class="coop-member-identity">
         <view class="coop-member-identity__top">
-            <CoopMerchantAvatar :image="profile.storefront_image || member.headimg" :name="name" :active="profile.membership?.active === true" :rank="rank" :appearance="profile.membership?.level_visual" :highlighted="rank >= 3" size="large" />
+            <CoopMerchantAvatar
+                :image="profile.storefront_image || member.headimg"
+                :name="name"
+                :active="profile.membership?.active === true"
+                :rank="rank"
+                :appearance="profile.membership?.level_visual"
+                :highlighted="rank >= 3"
+                size="large"
+            />
             <view class="coop-member-identity__body">
-                <view class="coop-member-identity__name-row"><text class="coop-member-identity__name">{{ name }}</text><CoopLevelBadge v-if="shown('showGrade') && profile.id" :level="rank" :label="profile.membership?.level_name || '普通会员'" :appearance="profile.membership?.level_visual" :state="membershipState(profile.membership || {})" variant="inline" size="small" /></view>
-                <button v-if="shown('showMemberNo') && memberNo" class="coop-member-identity__uid" aria-label="复制用户编号" @tap="copyNo"><text>{{ memberIdentifier.label }}：{{ memberNo }}</text><u-icon name="file-text" size="12" :color="muted" /></button>
-                <text v-if="shown('showRegion') && profile.region_text" class="coop-member-identity__region">{{ profile.region_text }}</text>
+                <view class="coop-member-identity__name-row"
+                    ><text class="coop-member-identity__name">{{ name }}</text
+                    ><CoopLevelBadge
+                        v-if="shown('showGrade') && profile.id"
+                        :level="rank"
+                        :label="profile.membership?.level_name || '普通会员'"
+                        :appearance="profile.membership?.level_visual"
+                        :state="membershipState(profile.membership || {})"
+                        variant="inline"
+                        size="small"
+                /></view>
+                <button
+                    v-if="shown('showMemberNo') && memberNo"
+                    class="coop-member-identity__uid"
+                    aria-label="复制用户编号"
+                    @tap="copyNo"
+                    ><text>{{ memberIdentifier.label }}：{{ memberNo }}</text
+                    ><u-icon name="file-text" size="12" :color="muted"
+                /></button>
+                <text
+                    v-if="shown('showRegion') && profile.region_text"
+                    class="coop-member-identity__region"
+                    >{{ profile.region_text }}</text
+                >
             </view>
-            <button v-if="shown('showSettings')" class="coop-member-identity__settings" aria-label="设置与退出登录" @tap="emit('action', 'settings')"><u-icon name="setting" size="23" :color="ink" /></button>
+            <button
+                v-if="shown('showSettings')"
+                class="coop-member-identity__settings"
+                aria-label="设置与退出登录"
+                @tap="emit('action', 'settings')"
+                ><u-icon name="setting" size="23" :color="ink"
+            /></button>
         </view>
         <view v-if="profile.blocked_at" class="coop-member-identity__blocked">已停止合作</view>
-        <view class="coop-member-identity__links"><text class="coop-member-identity__account">{{ member.nickname && member.nickname !== name ? member.nickname : '' }}</text><button v-if="profile.permissions?.can_manage_billing !== false" @tap="emit('action', 'profile')"><text>{{ profile.id ? '门店资料' : '创建门店' }}</text><u-icon name="arrow-right" size="11" :color="muted" /></button></view>
+        <view class="coop-member-identity__links"
+            ><text
+                class="coop-member-identity__account"
+                >{{ member.nickname && member.nickname !== name ? member.nickname : '' }}</text
+            ><button v-if="profile.permissions?.can_manage_billing !== false" @tap="emit('action', 'profile')"
+                ><text>{{ profile.id ? '门店资料' : '创建门店' }}</text
+                ><u-icon name="arrow-right" size="11" :color="muted" /></button
+        ></view>
         <view v-if="shown('showBalance') || shown('showStats') && profile.id" class="coop-member-identity__metrics">
-            <button v-if="shown('showBalance')" class="coop-member-identity__metric" @tap="emit('action', 'balance')"><text class="coop-member-identity__number">{{ balance }}</text><text>余额（元）</text></button>
-            <template v-if="shown('showStats') && profile.id"><button class="coop-member-identity__metric" @tap="emit('action', 'outgoing')"><text class="coop-member-identity__number">{{ count('outgoing') }}</text><text>{{ appearance.outgoingText || '找门店' }}</text></button><button class="coop-member-identity__metric" @tap="emit('action', 'incoming')"><text class="coop-member-identity__number">{{ count('incoming') }}</text><text>{{ appearance.incomingText || '找客户' }}</text></button><button class="coop-member-identity__metric" @tap="emit('action', 'members')"><text class="coop-member-identity__number">{{ profile.membership?.used_accounts ?? '—' }}</text><text>{{ appearance.secondaryText || '门店成员' }}</text></button></template>
+            <button v-if="shown('showBalance')" class="coop-member-identity__metric" @tap="emit('action', 'balance')"
+                ><text class="coop-member-identity__number">{{ balance }}</text
+                ><text>余额（元）</text></button
+            >
+            <template v-if="shown('showStats') && profile.id"
+                ><button class="coop-member-identity__metric" @tap="emit('action', 'outgoing')"
+                    ><text class="coop-member-identity__number">{{ count('outgoing') }}</text
+                    ><text>{{ appearance.outgoingText || '找门店' }}</text></button
+                ><button class="coop-member-identity__metric" @tap="emit('action', 'incoming')"
+                    ><text class="coop-member-identity__number">{{ count('incoming') }}</text
+                    ><text>{{ appearance.incomingText || '找客户' }}</text></button
+                ><button class="coop-member-identity__metric" @tap="emit('action', 'members')"
+                    ><text class="coop-member-identity__number">{{ profile.membership?.used_accounts ?? '—' }}</text
+                    ><text>{{ appearance.secondaryText || '门店成员' }}</text></button
+                ></template
+            >
         </view>
     </view>
 </template>

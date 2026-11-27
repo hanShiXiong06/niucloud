@@ -1,41 +1,205 @@
 <template>
     <view class="entity-page" :style="themeColor()">
-        <CoopTaskSheet page :show="true" :title="joining ? '加入门店' : '门店与成员'" :busy="locked" full @close="backCooperationTask">
+        <CoopTaskSheet
+            page
+            :show="true"
+            :title="joining ? '加入门店' : '门店与成员'"
+            :busy="locked"
+            full
+            @close="backCooperationTask"
+        >
             <CoopState v-if="state.loading.value && !state.ready.value" loading />
-            <view v-else-if="state.error.value" class="entity-content"><CoopState :error="state.error.value" @retry="refresh" /><u-button v-if="!loggedIn" type="primary" :custom-style="cooperationButtonStyle" text="登录后继续" @click="login" /></view>
+            <view v-else-if="state.error.value" class="entity-content"
+                ><CoopState :error="state.error.value" @retry="refresh" /><u-button
+                    v-if="!loggedIn"
+                    type="primary"
+                    :custom-style="cooperationButtonStyle"
+                    text="登录后继续"
+                    @click="login"
+            /></view>
             <view v-else-if="state.ready.value" class="entity-content">
                 <template v-if="joining || !team.merchant_id">
-                    <view v-if="team.pending_entity?.status === 'pending'" class="entity-section entity-pending"><u-icon name="clock" size="30" color="#6f8ab0" /><view class="entity-title">等待负责人确认</view><view>{{ team.pending_entity.name }}</view><view class="entity-muted">确认通过后，账号会共享门店的会员权益。</view><u-button type="primary" plain :custom-style="cooperationButtonStyle" :disabled="locked" text="刷新申请状态" @click="refresh" /><button class="entity-exit-button" :disabled="locked" @tap="leave">撤销加入申请</button></view>
+                    <view v-if="team.pending_entity?.status === 'pending'" class="entity-section entity-pending"
+                        ><u-icon name="clock" size="30" color="#6f8ab0" /><view class="entity-title"
+                            >等待负责人确认</view
+                        ><view>{{ team.pending_entity.name }}</view
+                        ><view class="entity-muted">确认通过后，账号会共享门店的会员权益。</view
+                        ><u-button
+                            type="primary"
+                            plain
+                            :custom-style="cooperationButtonStyle"
+                            :disabled="locked"
+                            text="刷新申请状态"
+                            @click="refresh"
+                        /><button class="entity-exit-button" :disabled="locked" @tap="leave">撤销加入申请</button></view
+                    >
                     <view v-else class="entity-section">
-                        <view class="entity-form-heading"><text class="entity-title">输入门店主体码</text><button class="entity-help" aria-label="在哪里找到主体码" @tap="showHelp = !showHelp"><u-icon name="question-circle" size="21" color="#6a83a1" /></button></view>
-                        <view v-if="showHelp" class="entity-help-body">请门店负责人打开「我的 → 门店与成员」，复制主体码发给你。主体码不是营业执照号码，也不是 ERP 编号。</view>
-                        <u-input v-model="code" :custom-style="cooperationInputStyle" maxlength="32" placeholder="粘贴负责人分享的主体码" :disabled="state.busy.value" @change="clearLookup" @confirm="lookup" />
+                        <view class="entity-form-heading"
+                            ><text class="entity-title">输入门店主体码</text
+                            ><button class="entity-help" aria-label="在哪里找到主体码" @tap="showHelp = !showHelp"
+                                ><u-icon name="question-circle" size="21" color="#6a83a1" /></button
+                        ></view>
+                        <view v-if="showHelp" class="entity-help-body"
+                            >请门店负责人打开「我的 → 门店与成员」，复制主体码发给你。主体码不是营业执照号码，也不是 ERP
+                            编号。</view
+                        >
+                        <u-input
+                            v-model="code"
+                            :custom-style="cooperationInputStyle"
+                            maxlength="32"
+                            placeholder="粘贴负责人分享的主体码"
+                            :disabled="state.busy.value"
+                            @change="clearLookup"
+                            @confirm="lookup"
+                        />
                         <view v-if="lookupError" class="entity-error" role="alert">{{ lookupError }}</view>
-                        <view v-if="found.merchant_id" class="entity-found"><u-icon name="home" size="24" color="#5275a3" /><view><text class="entity-name">{{ found.name }}</text><text class="entity-muted">请核对门店名称，再申请加入</text></view></view>
-                        <u-button v-if="!found.merchant_id" type="primary" shape="circle" :custom-style="cooperationButtonStyle" :loading="looking" :disabled="looking || state.busy.value || !code.trim()" text="查找门店" @click="lookup" />
-                        <u-button v-else type="primary" shape="circle" :custom-style="cooperationButtonStyle" :loading="state.busy.value" :disabled="state.busy.value || found.can_join===false" :text="found.can_join===false ? '请联系负责人开通店员名额' : '申请加入这家门店'" @click="join" />
+                        <view v-if="found.merchant_id" class="entity-found"
+                            ><u-icon name="home" size="24" color="#5275a3" /><view
+                                ><text class="entity-name">{{ found.name }}</text
+                                ><text class="entity-muted">请核对门店名称，再申请加入</text></view
+                            ></view
+                        >
+                        <u-button
+                            v-if="!found.merchant_id"
+                            type="primary"
+                            shape="circle"
+                            :custom-style="cooperationButtonStyle"
+                            :loading="looking"
+                            :disabled="looking || state.busy.value || !code.trim()"
+                            text="查找门店"
+                            @click="lookup"
+                        />
+                        <u-button
+                            v-else
+                            type="primary"
+                            shape="circle"
+                            :custom-style="cooperationButtonStyle"
+                            :loading="state.busy.value"
+                            :disabled="state.busy.value || found.can_join===false"
+                            :text="found.can_join===false ? '请联系负责人开通店员名额' : '申请加入这家门店'"
+                            @click="join"
+                        />
                     </view>
                 </template>
                 <template v-else>
-                    <view class="entity-section entity-overview"><view class="entity-overview__top"><view><text class="entity-title">{{ team.name }}</text><text class="entity-muted">{{ team.is_owner ? '负责人' : '门店成员' }}</text></view><CoopLevelBadge :level="membershipBadgeRank(membership)" :label="membership.level_name" :appearance="membership.level_visual" :state="membershipState(membership)" variant="inline" /></view><view class="entity-capacity"><view><text class="entity-capacity__number">{{ membership.used_accounts ?? '—' }}</text><text class="entity-muted">已用账号</text></view><view><text class="entity-capacity__number">{{ entityAccounts(membership) }}</text><text class="entity-muted">总名额 · 含负责人</text></view><text class="entity-link" @tap="openMembership">查看权益 ›</text></view></view>
+                    <view class="entity-section entity-overview"
+                        ><view class="entity-overview__top"
+                            ><view
+                                ><text class="entity-title">{{ team.name }}</text
+                                ><text class="entity-muted">{{ team.is_owner ? '负责人' : '门店成员' }}</text></view
+                            ><CoopLevelBadge
+                                :level="membershipBadgeRank(membership)"
+                                :label="membership.level_name"
+                                :appearance="membership.level_visual"
+                                :state="membershipState(membership)"
+                                variant="inline" /></view
+                        ><view class="entity-capacity"
+                            ><view
+                                ><text class="entity-capacity__number">{{ membership.used_accounts ?? '—' }}</text
+                                ><text class="entity-muted">已用账号</text></view
+                            ><view
+                                ><text class="entity-capacity__number">{{ entityAccounts(membership) }}</text
+                                ><text class="entity-muted">总名额 · 含负责人</text></view
+                            ><text class="entity-link" @tap="openMembership">查看权益 ›</text></view
+                        ></view
+                    >
                     <view v-if="team.is_owner && team.subject_code" class="entity-section">
-                        <view class="entity-form-heading"><text class="entity-title">邀请店员加入</text><button class="entity-help" aria-label="店员邀请说明" @tap="showHelp = !showHelp"><u-icon name="question-circle" size="21" color="#6a83a1" /></button></view>
-                        <view v-if="hasCapacity" class="entity-code-row"><text class="entity-code" selectable>{{ team.subject_code }}</text><button class="entity-copy" @tap="copyCode">复制</button></view>
-                        <view v-else class="entity-capacity-warning"><text>当前会员没有可用的店员名额</text><text class="entity-muted">升级门店会员后，可邀请店员共同处理本店业务。</text><button class="entity-copy" @tap="openMembership">升级门店会员</button></view>
-                        <view v-if="showHelp" class="entity-help-body">店员使用本店的会员权益，无需重复购买。负责人确认后加入，占用一个账号名额；本店内部交付不收协作费。邀请店员不会产生推广奖励。</view>
+                        <view class="entity-form-heading"
+                            ><text class="entity-title">邀请店员加入</text
+                            ><button class="entity-help" aria-label="店员邀请说明" @tap="showHelp = !showHelp"
+                                ><u-icon name="question-circle" size="21" color="#6a83a1" /></button
+                        ></view>
+                        <view v-if="hasCapacity" class="entity-code-row"
+                            ><text class="entity-code" selectable>{{ team.subject_code }}</text
+                            ><button class="entity-copy" @tap="copyCode">复制</button></view
+                        >
+                        <view v-else class="entity-capacity-warning"
+                            ><text>当前会员没有可用的店员名额</text
+                            ><text class="entity-muted">升级门店会员后，可邀请店员共同处理本店业务。</text
+                            ><button class="entity-copy" @tap="openMembership">升级门店会员</button></view
+                        >
+                        <view v-if="showHelp" class="entity-help-body"
+                            >店员使用本店的会员权益，无需重复购买。负责人确认后加入，占用一个账号名额；本店内部交付不收协作费。邀请店员不会产生推广奖励。</view
+                        >
                         <!-- #ifdef MP-WEIXIN -->
-                        <button v-if="hasCapacity" class="entity-share" open-type="share"><u-icon name="share" size="18" color="#5275a3" /><text>邀请店员加入</text></button>
+                        <button v-if="hasCapacity" class="entity-share" open-type="share"
+                            ><u-icon name="share" size="18" color="#5275a3" /><text>邀请店员加入</text></button
+                        >
                         <!-- #endif -->
-                        <button v-if="hasCapacity" class="entity-share entity-share--poster" @tap="posterOpen = true"><u-icon name="photo" size="18" color="#5275a3" /><text>生成店员邀请海报</text></button>
+                        <button v-if="hasCapacity" class="entity-share entity-share--poster" @tap="posterOpen = true"
+                            ><u-icon name="photo" size="18" color="#5275a3" /><text>生成店员邀请海报</text></button
+                        >
                     </view>
-                    <view v-if="pending.length && team.is_owner" class="entity-section"><view class="entity-section-heading"><text class="entity-title">加入申请</text><text class="entity-count">{{ pending.length }}</text></view><view v-if="!hasCapacity" class="entity-capacity-warning" role="alert"><text>账号名额已满，升级会员或移除成员后可继续加入</text><text class="entity-capacity-warning__link" role="button" @tap="openMembership">查看会员 ›</text></view><view v-for="member in pending" :key="member.member_id" class="entity-member"><view class="entity-member__info"><view class="entity-name">{{ member.nickname || '申请人' }}</view><text class="entity-muted">{{ member.mobile || '手机号未提供' }}</text></view><view class="entity-member__actions"><button class="entity-text-action" :disabled="locked" @tap="review(member, false)">拒绝</button><button class="entity-approve" :disabled="locked || !hasCapacity" @tap="review(member, true)">同意加入</button></view></view></view>
-                    <view class="entity-section"><view class="entity-section-heading"><text class="entity-title">门店成员</text><text class="entity-muted">{{ members.length }} 人</text></view><view v-for="member in members" :key="member.member_id" class="entity-member"><view class="entity-member__avatar">{{ String(member.nickname || '同事').slice(0, 1) }}</view><view class="entity-member__info"><view class="entity-name">{{ member.nickname || '门店成员' }}<text v-if="member.role === 'owner'" class="entity-owner">负责人</text></view><text class="entity-muted">{{ member.mobile || memberStatus(member.status) }}</text></view><button v-if="team.is_owner && member.role !== 'owner'" class="entity-text-action" :disabled="state.busy.value" @tap="remove(member)">移除</button></view><view v-if="!members.length" class="entity-muted">成员资料暂未返回，请刷新核对。</view></view>
-                    <view v-if="!team.is_owner" class="entity-exit"><button class="entity-exit-button" :disabled="state.busy.value" @tap="leave">退出这家门店</button></view>
+                    <view v-if="pending.length && team.is_owner" class="entity-section"
+                        ><view class="entity-section-heading"
+                            ><text class="entity-title">加入申请</text
+                            ><text class="entity-count">{{ pending.length }}</text></view
+                        ><view v-if="!hasCapacity" class="entity-capacity-warning" role="alert"
+                            ><text>账号名额已满，升级会员或移除成员后可继续加入</text
+                            ><text class="entity-capacity-warning__link" role="button" @tap="openMembership"
+                                >查看会员 ›</text
+                            ></view
+                        ><view v-for="member in pending" :key="member.member_id" class="entity-member"
+                            ><view class="entity-member__info"
+                                ><view class="entity-name">{{ member.nickname || '申请人' }}</view
+                                ><text class="entity-muted">{{ member.mobile || '手机号未提供' }}</text></view
+                            ><view class="entity-member__actions"
+                                ><button class="entity-text-action" :disabled="locked" @tap="review(member, false)"
+                                    >拒绝</button
+                                ><button
+                                    class="entity-approve"
+                                    :disabled="locked || !hasCapacity"
+                                    @tap="review(member, true)"
+                                    >同意加入</button
+                                ></view
+                            ></view
+                        ></view
+                    >
+                    <view class="entity-section"
+                        ><view class="entity-section-heading"
+                            ><text class="entity-title">门店成员</text
+                            ><text class="entity-muted">{{ members.length }} 人</text></view
+                        ><view v-for="member in members" :key="member.member_id" class="entity-member"
+                            ><view
+                                class="entity-member__avatar"
+                                >{{ String(member.nickname || '同事').slice(0, 1) }}</view
+                            ><view class="entity-member__info"
+                                ><view class="entity-name"
+                                    >{{ member.nickname || '门店成员'
+                                    }}<text v-if="member.role === 'owner'" class="entity-owner">负责人</text></view
+                                ><text
+                                    class="entity-muted"
+                                    >{{ member.mobile || memberStatus(member.status) }}</text
+                                ></view
+                            ><button
+                                v-if="team.is_owner && member.role !== 'owner'"
+                                class="entity-text-action"
+                                :disabled="state.busy.value"
+                                @tap="remove(member)"
+                                >移除</button
+                            ></view
+                        ><view v-if="!members.length" class="entity-muted">成员资料暂未返回，请刷新核对。</view></view
+                    >
+                    <view v-if="!team.is_owner" class="entity-exit"
+                        ><button class="entity-exit-button" :disabled="state.busy.value" @tap="leave"
+                            >退出这家门店</button
+                        ></view
+                    >
                 </template>
-                <view v-if="state.writeError.value" class="entity-error" role="alert">{{ state.writeError.value }}</view>
+                <view
+                    v-if="state.writeError.value"
+                    class="entity-error"
+                    role="alert"
+                    >{{ state.writeError.value }}</view
+                >
             </view>
         </CoopTaskSheet>
-        <CoopInvitePoster :show="posterOpen" scene="entity" :allowed="pageVisible && team.is_owner === true && hasCapacity && !!team.subject_code" @close="posterOpen = false" />
+        <CoopInvitePoster
+            :show="posterOpen"
+            scene="entity"
+            :allowed="pageVisible && team.is_owner === true && hasCapacity && !!team.subject_code"
+            @close="posterOpen = false"
+        />
     </view>
 </template>
 <script setup lang="ts">

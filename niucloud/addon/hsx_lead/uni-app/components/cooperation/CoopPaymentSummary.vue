@@ -1,12 +1,36 @@
 <template>
     <view class="coop-payment-summary" :class="{'is-embedded':embedded}">
         <view class="coop-payment-purchase">
-            <view class="coop-payment-kind"><view class="coop-payment-symbol"><u-icon :name="completed ? 'checkmark-circle' : 'order'" size="23" color="var(--primary-color, #3478cc)" /></view><view><text class="coop-payment-name">协作佣金</text><text class="coop-payment-caption">客户货款由门店与客户另行结算</text></view></view>
-            <view class="coop-payment-total"><text>{{ completed ? '本单已付款' : orderCreated ? '本单实付金额' : '本次实付' }}</text><view class="coop-payment-amount">{{ coopMoney(amount) }}</view><text v-if="loading" class="coop-payment-loading">正在核对本笔付款结果…</text></view>
+            <view class="coop-payment-kind"
+                ><view class="coop-payment-symbol"
+                    ><u-icon
+                        :name="completed ? 'checkmark-circle' : 'order'"
+                        size="23"
+                        color="var(--primary-color, #3478cc)" /></view
+                ><view
+                    ><text class="coop-payment-name">协作佣金</text
+                    ><text class="coop-payment-caption">客户货款由门店与客户另行结算</text></view
+                ></view
+            >
+            <view class="coop-payment-total"
+                ><text>{{ completed ? '本单已付款' : orderCreated ? '本单实付金额' : '本次实付' }}</text
+                ><view class="coop-payment-amount">{{ coopMoney(amount) }}</view
+                ><text v-if="loading" class="coop-payment-loading">正在核对本笔付款结果…</text></view
+            >
         </view>
         <view v-if="error" class="coop-payment-feedback is-error" role="alert">{{ error }}</view>
-        <view v-else-if="message" class="coop-payment-feedback" :class="{ 'is-confirmed': completed }" role="status">{{ message }}</view>
-        <view v-else-if="!loading" class="coop-payment-next">{{ orderCreated ? '按原付款单继续支付，请勿重复创建。' : '确认金额后创建协作佣金付款单。' }}</view>
+        <view
+            v-else-if="message"
+            class="coop-payment-feedback"
+            :class="{ 'is-confirmed': completed }"
+            role="status"
+            >{{ message }}</view
+        >
+        <view
+            v-else-if="!loading"
+            class="coop-payment-next"
+            >{{ orderCreated ? '按原付款单继续支付，请勿重复创建。' : '确认金额后创建协作佣金付款单。' }}</view
+        >
     </view>
 </template>
 <script setup lang="ts">

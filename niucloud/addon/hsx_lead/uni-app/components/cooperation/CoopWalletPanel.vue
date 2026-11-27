@@ -3,17 +3,58 @@
         <view class="coop-balance-card">
             <view class="coop-muted">会员佣金账户 · 可提现收益</view>
             <view class="coop-balance">{{ coopMoney(wallet.available) }}</view>
-            <view class="coop-withdraw-entry"><u-button :custom-style="cooperationButtonStyle" type="primary" shape="circle" text="申请提现" :disabled="loading || !!error || Number(wallet.available || 0) <= 0" @click="withdraw" /></view>
-            <view class="coop-income-summary"><view><text>提现处理中</text><text>{{ coopMoney(wallet.frozen) }}</text></view><view><text>累计佣金</text><text>{{ coopMoney(wallet.total_income) }}</text></view><view><text>已提现</text><text>{{ coopMoney(wallet.withdrawn) }}</text></view></view>
+            <view class="coop-withdraw-entry"
+                ><u-button
+                    :custom-style="cooperationButtonStyle"
+                    type="primary"
+                    shape="circle"
+                    text="申请提现"
+                    :disabled="loading || !!error || Number(wallet.available || 0) <= 0"
+                    @click="withdraw"
+            /></view>
+            <view class="coop-income-summary"
+                ><view
+                    ><text>提现处理中</text><text>{{ coopMoney(wallet.frozen) }}</text></view
+                ><view
+                    ><text>累计佣金</text><text>{{ coopMoney(wallet.total_income) }}</text></view
+                ><view
+                    ><text>已提现</text><text>{{ coopMoney(wallet.withdrawn) }}</text></view
+                ></view
+            >
         </view>
-        <view class="coop-wallet-note"><u-collapse :border="false"><u-collapse-item title="账户与提现说明" name="wallet-help"><view>本账户包含其他业务佣金。协作净收益也进入这里；提现条件与手续费以会员中心申请页为准。</view></u-collapse-item></u-collapse></view>
-        <view class="coop-form-section coop-wallet-links"><view class="coop-menu-row" @tap="commissionAccount"><text>会员佣金总账</text><u-icon name="arrow-right" size="14" color="#929ba8" /></view></view>
+        <view class="coop-wallet-note"
+            ><u-collapse :border="false"
+                ><u-collapse-item title="账户与提现说明" name="wallet-help"
+                    ><view
+                        >本账户包含其他业务佣金。协作净收益也进入这里；提现条件与手续费以会员中心申请页为准。</view
+                    ></u-collapse-item
+                ></u-collapse
+            ></view
+        >
+        <view class="coop-form-section coop-wallet-links"
+            ><view class="coop-menu-row" @tap="commissionAccount"
+                ><text>会员佣金总账</text><u-icon name="arrow-right" size="14" color="#929ba8" /></view
+        ></view>
         <CoopState v-if="loading || error" :loading="loading" :error="error" @retry="$emit('reload')" />
         <view v-else class="coop-form-section">
             <view class="coop-section-title">协作收益明细</view>
-            <view v-for="row in entries" :key="row.id" class="coop-wallet-entry"><view><view>{{ row.customer_name ? row.customer_name + '的交付' : '协作佣金收益' }}</view><text>{{ row.status === 'paid' ? '已支付佣金形成的发布方净收益' : '款项状态待核对，不代表已到账' }}</text><text>{{ coopDate(row.pay_time || row.paid_at || row.create_time) }}</text></view><text :class="{ credit: row.status === 'paid' }">{{ row.status === 'paid' ? '+' : '' }}{{ coopMoney(row.net_amount ?? row.amount) }}</text></view>
+            <view v-for="row in entries" :key="row.id" class="coop-wallet-entry"
+                ><view
+                    ><view>{{ row.customer_name ? row.customer_name + '的交付' : '协作佣金收益' }}</view
+                    ><text
+                        >{{ row.status === 'paid' ? '已支付佣金形成的发布方净收益' : '款项状态待核对，不代表已到账' }}</text
+                    ><text>{{ coopDate(row.pay_time || row.paid_at || row.create_time) }}</text></view
+                ><text :class="{ credit: row.status === 'paid' }"
+                    >{{ row.status === 'paid' ? '+' : '' }}{{ coopMoney(row.net_amount ?? row.amount) }}</text
+                ></view
+            >
             <view v-if="!entries.length" class="coop-muted">暂无已支付的协作收益</view>
-            <view v-if="hasMore" class="coop-loadmore" @tap="!loading && $emit('more')">{{ loading ? '正在读取更早记录…' : '加载更早的协作收益' }}</view>
+            <view
+                v-if="hasMore"
+                class="coop-loadmore"
+                @tap="!loading && $emit('more')"
+                >{{ loading ? '正在读取更早记录…' : '加载更早的协作收益' }}</view
+            >
         </view>
     </view>
 </template>

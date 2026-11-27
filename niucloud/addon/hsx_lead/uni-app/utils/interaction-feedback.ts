@@ -10,15 +10,29 @@ const preferenceKey = 'hsx_lead_touch_feedback_v1'
 export function createInteractionFeedback(getRuntime: () => Runtime | undefined, now = () => Date.now()) {
     let preference: boolean | undefined
     let lastAt = -Infinity
-    const runtime = () => { try { return getRuntime() } catch { return undefined } }
+    const runtime = () => {
+        try {
+            return getRuntime()
+        } catch {
+            return undefined
+        }
+    }
     const supported = () => typeof runtime()?.vibrateShort === 'function'
     const enabled = () => {
         if (preference !== undefined) return preference
-        try { return runtime()?.getStorageSync?.(preferenceKey) !== false } catch { return true }
+        try {
+            return runtime()?.getStorageSync?.(preferenceKey) !== false
+        } catch {
+            return true
+        }
     }
     const setEnabled = (value: boolean) => {
         preference = value === true
-        try { runtime()?.setStorageSync?.(preferenceKey, preference) } catch { /* Optional preference storage. */ }
+        try {
+            runtime()?.setStorageSync?.(preferenceKey, preference)
+        } catch {
+            /* Optional preference storage. */
+        }
     }
     const feedback = (_kind: Kind) => {
         const api = runtime()
@@ -26,7 +40,12 @@ export function createInteractionFeedback(getRuntime: () => Runtime | undefined,
         const at = now()
         if (at - lastAt < 350) return false
         lastAt = at
-        try { api.vibrateShort({ type: 'light', fail: () => {} }); return true } catch { return false }
+        try {
+            api.vibrateShort({ type: 'light', fail: () => {} })
+            return true
+        } catch {
+            return false
+        }
     }
     return { supported, enabled, setEnabled, feedback }
 }

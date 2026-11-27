@@ -1,4 +1,33 @@
-<template><view><view class="coop-upload-grid"><view v-for="(url, index) in modelValue" :key="url" class="coop-upload-image"><image :src="img(url)" mode="aspectFill" @tap="preview(url)" /><button :disabled="disabled || uploading" aria-label="移除此图片" @tap="remove(index)"><u-icon name="close" size="12" color="#fff" /></button></view><u-upload v-if="modelValue.length < 6" :multiple="true" :max-count="6 - modelValue.length" :max-size="5242880" :disabled="disabled || uploading" @after-read="afterRead" @oversize="error = '每张图片不能超过 5 MB'"><view class="coop-upload-add"><u-loading-icon v-if="uploading" mode="circle" /><u-icon v-else name="plus" size="24" color="#8d97a4" /><text>{{ uploading ? '正在上传' : '添加图片' }}</text></view></u-upload></view><view v-if="error" class="coop-upload-error">{{ error }}</view><view class="coop-upload-hint">支持聊天截图或图片，最多 6 张，每张不超过 5 MB</view></view></template>
+<template>
+    <view
+        ><view class="coop-upload-grid"
+            ><view v-for="(url, index) in modelValue" :key="url" class="coop-upload-image"
+                ><image :src="img(url)" mode="aspectFill" @tap="preview(url)" /><button
+                    :disabled="disabled || uploading"
+                    aria-label="移除此图片"
+                    @tap="remove(index)"
+                    ><u-icon name="close" size="12" color="#fff" /></button></view
+            ><u-upload
+                v-if="modelValue.length < 6"
+                :multiple="true"
+                :max-count="6 - modelValue.length"
+                :max-size="5242880"
+                :disabled="disabled || uploading"
+                @after-read="afterRead"
+                @oversize="error = '每张图片不能超过 5 MB'"
+                ><view class="coop-upload-add"
+                    ><u-loading-icon v-if="uploading" mode="circle" /><u-icon
+                        v-else
+                        name="plus"
+                        size="24"
+                        color="#8d97a4"
+                    /><text>{{ uploading ? '正在上传' : '添加图片' }}</text></view
+                ></u-upload
+            ></view
+        ><view v-if="error" class="coop-upload-error">{{ error }}</view
+        ><view class="coop-upload-hint">支持聊天截图或图片，最多 6 张，每张不超过 5 MB</view></view
+    >
+</template>
 <script setup lang="ts">
 import { onBeforeUnmount, ref } from 'vue'
 import { img } from '@/utils/common'

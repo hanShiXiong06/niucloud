@@ -7,4 +7,6 @@ import CoopState from './CoopState.vue'
 defineProps<{ loading: boolean; error: string }>()
 defineEmits<{ (event: 'retry'): void }>()
 </script>
-<style scoped>.coop-diy-page-status { padding: 48px 20px 24px; }</style>
+<style scoped>
+.coop-diy-page-status { padding: 48px 20px 24px; }
+</style>

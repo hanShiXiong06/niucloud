@@ -1,16 +1,60 @@
 <template>
     <view class="coop-storefront-upload">
         <view class="coop-storefront-upload__row">
-            <view class="coop-storefront-upload__title">门头照片<text>{{ required ? '必填' : '选填' }}</text></view>
+            <view class="coop-storefront-upload__title"
+                >门头照片<text>{{ required ? '必填' : '选填' }}</text></view
+            >
             <view class="coop-storefront-upload__controls">
-                <view v-if="modelValue" class="coop-storefront-upload__tile coop-storefront-upload__preview" role="button" aria-label="预览门头照片" :aria-disabled="uploading" @tap.stop="preview">
+                <view
+                    v-if="modelValue"
+                    class="coop-storefront-upload__tile coop-storefront-upload__preview"
+                    role="button"
+                    aria-label="预览门头照片"
+                    :aria-disabled="uploading"
+                    @tap.stop="preview"
+                >
                     <image v-if="!imageFailed" :src="img(modelValue)" mode="aspectFill" @error="imageFailed = true" />
-                    <view v-else class="coop-storefront-upload__fallback"><u-icon name="photo" size="24" color="#9aabbe" /></view>
-                    <button class="coop-storefront-upload__more" :disabled="disabled || uploading" aria-label="门头照片操作" @tap.stop="openActions"><view><u-icon name="more-dot-fill" size="19" color="#fff" /></view></button>
-                    <view v-if="uploading" class="coop-storefront-upload__busy" role="status"><u-loading-icon mode="circle" size="20" color="#fff" /><text>上传中</text></view>
+                    <view v-else class="coop-storefront-upload__fallback"
+                        ><u-icon name="photo" size="24" color="#9aabbe"
+                    /></view>
+                    <button
+                        class="coop-storefront-upload__more"
+                        :disabled="disabled || uploading"
+                        aria-label="门头照片操作"
+                        @tap.stop="openActions"
+                        ><view><u-icon name="more-dot-fill" size="19" color="#fff" /></view
+                    ></button>
+                    <view v-if="uploading" class="coop-storefront-upload__busy" role="status"
+                        ><u-loading-icon mode="circle" size="20" color="#fff" /><text>上传中</text></view
+                    >
                 </view>
-                <u-upload ref="uploader" :multiple="false" :max-count="1" :max-size="5242880" :custom-style="{ display: modelValue ? 'none' : 'block' }" :disabled="disabled || uploading" :capture="['album', 'camera']" @after-read="afterRead" @oversize="error = '门头图片不能超过 5 MB'">
-                    <view class="coop-storefront-upload__tile coop-storefront-upload__choose" role="button" aria-label="添加门头照片" :aria-disabled="disabled || uploading" :class="{ disabled: disabled || uploading }"><template v-if="uploading"><u-loading-icon mode="circle" size="21" color="var(--primary-color, #3478cc)" /><text>上传中</text></template><template v-else><u-icon name="camera" size="26" color="var(--primary-color, #3478cc)" /><text>添加照片</text></template></view>
+                <u-upload
+                    ref="uploader"
+                    :multiple="false"
+                    :max-count="1"
+                    :max-size="5242880"
+                    :custom-style="{ display: modelValue ? 'none' : 'block' }"
+                    :disabled="disabled || uploading"
+                    :capture="['album', 'camera']"
+                    @after-read="afterRead"
+                    @oversize="error = '门头图片不能超过 5 MB'"
+                >
+                    <view
+                        class="coop-storefront-upload__tile coop-storefront-upload__choose"
+                        role="button"
+                        aria-label="添加门头照片"
+                        :aria-disabled="disabled || uploading"
+                        :class="{ disabled: disabled || uploading }"
+                        ><template v-if="uploading"
+                            ><u-loading-icon mode="circle" size="21" color="var(--primary-color, #3478cc)" /><text
+                                >上传中</text
+                            ></template
+                        ><template v-else
+                            ><u-icon name="camera" size="26" color="var(--primary-color, #3478cc)" /><text
+                                >添加照片</text
+                            ></template
+                        ></view
+                    >
                 </u-upload>
             </view>
         </view>

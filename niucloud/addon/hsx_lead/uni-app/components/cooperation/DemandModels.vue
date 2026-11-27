@@ -3,11 +3,25 @@
         <view class="demand-models__items">
             <view v-for="item in preview.items" :key="item.id" class="demand-models__tag">
                 <text>{{ item.title || item.name || '未命名型号' }}</text>
-                <button v-if="removable" class="demand-models__remove" :disabled="disabled" :aria-label="`移除${item.title || item.name || '型号'}`" @tap.stop="emit('remove', item.id)"><u-icon name="close" size="11" color="#76879c" /></button>
+                <button
+                    v-if="removable"
+                    class="demand-models__remove"
+                    :disabled="disabled"
+                    :aria-label="`移除${item.title || item.name || '型号'}`"
+                    @tap.stop="emit('remove', item.id)"
+                    ><u-icon name="close" size="11" color="#76879c"
+                /></button>
             </view>
             <text v-if="!preview.total" class="demand-models__empty">{{ empty }}</text>
         </view>
-        <button v-if="preview.hidden" class="demand-models__toggle" :aria-expanded="expanded" @tap.stop="expanded = !expanded"><text>{{ expanded ? '收起' : `展开其余 ${preview.hidden} 个型号` }}</text><u-icon :name="expanded ? 'arrow-up' : 'arrow-down'" size="10" color="#6580a1" /></button>
+        <button
+            v-if="preview.hidden"
+            class="demand-models__toggle"
+            :aria-expanded="expanded"
+            @tap.stop="expanded = !expanded"
+            ><text>{{ expanded ? '收起' : `展开其余 ${preview.hidden} 个型号` }}</text
+            ><u-icon :name="expanded ? 'arrow-up' : 'arrow-down'" size="10" color="#6580a1"
+        /></button>
     </view>
 </template>
 <script setup lang="ts">

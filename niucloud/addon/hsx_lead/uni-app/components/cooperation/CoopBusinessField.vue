@@ -1,14 +1,47 @@
 <template>
     <view class="coop-business-field">
-        <view class="coop-business-field__label"><text>{{ field.label }}</text><text v-if="!field.required" class="coop-business-field__optional">选填</text></view>
-        <picker v-if="field.type === 'select'" :range="field.options || []" range-key="label" :disabled="disabled" @change="selectOption">
-            <view class="coop-business-field__select" :class="{ 'is-empty': !displayValue, 'is-disabled': disabled }"><text>{{ displayValue || field.placeholder || '请选择' }}</text><u-icon name="arrow-right" size="12" color="#8996a6" /></view>
+        <view class="coop-business-field__label"
+            ><text>{{ field.label }}</text
+            ><text v-if="!field.required" class="coop-business-field__optional">选填</text></view
+        >
+        <picker
+            v-if="field.type === 'select'"
+            :range="field.options || []"
+            range-key="label"
+            :disabled="disabled"
+            @change="selectOption"
+        >
+            <view class="coop-business-field__select" :class="{ 'is-empty': !displayValue, 'is-disabled': disabled }"
+                ><text>{{ displayValue || field.placeholder || '请选择' }}</text
+                ><u-icon name="arrow-right" size="12" color="#8996a6"
+            /></view>
         </picker>
-        <view v-else-if="field.type === 'address'" class="coop-business-field__address" :class="{ 'is-disabled': disabled }">
-            <textarea :value="String(modelValue || '')" :disabled="disabled" :maxlength="300" :auto-height="true" :placeholder="field.placeholder || '小区、街道或地标（门牌可不填）'" placeholder-class="coop-business-field__placeholder" @input="writeAddress" />
+        <view
+            v-else-if="field.type === 'address'"
+            class="coop-business-field__address"
+            :class="{ 'is-disabled': disabled }"
+        >
+            <textarea
+                :value="String(modelValue || '')"
+                :disabled="disabled"
+                :maxlength="300"
+                :auto-height="true"
+                :placeholder="field.placeholder || '小区、街道或地标（门牌可不填）'"
+                placeholder-class="coop-business-field__placeholder"
+                @input="writeAddress"
+            />
             <text class="coop-business-field__count">{{ charCount }}/300</text>
         </view>
-        <u-input v-else :model-value="modelValue" :custom-style="cooperationInputStyle" :type="field.type === 'number' ? 'digit' : 'text'" :maxlength="1000" :placeholder="field.placeholder || '请填写' + field.label" :disabled="disabled" @update:model-value="$emit('update:modelValue', $event)" />
+        <u-input
+            v-else
+            :model-value="modelValue"
+            :custom-style="cooperationInputStyle"
+            :type="field.type === 'number' ? 'digit' : 'text'"
+            :maxlength="1000"
+            :placeholder="field.placeholder || '请填写' + field.label"
+            :disabled="disabled"
+            @update:model-value="$emit('update:modelValue', $event)"
+        />
     </view>
 </template>
 <script setup lang="ts">

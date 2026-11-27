@@ -1,8 +1,28 @@
 <template>
     <view class="income-page" :style="themeColor()">
-        <CooperationNav title="我的收益" :back="hasPreviousPage" :actions="[{ key: 'orders', label: '付款单', ariaLabel: '我的付款单' }, { key: 'refresh', icon: 'reload', ariaLabel: '刷新收益' }]" @back="backCooperationTask" @action="navAction" />
-        <CoopIncomePanel v-if="loggedIn" ref="panelRef" :active="active" :initial-type="initialType" :initial-status="initialStatus" @overlay="overlay = $event" />
-        <view v-else class="income-page__login"><CoopState title="登录后查看收益" hint="普通会员也可以邀请朋友赚取佣金" icon="account" /><u-button type="primary" shape="circle" :custom-style="cooperationButtonStyle" text="登录" @click="login" /></view>
+        <CooperationNav
+            title="我的收益"
+            :back="hasPreviousPage"
+            :actions="[{ key: 'orders', label: '付款单', ariaLabel: '我的付款单' }, { key: 'refresh', icon: 'reload', ariaLabel: '刷新收益' }]"
+            @back="backCooperationTask"
+            @action="navAction"
+        />
+        <CoopIncomePanel
+            v-if="loggedIn"
+            ref="panelRef"
+            :active="active"
+            :initial-type="initialType"
+            :initial-status="initialStatus"
+            @overlay="overlay = $event"
+        />
+        <view v-else class="income-page__login"
+            ><CoopState title="登录后查看收益" hint="普通会员也可以邀请朋友赚取佣金" icon="account" /><u-button
+                type="primary"
+                shape="circle"
+                :custom-style="cooperationButtonStyle"
+                text="登录"
+                @click="login"
+        /></view>
         <view class="income-page__tabbar"><FrameworkTabbar v-if="!overlay" addon="hsx_lead" /></view>
     </view>
 </template>

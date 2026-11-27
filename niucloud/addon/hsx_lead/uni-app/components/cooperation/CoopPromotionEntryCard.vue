@@ -1,10 +1,35 @@
 <template>
     <view class="promotion-entry" :style="{ background: appearance?.panelColor, color: appearance?.titleColor }">
-        <view class="promotion-entry__main" :style="{ background: appearance?.panelColor }" role="button" aria-label="打开推广中心" @tap="emit('open', 'overview')">
-            <view class="promotion-entry__copy"><view class="promotion-entry__eyebrow"><u-icon name="share" size="14" color="#4c75b5" /><text>推广中心</text><text v-if="enabled" class="promotion-entry__status">城市服务商</text></view><view class="promotion-entry__title">好生意，一起做</view><view class="promotion-entry__subtitle">邀请商户 · 连接本地生意</view><view class="promotion-entry__action"><text>邀请商户，查看收益</text><u-icon name="arrow-right" size="12" color="#fff" /></view></view>
-            <view class="promotion-entry__art" aria-hidden="true"><view class="promotion-entry__orbit" /><view class="promotion-entry__small-store"><u-icon name="home" size="24" color="#6e88ad" /></view><view class="promotion-entry__store"><u-icon name="home" size="40" color="#4878ba" /><view class="promotion-entry__store-line" /></view><view class="promotion-entry__join"><u-icon name="man-add" size="17" color="#b48b46" /></view></view>
+        <view
+            class="promotion-entry__main"
+            :style="{ background: appearance?.panelColor }"
+            role="button"
+            aria-label="打开推广中心"
+            @tap="emit('open', 'overview')"
+        >
+            <view class="promotion-entry__copy"
+                ><view class="promotion-entry__eyebrow"
+                    ><u-icon name="share" size="14" color="#4c75b5" /><text>推广中心</text
+                    ><text v-if="enabled" class="promotion-entry__status">城市服务商</text></view
+                ><view class="promotion-entry__title">好生意，一起做</view
+                ><view class="promotion-entry__subtitle">邀请商户 · 连接本地生意</view
+                ><view class="promotion-entry__action"
+                    ><text>邀请商户，查看收益</text><u-icon name="arrow-right" size="12" color="#fff" /></view
+            ></view>
+            <view class="promotion-entry__art" aria-hidden="true"
+                ><view class="promotion-entry__orbit" /><view class="promotion-entry__small-store"
+                    ><u-icon name="home" size="24" color="#6e88ad" /></view
+                ><view class="promotion-entry__store"
+                    ><u-icon name="home" size="40" color="#4878ba" /><view class="promotion-entry__store-line" /></view
+                ><view class="promotion-entry__join"><u-icon name="man-add" size="17" color="#b48b46" /></view
+            ></view>
         </view>
-        <view v-if="showInviter" class="promotion-entry__upstream" @tap="emit('open', 'upstream')"><view><u-icon name="account" size="17" color="#7b8caa" /><text>邀请我的人</text></view><view><text>{{ upstreamName || '查看邀请关系' }}</text><u-icon name="arrow-right" size="12" color="#9aa6b5" /></view></view>
+        <view v-if="showInviter" class="promotion-entry__upstream" @tap="emit('open', 'upstream')"
+            ><view><u-icon name="account" size="17" color="#7b8caa" /><text>邀请我的人</text></view
+            ><view
+                ><text>{{ upstreamName || '查看邀请关系' }}</text
+                ><u-icon name="arrow-right" size="12" color="#9aa6b5" /></view
+        ></view>
     </view>
 </template>
 <script setup lang="ts">

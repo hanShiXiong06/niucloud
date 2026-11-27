@@ -1,13 +1,39 @@
 <template>
     <view class="service-line-icon" :style="iconStyle" aria-hidden="true">
         <view class="service-line-icon__drawing" :class="'is-' + actualShape" :style="drawingStyle">
-            <template v-if="actualShape === 'phone'"><view class="service-stroke phone-back" /><view class="service-stroke phone-front" /><view class="service-stroke phone-speaker" /><view class="service-stroke phone-home" /></template>
-            <template v-else-if="actualShape === 'new'"><view class="service-stroke new-device" /><view class="service-stroke new-plus-h" /><view class="service-stroke new-plus-v" /><view class="service-stroke new-home" /></template>
-            <template v-else-if="actualShape === 'rent'"><view class="service-stroke rent-calendar" /><view class="service-stroke rent-divider" /><view class="service-stroke rent-binding rent-binding--left" /><view class="service-stroke rent-binding rent-binding--right" /><view class="service-stroke rent-clock" /><view class="service-stroke rent-hour" /><view class="service-stroke rent-minute" /></template>
-            <template v-else-if="actualShape === 'exchange'"><view class="service-stroke exchange-line exchange-line--top" /><view class="service-stroke exchange-head exchange-head--right" /><view class="service-stroke exchange-line exchange-line--bottom" /><view class="service-stroke exchange-head exchange-head--left" /></template>
-            <template v-else-if="actualShape === 'wifi'"><view class="service-stroke wifi-wave wifi-wave--outer" /><view class="service-stroke wifi-wave wifi-wave--middle" /><view class="service-stroke wifi-dot" /></template>
-            <template v-else-if="actualShape === 'repair'"><view class="service-stroke repair-handle" /><view class="service-stroke repair-head" /><view class="service-stroke repair-hole" /></template>
-            <template v-else><view class="service-stroke recycle-roof" /><view class="service-stroke recycle-house" /><view class="service-stroke recycle-stem" /><view class="service-stroke recycle-arrow" /></template>
+            <template v-if="actualShape === 'phone'"
+                ><view class="service-stroke phone-back" /><view class="service-stroke phone-front" /><view
+                    class="service-stroke phone-speaker" /><view class="service-stroke phone-home"
+            /></template>
+            <template v-else-if="actualShape === 'new'"
+                ><view class="service-stroke new-device" /><view class="service-stroke new-plus-h" /><view
+                    class="service-stroke new-plus-v" /><view class="service-stroke new-home"
+            /></template>
+            <template v-else-if="actualShape === 'rent'"
+                ><view class="service-stroke rent-calendar" /><view class="service-stroke rent-divider" /><view
+                    class="service-stroke rent-binding rent-binding--left" /><view
+                    class="service-stroke rent-binding rent-binding--right" /><view
+                    class="service-stroke rent-clock" /><view class="service-stroke rent-hour" /><view
+                    class="service-stroke rent-minute"
+            /></template>
+            <template v-else-if="actualShape === 'exchange'"
+                ><view class="service-stroke exchange-line exchange-line--top" /><view
+                    class="service-stroke exchange-head exchange-head--right" /><view
+                    class="service-stroke exchange-line exchange-line--bottom" /><view
+                    class="service-stroke exchange-head exchange-head--left"
+            /></template>
+            <template v-else-if="actualShape === 'wifi'"
+                ><view class="service-stroke wifi-wave wifi-wave--outer" /><view
+                    class="service-stroke wifi-wave wifi-wave--middle" /><view class="service-stroke wifi-dot"
+            /></template>
+            <template v-else-if="actualShape === 'repair'"
+                ><view class="service-stroke repair-handle" /><view class="service-stroke repair-head" /><view
+                    class="service-stroke repair-hole"
+            /></template>
+            <template v-else
+                ><view class="service-stroke recycle-roof" /><view class="service-stroke recycle-house" /><view
+                    class="service-stroke recycle-stem" /><view class="service-stroke recycle-arrow"
+            /></template>
         </view>
     </view>
 </template>

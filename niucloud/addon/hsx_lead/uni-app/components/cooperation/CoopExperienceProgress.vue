@@ -1,15 +1,41 @@
 <template>
     <view class="coop-experience" :style="{ '--experience-color': tone }">
-        <view class="coop-experience__heading"><text>会员经验</text><text>{{ completedText }}</text></view>
-        <view class="coop-experience__value"><text>{{ valueText }}</text><text>经验</text></view>
-        <view v-if="hasSources" class="coop-experience__sources"><text>真实付佣 {{ experienceText(experience.earned_value) }}</text><text>补足经验 {{ experienceText(experience.purchased_value) }}</text></view>
+        <view class="coop-experience__heading"
+            ><text>会员经验</text><text>{{ completedText }}</text></view
+        >
+        <view class="coop-experience__value"
+            ><text>{{ valueText }}</text
+            ><text>经验</text></view
+        >
+        <view v-if="hasSources" class="coop-experience__sources"
+            ><text>真实付佣 {{ experienceText(experience.earned_value) }}</text
+            ><text>补足经验 {{ experienceText(experience.purchased_value) }}</text></view
+        >
         <template v-if="nextLevel && hasTarget">
-            <view class="coop-experience__target"><text>下一等级 · {{ nextLevel.name }}</text><text>{{ targetText }} 经验</text></view>
-            <u-line-progress v-if="percentage !== null" :percentage="percentage" :active-color="tone" inactive-color="#ededed" :height="5" :show-text="false" />
-            <view class="coop-experience__hint"><text>{{ nextLevel.experience_eligible === true ? '经验已达标，可自主选择升级' : nextLevel.experience_eligible === false ? '还差 ' + remainingText + ' 经验' : '成长资格核验中' }}</text><text v-if="percentage !== null">{{ percentage }}%</text></view>
+            <view class="coop-experience__target"
+                ><text>下一等级 · {{ nextLevel.name }}</text
+                ><text>{{ targetText }} 经验</text></view
+            >
+            <u-line-progress
+                v-if="percentage !== null"
+                :percentage="percentage"
+                :active-color="tone"
+                inactive-color="#ededed"
+                :height="5"
+                :show-text="false"
+            />
+            <view class="coop-experience__hint"
+                ><text
+                    >{{ nextLevel.experience_eligible === true ? '经验已达标，可自主选择升级' : nextLevel.experience_eligible === false ? '还差 ' + remainingText + ' 经验' : '成长资格核验中' }}</text
+                ><text v-if="percentage !== null">{{ percentage }}%</text></view
+            >
         </template>
-        <view v-else-if="nextLevel && !experienceGateEnabled(nextLevel)" class="coop-experience__hint"><text>下一等级 · {{ nextLevel.name }}，无需经验门槛</text></view>
-        <view v-else class="coop-experience__hint"><text>{{ maxed ? '已达当前最高等级，经验继续累计' : '暂无下一等级，经验继续累计' }}</text></view>
+        <view v-else-if="nextLevel && !experienceGateEnabled(nextLevel)" class="coop-experience__hint"
+            ><text>下一等级 · {{ nextLevel.name }}，无需经验门槛</text></view
+        >
+        <view v-else class="coop-experience__hint"
+            ><text>{{ maxed ? '已达当前最高等级，经验继续累计' : '暂无下一等级，经验继续累计' }}</text></view
+        >
     </view>
 </template>
 <script setup lang="ts">

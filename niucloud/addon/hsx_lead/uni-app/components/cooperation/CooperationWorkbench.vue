@@ -1,75 +1,425 @@
 <template>
     <view class="hsx-cooperation" :style="themeColor()">
         <template v-if="!task">
-        <CooperationNav :title="workspaceTitle" :actions="[{ key: 'refresh', icon: 'reload', ariaLabel: '刷新当前业务数据', loading: ui.loading.value || visitorLoading, disabled: ui.loading.value || visitorLoading }]" @action="refresh" />
-        <view v-if="leadControlsVisible" class="coop-delivery-controls" :class="{ 'is-pending': !leadListVisible }" :aria-busy="!leadListVisible">
-            <view class="coop-list-tools">
-                <CooperationSearch v-model="leadKeyword" placeholder="搜索客户或意向型号" :disabled="!leadListVisible || locked" :show-action="true" action-text="查询" @search="searchLeads" @custom="searchLeads" @clear="clearLeadSearch" />
-                <scroll-view scroll-x class="coop-status-tabs"><view class="coop-status-tabs__inner"><text v-for="item in visibleStatusOptions" :key="item.value" :class="{ active: ui.query.status === item.value }" @tap="filterStatus(item.value)">{{ item.label }}</text></view></scroll-view>
+            <CooperationNav
+                :title="workspaceTitle"
+                :actions="[{ key: 'refresh', icon: 'reload', ariaLabel: '刷新当前业务数据', loading: ui.loading.value || visitorLoading, disabled: ui.loading.value || visitorLoading }]"
+                @action="refresh"
+            />
+            <view
+                v-if="leadControlsVisible"
+                class="coop-delivery-controls"
+                :class="{ 'is-pending': !leadListVisible }"
+                :aria-busy="!leadListVisible"
+            >
+                <view class="coop-list-tools">
+                    <CooperationSearch
+                        v-model="leadKeyword"
+                        placeholder="搜索客户或意向型号"
+                        :disabled="!leadListVisible || locked"
+                        :show-action="true"
+                        action-text="查询"
+                        @search="searchLeads"
+                        @custom="searchLeads"
+                        @clear="clearLeadSearch"
+                    />
+                    <scroll-view scroll-x class="coop-status-tabs"
+                        ><view class="coop-status-tabs__inner"
+                            ><text
+                                v-for="item in visibleStatusOptions"
+                                :key="item.value"
+                                :class="{ active: ui.query.status === item.value }"
+                                @tap="filterStatus(item.value)"
+                                >{{ item.label }}</text
+                            ></view
+                        ></scroll-view
+                    >
+                </view>
             </view>
-        </view>
-        <view v-if="leadListVisible" class="coop-main-paging"><z-paging :key="leadPagingRevision" ref="leadPagingRef" :model-value="ui.rows.value" class="coop-lead-pager" height="100%" :fixed="false" :auto="true" :concat="false" :default-page-size="20" :scrollable="!overlay && !childOverlay" :refresher-enabled="!overlay && !childOverlay" :auto-clean-list-when-reload="false" :safe-area-inset-bottom="false" :call-network-reject="false" :show-loading-more-no-more-line="false" loading-more-fail-text="读取失败，点击重试" loading-more-no-more-text="已显示全部交付" @query="leadPagingQuery">
-                    <view v-if="ui.profile.value.blocked_at" class="coop-warning">合作已停止。历史交付与已形成收益仍保留，请到“我的”查看原因。</view>
-                    <view v-else-if="!ui.config.value.enabled" class="coop-warning">本站尚未开启商户协作，发单前请联系平台完成配置。</view>
-                    <view v-else-if="needsMembershipEntitlement" class="coop-payment-status"><text>当前会员尚无此项协作权限</text><text @tap="openMembership">查看会员权益 ›</text></view>
+            <view v-if="leadListVisible" class="coop-main-paging"
+                ><z-paging
+                    :key="leadPagingRevision"
+                    ref="leadPagingRef"
+                    :model-value="ui.rows.value"
+                    class="coop-lead-pager"
+                    height="100%"
+                    :fixed="false"
+                    :auto="true"
+                    :concat="false"
+                    :default-page-size="20"
+                    :scrollable="!overlay && !childOverlay"
+                    :refresher-enabled="!overlay && !childOverlay"
+                    :auto-clean-list-when-reload="false"
+                    :safe-area-inset-bottom="false"
+                    :call-network-reject="false"
+                    :show-loading-more-no-more-line="false"
+                    loading-more-fail-text="读取失败，点击重试"
+                    loading-more-no-more-text="已显示全部交付"
+                    @query="leadPagingQuery"
+                >
+                    <view v-if="ui.profile.value.blocked_at" class="coop-warning"
+                        >合作已停止。历史交付与已形成收益仍保留，请到“我的”查看原因。</view
+                    >
+                    <view v-else-if="!ui.config.value.enabled" class="coop-warning"
+                        >本站尚未开启商户协作，发单前请联系平台完成配置。</view
+                    >
+                    <view v-else-if="needsMembershipEntitlement" class="coop-payment-status"
+                        ><text>当前会员尚无此项协作权限</text><text @tap="openMembership">查看会员权益 ›</text></view
+                    >
                     <view v-if="paymentId" class="coop-payment-status">
-<text>{{ paymentMessage || '上笔支付结果待核对，不要重复下单' }}</text>
-<text @tap="resumePayment">核对 / 继续支付 ›</text>
-</view>
+                        <text>{{ paymentMessage || '上笔支付结果待核对，不要重复下单' }}</text>
+                        <text @tap="resumePayment">核对 / 继续支付 ›</text>
+                    </view>
                     <view v-if="ui.writeError.value && !overlay" class="coop-warning">{{ ui.writeError.value }}</view>
-<view v-if="ui.error.value" class="coop-warning">{{ ui.error.value }}</view>
-<view class="coop-work-overview">
-<template v-if="ui.direction.value === 'outgoing'"><view @tap="focusTasks('outgoing', 'selecting')"><view class="coop-work-overview__icon is-select"><u-icon name="home" size="20" color="#a67b41" /></view><view><text>{{ ui.stats.value.selecting ?? '—' }}</text><text>待选门店</text></view></view><view @tap="focusTasks('outgoing', '')"><view class="coop-work-overview__icon is-follow"><u-icon name="order" size="20" color="#5a8a74" /></view><view><text>{{ ui.stats.value.outgoing ?? '—' }}</text><text>发出线索进度</text></view></view></template>
-<template v-else><view @tap="focusTasks('incoming', 'assigned')"><view class="coop-work-overview__icon is-receive"><u-icon name="order" size="20" color="#617eaa" /></view><view><text>{{ ui.stats.value.assigned ?? '—' }}</text><text>等待接单</text></view></view><view @tap="focusTasks('incoming', 'following')"><view class="coop-work-overview__icon is-follow"><u-icon name="chat" size="20" color="#5a8a74" /></view><view><text>{{ ui.stats.value.following ?? '—' }}</text><text>跟进客户</text></view></view><view @tap="focusTasks('incoming', 'unpaid')"><view class="coop-work-overview__icon is-select"><u-icon name="order" size="20" color="#a67b41" /></view><view><text>{{ ui.stats.value.unpaid ?? '—' }}</text><text>成交待付佣</text></view></view></template>
-</view>
-<view class="coop-subscribe-entry" role="button" :aria-busy="subscribeState.loading.value" @tap="subscribe"><u-icon name="bell" size="17" color="#ad8245" /><text>及时接收交付与成交进度</text><text>{{ subscribeState.loading.value ? '准备中…' : '订阅通知 ›' }}</text></view>
-<view v-if="ui.listError.value && ui.rows.value.length" class="coop-warning">{{ ui.listError.value }}，请点击列表底部重试。</view>
-<view class="coop-lead-list" v-if="ui.rows.value.length"><CoopLeadCard v-for="lead in ui.rows.value" :key="lead.id" :lead="lead" :direction="ui.direction.value" :active="countdownActive" @open="openDetail" @select="openSelection" @cancel="cancelLead" /></view>
-            <template #empty="{ isLoadFailed }"><view class="coop-lead-empty"><CoopState :error="isLoadFailed ? ui.listError.value || ui.error.value || '交付读取失败，请重试' : ''" :title="ui.query.keyword || ui.query.status ? '没有符合条件的线索' : ui.direction.value === 'outgoing' ? '还没有发出的客户需求' : '还没有收到的客户交付'" :hint="ui.query.keyword || ui.query.status ? '试试其他关键词，或切换状态查看' : ui.direction.value === 'outgoing' ? '发布客户需求后，再为这条需求选择合适门店' : '其他门店交付给你的客户，会在这里接单并跟进'" @retry="reloadLeads" /></view></template>
-        </z-paging></view>
-        <scroll-view v-else :scroll-y="!overlay && !childOverlay && !onboarding" class="coop-main-scroll" @touchmove.stop>
-            <template v-if="!ui.loggedIn.value">
-                <CoopGuestWorkspace v-if="managedDeliveries" :direction="ui.direction.value" :services="visitorServices" :enabled="visitorEnabled" :loading="visitorLoading" :error="visitorError" @action="guestAction" @retry="refresh" />
-                <template v-else><CoopState title="登录后查看我的协作" hint="登录后可查看自己的门店与收益" icon="account" /><view class="coop-login"><u-button :custom-style="cooperationButtonStyle" type="primary" shape="circle" text="登录" @click="login()" /></view></template>
-            </template>
-            <CoopState v-else-if="!ui.ready.value || ui.error.value" :loading="ui.loading.value" :error="ui.error.value" @retry="refresh" />
-            <template v-else-if="ui.loggedIn.value && ui.profile.value.id">
-                    <view v-if="ui.profile.value.blocked_at" class="coop-warning">合作已停止。历史交付与已形成收益仍保留，请到“我的”查看原因。</view>
-                    <view v-else-if="!ui.config.value.enabled" class="coop-warning">本站尚未开启商户协作，发单前请联系平台完成配置。</view>
+                    <view v-if="ui.error.value" class="coop-warning">{{ ui.error.value }}</view>
+                    <view class="coop-work-overview">
+                        <template v-if="ui.direction.value === 'outgoing'"
+                            ><view @tap="focusTasks('outgoing', 'selecting')"
+                                ><view class="coop-work-overview__icon is-select"
+                                    ><u-icon name="home" size="20" color="#a67b41" /></view
+                                ><view
+                                    ><text>{{ ui.stats.value.selecting ?? '—' }}</text
+                                    ><text>待选门店</text></view
+                                ></view
+                            ><view @tap="focusTasks('outgoing', '')"
+                                ><view class="coop-work-overview__icon is-follow"
+                                    ><u-icon name="order" size="20" color="#5a8a74" /></view
+                                ><view
+                                    ><text>{{ ui.stats.value.outgoing ?? '—' }}</text
+                                    ><text>发出线索进度</text></view
+                                ></view
+                            ></template
+                        >
+                        <template v-else
+                            ><view @tap="focusTasks('incoming', 'assigned')"
+                                ><view class="coop-work-overview__icon is-receive"
+                                    ><u-icon name="order" size="20" color="#617eaa" /></view
+                                ><view
+                                    ><text>{{ ui.stats.value.assigned ?? '—' }}</text
+                                    ><text>等待接单</text></view
+                                ></view
+                            ><view @tap="focusTasks('incoming', 'following')"
+                                ><view class="coop-work-overview__icon is-follow"
+                                    ><u-icon name="chat" size="20" color="#5a8a74" /></view
+                                ><view
+                                    ><text>{{ ui.stats.value.following ?? '—' }}</text
+                                    ><text>跟进客户</text></view
+                                ></view
+                            ><view @tap="focusTasks('incoming', 'unpaid')"
+                                ><view class="coop-work-overview__icon is-select"
+                                    ><u-icon name="order" size="20" color="#a67b41" /></view
+                                ><view
+                                    ><text>{{ ui.stats.value.unpaid ?? '—' }}</text
+                                    ><text>成交待付佣</text></view
+                                ></view
+                            ></template
+                        >
+                    </view>
+                    <view
+                        class="coop-subscribe-entry"
+                        role="button"
+                        :aria-busy="subscribeState.loading.value"
+                        @tap="subscribe"
+                        ><u-icon name="bell" size="17" color="#ad8245" /><text>及时接收交付与成交进度</text
+                        ><text>{{ subscribeState.loading.value ? '准备中…' : '订阅通知 ›' }}</text></view
+                    >
+                    <view v-if="ui.listError.value && ui.rows.value.length" class="coop-warning"
+                        >{{ ui.listError.value }}，请点击列表底部重试。</view
+                    >
+                    <view class="coop-lead-list" v-if="ui.rows.value.length"
+                        ><CoopLeadCard
+                            v-for="lead in ui.rows.value"
+                            :key="lead.id"
+                            :lead="lead"
+                            :direction="ui.direction.value"
+                            :active="countdownActive"
+                            @open="openDetail"
+                            @select="openSelection"
+                            @cancel="cancelLead"
+                    /></view>
+                    <template #empty="{ isLoadFailed }"
+                        ><view class="coop-lead-empty"
+                            ><CoopState
+                                :error="isLoadFailed ? ui.listError.value || ui.error.value || '交付读取失败，请重试' : ''"
+                                :title="ui.query.keyword || ui.query.status ? '没有符合条件的线索' : ui.direction.value === 'outgoing' ? '还没有发出的客户需求' : '还没有收到的客户交付'"
+                                :hint="ui.query.keyword || ui.query.status ? '试试其他关键词，或切换状态查看' : ui.direction.value === 'outgoing' ? '发布客户需求后，再为这条需求选择合适门店' : '其他门店交付给你的客户，会在这里接单并跟进'"
+                                @retry="reloadLeads" /></view
+                    ></template> </z-paging
+            ></view>
+            <scroll-view
+                v-else
+                :scroll-y="!overlay && !childOverlay && !onboarding"
+                class="coop-main-scroll"
+                @touchmove.stop
+            >
+                <template v-if="!ui.loggedIn.value">
+                    <CoopGuestWorkspace
+                        v-if="managedDeliveries"
+                        :direction="ui.direction.value"
+                        :services="visitorServices"
+                        :enabled="visitorEnabled"
+                        :loading="visitorLoading"
+                        :error="visitorError"
+                        @action="guestAction"
+                        @retry="refresh"
+                    />
+                    <template v-else
+                        ><CoopState
+                            title="登录后查看我的协作"
+                            hint="登录后可查看自己的门店与收益"
+                            icon="account" /><view class="coop-login"
+                            ><u-button
+                                :custom-style="cooperationButtonStyle"
+                                type="primary"
+                                shape="circle"
+                                text="登录"
+                                @click="login()" /></view
+                    ></template>
+                </template>
+                <CoopState
+                    v-else-if="!ui.ready.value || ui.error.value"
+                    :loading="ui.loading.value"
+                    :error="ui.error.value"
+                    @retry="refresh"
+                />
+                <template v-else-if="ui.loggedIn.value && ui.profile.value.id">
+                    <view v-if="ui.profile.value.blocked_at" class="coop-warning"
+                        >合作已停止。历史交付与已形成收益仍保留，请到“我的”查看原因。</view
+                    >
+                    <view v-else-if="!ui.config.value.enabled" class="coop-warning"
+                        >本站尚未开启商户协作，发单前请联系平台完成配置。</view
+                    >
                     <view v-if="paymentId" class="coop-payment-status">
-<text>{{ paymentMessage || '上笔支付结果待核对，不要重复下单' }}</text>
-<text @tap="resumePayment">核对 / 继续支付 ›</text>
-</view>
+                        <text>{{ paymentMessage || '上笔支付结果待核对，不要重复下单' }}</text>
+                        <text @tap="resumePayment">核对 / 继续支付 ›</text>
+                    </view>
                     <view v-if="ui.writeError.value && !overlay" class="coop-warning">{{ ui.writeError.value }}</view>
-                    <template v-if="ui.tab.value === 'wallet'"><CoopState v-if="ui.profile.value.permissions?.can_withdraw === false" title="门店收益由负责人管理" hint="成员共享协作权益，不共享负责人账户或提现权限" icon="lock" /><CoopWalletPanel v-else :key="'wallet-' + ui.profile.value.id" :wallet="ui.wallet.value" :loading="ui.walletLoading.value" :error="ui.walletError.value" @reload="ui.loadWallet()" @more="ui.loadWallet(true)" /></template>
+                    <template v-if="ui.tab.value === 'wallet'"
+                        ><CoopState
+                            v-if="ui.profile.value.permissions?.can_withdraw === false"
+                            title="门店收益由负责人管理"
+                            hint="成员共享协作权益，不共享负责人账户或提现权限"
+                            icon="lock" /><CoopWalletPanel
+                            v-else
+                            :key="'wallet-' + ui.profile.value.id"
+                            :wallet="ui.wallet.value"
+                            :loading="ui.walletLoading.value"
+                            :error="ui.walletError.value"
+                            @reload="ui.loadWallet()"
+                            @more="ui.loadWallet(true)"
+                    /></template>
                     <view v-else class="coop-profile-wrap">
-<CoopProfilePanel ref="profileRef" :key="'profile-' + ui.profile.value.id" :profile="ui.profile.value" :onboarding-inviter="ui.onboardingInviter.value" :config="ui.config.value" :providers="ui.providers.value" :busy="ui.busy.value" :error="ui.writeError.value" @submit="saveProfile" @edit="editProfile" @members="openMembers" @promotion="openPromotion" @connection="openTask('connection')" @inventory="openTask('inventory')" @membership="openMembership" @subscribe="subscribe" @overlay="childOverlay = $event" />
-</view>
-            </template>
-            <view v-else-if="onboarding" class="coop-onboarding-entry"><CoopState :title="ui.pendingEntity.value.status === 'pending' ? '等待负责人确认' : '创建或加入门店'" :hint="ui.pendingEntity.value.status === 'pending' ? ui.pendingEntity.value.name : '已有门店的同事可使用主体码加入'" /><u-button :custom-style="cooperationButtonStyle" type="primary" shape="circle" :text="ui.pendingEntity.value.status === 'pending' ? '查看加入申请' : '创建我的门店'" @click="ui.pendingEntity.value.status === 'pending' ? openMembers() : editProfile()" /><button v-if="ui.pendingEntity.value.status !== 'pending'" class="coop-onboarding-existing" @tap="openMembers">加入已有门店</button></view>
-        </scroll-view>
-        <view v-if="leadControlsVisible && ui.direction.value === 'outgoing'" class="coop-publish-dock">
-<u-button :custom-style="cooperationButtonStyle" type="primary" shape="circle" :text="needsMembershipEntitlement ? '查看会员权益，开始协作' : '＋ 发布客户需求，找门店交付'" :disabled="!leadListVisible || locked || !!overlay || childOverlay || !ui.config.value.enabled || !!ui.profile.value.blocked_at" @click="openPublish" />
-</view>
-        <view v-if="reserveFrameworkTabbar" class="coop-framework-tabbar">
-<view v-if="showFrameworkTabbar" class="coop-framework-tabbar-mount"><FrameworkTabbar addon="hsx_lead" /></view>
-</view>
+                        <CoopProfilePanel
+                            ref="profileRef"
+                            :key="'profile-' + ui.profile.value.id"
+                            :profile="ui.profile.value"
+                            :onboarding-inviter="ui.onboardingInviter.value"
+                            :config="ui.config.value"
+                            :providers="ui.providers.value"
+                            :busy="ui.busy.value"
+                            :error="ui.writeError.value"
+                            @submit="saveProfile"
+                            @edit="editProfile"
+                            @members="openMembers"
+                            @promotion="openPromotion"
+                            @connection="openTask('connection')"
+                            @inventory="openTask('inventory')"
+                            @membership="openMembership"
+                            @subscribe="subscribe"
+                            @overlay="childOverlay = $event"
+                        />
+                    </view>
+                </template>
+                <view v-else-if="onboarding" class="coop-onboarding-entry"
+                    ><CoopState
+                        :title="ui.pendingEntity.value.status === 'pending' ? '等待负责人确认' : '创建或加入门店'"
+                        :hint="ui.pendingEntity.value.status === 'pending' ? ui.pendingEntity.value.name : '已有门店的同事可使用主体码加入'"
+                    /><u-button
+                        :custom-style="cooperationButtonStyle"
+                        type="primary"
+                        shape="circle"
+                        :text="ui.pendingEntity.value.status === 'pending' ? '查看加入申请' : '创建我的门店'"
+                        @click="ui.pendingEntity.value.status === 'pending' ? openMembers() : editProfile()"
+                    /><button
+                        v-if="ui.pendingEntity.value.status !== 'pending'"
+                        class="coop-onboarding-existing"
+                        @tap="openMembers"
+                        >加入已有门店</button
+                    ></view
+                >
+            </scroll-view>
+            <view v-if="leadControlsVisible && ui.direction.value === 'outgoing'" class="coop-publish-dock">
+                <u-button
+                    :custom-style="cooperationButtonStyle"
+                    type="primary"
+                    shape="circle"
+                    :text="needsMembershipEntitlement ? '查看会员权益，开始协作' : '＋ 发布客户需求，找门店交付'"
+                    :disabled="!leadListVisible || locked || !!overlay || childOverlay || !ui.config.value.enabled || !!ui.profile.value.blocked_at"
+                    @click="openPublish"
+                />
+            </view>
+            <view v-if="reserveFrameworkTabbar" class="coop-framework-tabbar">
+                <view v-if="showFrameworkTabbar" class="coop-framework-tabbar-mount"
+                    ><FrameworkTabbar addon="hsx_lead"
+                /></view>
+            </view>
         </template>
-        <CoopPendingEntry :active="pendingEntryReady && !task && managedDeliveries && ui.loggedIn.value && ui.ready.value && !!ui.profile.value.id && !overlay && !childOverlay && !locked && !canonicalPending" :member-id="ui.memberId.value" @publish="openPublish" />
-        <template v-if="task && !overlay"><CooperationNav title="商户协作" back @back="closeOverlay" /><CoopState :loading="ui.loading.value" :error="ui.error.value" :title="ui.loading.value ? '正在读取…' : '请先完善门店资料'" @retry="refresh" /><u-button :custom-style="cooperationButtonStyle" v-if="ui.ready.value && !ui.profile.value.id && task !== 'profile-edit'" text="完善门店资料" @click="editProfile" /></template>
+        <CoopPendingEntry
+            :active="pendingEntryReady && !task && managedDeliveries && ui.loggedIn.value && ui.ready.value && !!ui.profile.value.id && !overlay && !childOverlay && !locked && !canonicalPending"
+            :member-id="ui.memberId.value"
+            @publish="openPublish"
+        />
+        <template v-if="task && !overlay"
+            ><CooperationNav title="商户协作" back @back="closeOverlay" /><CoopState
+                :loading="ui.loading.value"
+                :error="ui.error.value"
+                :title="ui.loading.value ? '正在读取…' : '请先完善门店资料'"
+                @retry="refresh" /><u-button
+                :custom-style="cooperationButtonStyle"
+                v-if="ui.ready.value && !ui.profile.value.id && task !== 'profile-edit'"
+                text="完善门店资料"
+                @click="editProfile"
+        /></template>
         <view class="coop-overlay-root" :class="{ 'is-task-page': !!task }">
-<CoopPromotionPanel ref="promotionRef" :page="!!task" :show="overlay === 'promotion'" :initial-tab="promotionTab" @close="closeOverlay" @changed="markChanged" />
-<CoopPublishForm ref="publishRef" :page="!!task" :initial-business-type="initialBusinessType" :merchant-id="ui.profile.value.id" :key="'publish-' + (ui.profile.value.id || 0)" :show="overlay === 'publish'" :config="ui.config.value" :busy="ui.busy.value" :error="ui.writeError.value" @close="closeOverlay" @submit="publish" />
-        <CoopStorePicker :page="!!task" :config="ui.config.value" :show="overlay === 'select'" :lead="ui.detail.value" :profile="ui.profile.value" :busy="locked" :submission-error="ui.writeError.value || ui.detailError.value" @close="closeOverlay" @assign="assign" @reload="reloadDetail" />
-        <CoopTaskDetail :page="!!task" :show="overlay === 'detail'" :lead="ui.detail.value" :config="ui.config.value" :loading="ui.detailLoading.value" :error="ui.detailError.value || ui.writeError.value" :busy="locked" :active="countdownActive" @close="closeOverlay" @reload="reloadDetail" @select="openSelection(Number(ui.detail.value.id))" @reselect="reselectStore" @membership="openMembership" @pay="openTask('commission', { collaboration_id: ui.detail.value.id })" @action="act" />
-        <CoopCommissionForm v-if="!commissionPaymentClosed" ref="commissionRef" :page="!!task" :show="overlay === 'commission'" :lead="commissionLead" :order="paymentOrder" :config="ui.config.value" :busy="ui.busy.value || paymentChecking || paymentResuming" :blocked="!!paymentContextError" :error="paymentContextError || ui.detailError.value || ui.writeError.value" @payment-help-ready="paymentHelpReady = $event" @close="closeOverlay" @submit="payCommission" />
-        <CoopTaskSheet v-else :page="!!task" :show="overlay === 'commission'" title="付款单已关闭" @close="closeOverlay"><CoopState title="原付款单已关闭" :hint="paymentContextError || paymentMessage || '请查看付款单并核对最新状态，不会按原金额重新下单。'" icon="order" /><template #footer><u-button :custom-style="cooperationButtonStyle" type="primary" shape="circle" text="查看我的付款单" @click="openPaymentOrders" /></template></CoopTaskSheet>
-        <CoopTaskSheet v-if="overlay === 'erp-disabled'" page :show="true" title="门店协作" @close="closeOverlay"><CoopState title="该功能暂未开放" /><template #footer><u-button :custom-style="cooperationButtonStyle" text="返回协作" @click="closeOverlay" /></template></CoopTaskSheet>
-        <CoopConnectionPanel v-if="ui.config.value.erp_visible !== false" :page="!!task" :show="overlay === 'connection'" :profile="ui.profile.value" :providers="ui.providers.value" @close="closeOverlay" @changed="changedConnection" />
-        <CoopStoreInventory v-if="ui.config.value.erp_visible !== false" :page="!!task" :show="overlay === 'inventory'" :store="initialStoreId ? { id: initialStoreId } : ui.profile.value" @close="closeOverlay" />
-        <CoopProfilePanel v-if="task === 'profile-edit' && ui.ready.value" ref="profileRef" page editing :profile="ui.profile.value" :onboarding-inviter="ui.onboardingInviter.value" :config="ui.config.value" :providers="ui.providers.value" :onboarding="!ui.profile.value.id" :busy="ui.busy.value" :error="ui.writeError.value" @submit="saveProfile" @close="closeOverlay" @promotion="openPromotion" @connection="openTask('connection')" />
-        <view class="coop-cashier-mount"><pay ref="payRef" :ignore-pay="['friendspay']" :reformat="cashierReturnUrl" @confirm="verifyPayment" @close="handlePaymentClose" @check="handlePaymentCheck"><template #help="{ busy }"><button v-if="paymentHelpReady && overlay === 'commission'" class="coop-cashier-help" :disabled="busy || locked || paymentChecking || paymentResuming" @tap.stop="contactPaymentAdmin(busy)"><text>支付遇到问题？</text><text>联系管理员 ›</text></button></template></pay></view>
-</view>
+            <CoopPromotionPanel
+                ref="promotionRef"
+                :page="!!task"
+                :show="overlay === 'promotion'"
+                :initial-tab="promotionTab"
+                @close="closeOverlay"
+                @changed="markChanged"
+            />
+            <CoopPublishForm
+                ref="publishRef"
+                :page="!!task"
+                :initial-business-type="initialBusinessType"
+                :merchant-id="ui.profile.value.id"
+                :key="'publish-' + (ui.profile.value.id || 0)"
+                :show="overlay === 'publish'"
+                :config="ui.config.value"
+                :busy="ui.busy.value"
+                :error="ui.writeError.value"
+                @close="closeOverlay"
+                @submit="publish"
+            />
+            <CoopStorePicker
+                :page="!!task"
+                :config="ui.config.value"
+                :show="overlay === 'select'"
+                :lead="ui.detail.value"
+                :profile="ui.profile.value"
+                :busy="locked"
+                :submission-error="ui.writeError.value || ui.detailError.value"
+                @close="closeOverlay"
+                @assign="assign"
+                @reload="reloadDetail"
+            />
+            <CoopTaskDetail
+                :page="!!task"
+                :show="overlay === 'detail'"
+                :lead="ui.detail.value"
+                :config="ui.config.value"
+                :loading="ui.detailLoading.value"
+                :error="ui.detailError.value || ui.writeError.value"
+                :busy="locked"
+                :active="countdownActive"
+                @close="closeOverlay"
+                @reload="reloadDetail"
+                @select="openSelection(Number(ui.detail.value.id))"
+                @reselect="reselectStore"
+                @membership="openMembership"
+                @pay="openTask('commission', { collaboration_id: ui.detail.value.id })"
+                @action="act"
+            />
+            <CoopCommissionForm
+                v-if="!commissionPaymentClosed"
+                ref="commissionRef"
+                :page="!!task"
+                :show="overlay === 'commission'"
+                :lead="commissionLead"
+                :order="paymentOrder"
+                :config="ui.config.value"
+                :busy="ui.busy.value || paymentChecking || paymentResuming"
+                :blocked="!!paymentContextError"
+                :error="paymentContextError || ui.detailError.value || ui.writeError.value"
+                @payment-help-ready="paymentHelpReady = $event"
+                @close="closeOverlay"
+                @submit="payCommission"
+            />
+            <CoopTaskSheet
+                v-else
+                :page="!!task"
+                :show="overlay === 'commission'"
+                title="付款单已关闭"
+                @close="closeOverlay"
+                ><CoopState
+                    title="原付款单已关闭"
+                    :hint="paymentContextError || paymentMessage || '请查看付款单并核对最新状态，不会按原金额重新下单。'"
+                    icon="order" /><template #footer
+                    ><u-button
+                        :custom-style="cooperationButtonStyle"
+                        type="primary"
+                        shape="circle"
+                        text="查看我的付款单"
+                        @click="openPaymentOrders" /></template
+            ></CoopTaskSheet>
+            <CoopTaskSheet v-if="overlay === 'erp-disabled'" page :show="true" title="门店协作" @close="closeOverlay"
+                ><CoopState title="该功能暂未开放" /><template #footer
+                    ><u-button :custom-style="cooperationButtonStyle" text="返回协作" @click="closeOverlay" /></template
+            ></CoopTaskSheet>
+            <CoopConnectionPanel
+                v-if="ui.config.value.erp_visible !== false"
+                :page="!!task"
+                :show="overlay === 'connection'"
+                :profile="ui.profile.value"
+                :providers="ui.providers.value"
+                @close="closeOverlay"
+                @changed="changedConnection"
+            />
+            <CoopStoreInventory
+                v-if="ui.config.value.erp_visible !== false"
+                :page="!!task"
+                :show="overlay === 'inventory'"
+                :store="initialStoreId ? { id: initialStoreId } : ui.profile.value"
+                @close="closeOverlay"
+            />
+            <CoopProfilePanel
+                v-if="task === 'profile-edit' && ui.ready.value"
+                ref="profileRef"
+                page
+                editing
+                :profile="ui.profile.value"
+                :onboarding-inviter="ui.onboardingInviter.value"
+                :config="ui.config.value"
+                :providers="ui.providers.value"
+                :onboarding="!ui.profile.value.id"
+                :busy="ui.busy.value"
+                :error="ui.writeError.value"
+                @submit="saveProfile"
+                @close="closeOverlay"
+                @promotion="openPromotion"
+                @connection="openTask('connection')"
+            />
+            <view class="coop-cashier-mount"
+                ><pay
+                    ref="payRef"
+                    :ignore-pay="['friendspay']"
+                    :reformat="cashierReturnUrl"
+                    @confirm="verifyPayment"
+                    @close="handlePaymentClose"
+                    @check="handlePaymentCheck"
+                    ><template #help="{ busy }"
+                        ><button
+                            v-if="paymentHelpReady && overlay === 'commission'"
+                            class="coop-cashier-help"
+                            :disabled="busy || locked || paymentChecking || paymentResuming"
+                            @tap.stop="contactPaymentAdmin(busy)"
+                            ><text>支付遇到问题？</text><text>联系管理员 ›</text></button
+                        ></template
+                    ></pay
+                ></view
+            >
+        </view>
     </view>
 </template>
 <script setup lang="ts">
@@ -565,7 +915,8 @@ function pausePage() { pendingEntryReady.value = false; countdownActive.value = 
 defineExpose({ resume: initialize, pause: pausePage, refresh, loadMore, openInvitation })
 onBeforeUnmount(() => { pendingEntryReady.value = false; countdownActive.value = false; disposed = true; ui.dispose(); orderRequests.clear() })
 </script>
-<style lang="scss" scoped>@import './cooperation';.coop-onboarding-existing { margin:10px 0 0;line-height:44px;font-size:14px;color:#6685ae;background:transparent; }.coop-onboarding-existing::after { border:0; }
+<style lang="scss" scoped>
+@import './cooperation';.coop-onboarding-existing { margin:10px 0 0;line-height:44px;font-size:14px;color:#6685ae;background:transparent; }.coop-onboarding-existing::after { border:0; }
 .coop-cashier-help { display:flex;align-items:center;justify-content:center;gap:8px;min-height:44px;width:100%;margin:8px 0 0;padding:8px 12px;border:1px solid #eedab7;border-radius:10px;background:#fff8e9;line-height:1.5;color:#765321;font-size:13px;box-sizing:border-box; }
 .coop-cashier-help>text:last-child { font-weight:600; }.coop-cashier-help::after { border:0; }
 </style>

@@ -1,60 +1,486 @@
 <template>
-    <view class="coop-profile-theme" :class="{ 'is-diy': displayOnly, 'is-page-panel': page===true && !displayOnly }" :style="displayStyle">
-        <view v-if="!editing && profile?.id && (hasSection('identity') || hasSection('tools'))" class="coop-profile-card coop-profile-card--identity">
+    <view
+        class="coop-profile-theme"
+        :class="{ 'is-diy': displayOnly, 'is-page-panel': page===true && !displayOnly }"
+        :style="displayStyle"
+    >
+        <view
+            v-if="!editing && profile?.id && (hasSection('identity') || hasSection('tools'))"
+            class="coop-profile-card coop-profile-card--identity"
+        >
             <template v-if="hasSection('identity')">
                 <view class="coop-profile-title">
-
-                    <CoopMerchantAvatar :image="profile.storefront_image" :name="profile.name" :active="profile.membership?.active===true" :rank="membershipBadgeRank(profile.membership)" :appearance="profile.membership?.level_visual" :highlighted="membershipBadgeRank(profile.membership)>=3" />
+                    <CoopMerchantAvatar
+                        :image="profile.storefront_image"
+                        :name="profile.name"
+                        :active="profile.membership?.active===true"
+                        :rank="membershipBadgeRank(profile.membership)"
+                        :appearance="profile.membership?.level_visual"
+                        :highlighted="membershipBadgeRank(profile.membership)>=3"
+                    />
                     <view class="coop-profile-identity">
-                        <view class="coop-profile-name-line"><view class="coop-profile-name">{{ profile.name }}</view><view v-if="shown('showGrade')" class="coop-profile-name-badge"><CoopLevelBadge :level="membershipBadgeRank(profile.membership)" :label="profile.membership?.level_name||'普通会员'" :appearance="profile.membership?.level_visual" :state="membershipState(profile.membership||{})" variant="inline" size="small" /></view></view>
-                        <view v-if="shown('showMemberNo') && memberNo" class="coop-profile-region">{{ memberIdentifier.label }}：{{ memberNo }}</view>
-                        <view v-if="shown('showRegion') && profile.region_text" class="coop-profile-region">{{ profile.region_text }}</view>
-                        <view v-if="profile.blocked_at" class="coop-profile-badges"><text class="is-blocked">已停止合作</text></view>
+                        <view class="coop-profile-name-line"
+                            ><view class="coop-profile-name">{{ profile.name }}</view
+                            ><view v-if="shown('showGrade')" class="coop-profile-name-badge"
+                                ><CoopLevelBadge
+                                    :level="membershipBadgeRank(profile.membership)"
+                                    :label="profile.membership?.level_name||'普通会员'"
+                                    :appearance="profile.membership?.level_visual"
+                                    :state="membershipState(profile.membership||{})"
+                                    variant="inline"
+                                    size="small" /></view
+                        ></view>
+                        <view v-if="shown('showMemberNo') && memberNo" class="coop-profile-region"
+                            >{{ memberIdentifier.label }}：{{ memberNo }}</view
+                        >
+                        <view
+                            v-if="shown('showRegion') && profile.region_text"
+                            class="coop-profile-region"
+                            >{{ profile.region_text }}</view
+                        >
+                        <view v-if="profile.blocked_at" class="coop-profile-badges"
+                            ><text class="is-blocked">已停止合作</text></view
+                        >
                     </view>
-                    <button v-if="canEdit" class="coop-profile-edit" :aria-label="text('buttonText','门店资料')" @tap="open"><u-icon name="edit-pen" size="19" :color="iconColor" /></button>
-                    <button v-if="shown('showSettings') && member.member_id" class="coop-profile-edit" aria-label="设置与退出登录" @tap="$emit('settings')"><u-icon name="setting" size="21" :color="iconColor" /></button>
+                    <button
+                        v-if="canEdit"
+                        class="coop-profile-edit"
+                        :aria-label="text('buttonText','门店资料')"
+                        @tap="open"
+                        ><u-icon name="edit-pen" size="19" :color="iconColor"
+                    /></button>
+                    <button
+                        v-if="shown('showSettings') && member.member_id"
+                        class="coop-profile-edit"
+                        aria-label="设置与退出登录"
+                        @tap="$emit('settings')"
+                        ><u-icon name="setting" size="21" :color="iconColor"
+                    /></button>
                 </view>
-                <view v-if="profile.cooperation_stats && shown('showStats') || shown('showBalance') && member.member_id" class="coop-profile-stats"><button v-if="shown('showBalance') && member.member_id" @tap="$emit('balance')"><text class="coop-profile-stats__count">{{ memberBalance }}</text><text>余额（元）</text></button><template v-if="profile.cooperation_stats && shown('showStats')"><button @tap="$emit('outgoing')"><text class="coop-profile-stats__count">{{ statCount('outgoing') }}</text><text>{{ text('outgoingText','找门店') }}</text></button><button @tap="$emit('incoming')"><text class="coop-profile-stats__count">{{ statCount('incoming') }}</text><text>{{ text('incomingText','找客户') }}</text></button><button @tap="$emit('members')"><text class="coop-profile-stats__count">{{ profile.membership?.used_accounts ?? '—' }}</text><text>{{ text('secondaryText','门店成员') }}</text></button></template></view>
+                <view
+                    v-if="profile.cooperation_stats && shown('showStats') || shown('showBalance') && member.member_id"
+                    class="coop-profile-stats"
+                    ><button v-if="shown('showBalance') && member.member_id" @tap="$emit('balance')"
+                        ><text class="coop-profile-stats__count">{{ memberBalance }}</text
+                        ><text>余额（元）</text></button
+                    ><template v-if="profile.cooperation_stats && shown('showStats')"
+                        ><button @tap="$emit('outgoing')"
+                            ><text class="coop-profile-stats__count">{{ statCount('outgoing') }}</text
+                            ><text>{{ text('outgoingText','找门店') }}</text></button
+                        ><button @tap="$emit('incoming')"
+                            ><text class="coop-profile-stats__count">{{ statCount('incoming') }}</text
+                            ><text>{{ text('incomingText','找客户') }}</text></button
+                        ><button @tap="$emit('members')"
+                            ><text
+                                class="coop-profile-stats__count"
+                                >{{ profile.membership?.used_accounts ?? '—' }}</text
+                            ><text>{{ text('secondaryText','门店成员') }}</text></button
+                        ></template
+                    ></view
+                >
             </template>
             <template v-if="hasSection('tools')">
-                <view v-if="hasConfiguredTools" class="coop-profile-tools" :class="{ 'is-list': appearance?.layout === 'list' }"><button v-for="tool in tools" :key="tool.key" class="coop-profile-tool" hover-class="coop-profile-pressed" @tap="toolAction(tool.key)"><image v-if="tool.image" class="coop-profile-tool__image" :src="tool.image" mode="aspectFit" /><CoopBusinessIcon v-else :name="tool.icon" size="small" :color="iconColor" /><view><text class="coop-profile-tool__label">{{ tool.label }}</text><text v-if="tool.hint" class="coop-profile-tool__hint">{{ tool.hint }}</text></view></button></view>
-                <button v-if="shown('showNotice')" class="coop-profile-notice" hover-class="coop-profile-pressed" @tap="$emit('subscribe')"><image v-if="noticeImage" class="coop-profile-tool__image" :src="noticeImage" mode="aspectFit" /><view v-else class="coop-profile-notice__icon"><u-icon name="bell" size="21" :color="iconColor" /></view><text>{{ text('noticeText','工单消息提醒') }}</text><u-icon name="arrow-right" size="12" :color="subtleColor" /></button>
-                <button v-if="shown('showNotice') && Number(member.member_id)>0" class="coop-profile-notice" hover-class="coop-profile-pressed" @tap="openNoticePreferences"><view class="coop-profile-notice__icon"><u-icon name="setting" size="21" :color="iconColor" /></view><text>通知偏好</text><u-icon name="arrow-right" size="12" :color="subtleColor" /></button>
+                <view
+                    v-if="hasConfiguredTools"
+                    class="coop-profile-tools"
+                    :class="{ 'is-list': appearance?.layout === 'list' }"
+                    ><button
+                        v-for="tool in tools"
+                        :key="tool.key"
+                        class="coop-profile-tool"
+                        hover-class="coop-profile-pressed"
+                        @tap="toolAction(tool.key)"
+                        ><image
+                            v-if="tool.image"
+                            class="coop-profile-tool__image"
+                            :src="tool.image"
+                            mode="aspectFit"
+                        /><CoopBusinessIcon v-else :name="tool.icon" size="small" :color="iconColor" /><view
+                            ><text class="coop-profile-tool__label">{{ tool.label }}</text
+                            ><text v-if="tool.hint" class="coop-profile-tool__hint">{{ tool.hint }}</text></view
+                        ></button
+                    ></view
+                >
+                <button
+                    v-if="shown('showNotice')"
+                    class="coop-profile-notice"
+                    hover-class="coop-profile-pressed"
+                    @tap="$emit('subscribe')"
+                    ><image
+                        v-if="noticeImage"
+                        class="coop-profile-tool__image"
+                        :src="noticeImage"
+                        mode="aspectFit" /><view v-else class="coop-profile-notice__icon"
+                        ><u-icon name="bell" size="21" :color="iconColor" /></view
+                    ><text>{{ text('noticeText','工单消息提醒') }}</text
+                    ><u-icon name="arrow-right" size="12" :color="subtleColor"
+                /></button>
+                <button
+                    v-if="shown('showNotice') && Number(member.member_id)>0"
+                    class="coop-profile-notice"
+                    hover-class="coop-profile-pressed"
+                    @tap="openNoticePreferences"
+                    ><view class="coop-profile-notice__icon"
+                        ><u-icon name="setting" size="21" :color="iconColor" /></view
+                    ><text>通知偏好</text><u-icon name="arrow-right" size="12" :color="subtleColor"
+                /></button>
                 <TouchFeedbackPreference v-if="shown('showFeedback')" :label="text('feedbackText','轻触反馈')" />
             </template>
         </view>
-        <view v-if="!editing && (profile?.id || member.member_id) && hasSection('promotion')" class="coop-profile-card coop-profile-promotion"><button class="coop-profile-promotion__main" hover-class="coop-profile-pressed" @tap="$emit('promotion','overview')"><image v-if="toolPicture('entryImage')" class="coop-profile-tool__image" :src="toolPicture('entryImage')" mode="aspectFit" /><CoopBusinessIcon v-else name="invite" :color="iconColor" /><view class="coop-profile-promotion__copy"><text class="coop-profile-promotion__title">{{ text('buttonText','推广中心') }}</text><text v-if="appearance.subtitle" class="coop-profile-promotion__hint">{{ appearance.subtitle }}</text></view><u-icon name="arrow-right" size="12" :color="subtleColor" /></button><view class="coop-profile-promotion__links"><button v-if="shown('showInviter')" hover-class="coop-profile-pressed" @tap="$emit('promotion','upstream')"><u-icon name="account" size="17" :color="iconColor" /><text>邀请关系</text><u-icon name="arrow-right" size="11" :color="subtleColor" /></button><button hover-class="coop-profile-pressed" @tap="$emit('promotion','application')"><u-icon name="man-add" size="17" :color="iconColor" /><text>{{ text('secondaryText','服务商申请') }}</text><u-icon name="arrow-right" size="11" :color="subtleColor" /></button></view></view>
-        <view v-if="!editing && profile?.blocked_at && !displayOnly" class="coop-task-rule">合作已停用：{{ profile.block_reason || '请联系平台核对' }}。历史记录和已形成收益仍保留。</view>
-        <CoopMembershipEntry v-if="!editing && profile?.id && hasSection('benefits') && shown('showMembership')" :profile="profile" :appearance="appearance" :embedded="displayOnly" @open="$emit('membership')" />
-        <CoopTaskSheet v-if="!displayOnly && editing && !canEdit" :page="page" :show="true" title="门店资料" full @close="close"><view class="coop-form-section"><view class="coop-section-title">资料由门店负责人管理</view><view class="coop-muted">你可以处理负责人授权的协作业务，不能修改门店资质、付款或 ERP 授权。</view></view></CoopTaskSheet>
-        <CoopTaskSheet v-if="!displayOnly && canEdit" :page="page" :show="editing || visible || onboarding" :inactive="regionOpen" :title="onboarding ? '完善门店资料' : '门店资料'" :busy="locked" :scroll-into-view="scrollTarget" full @close="close">
-            <view v-if="formConfigLoading" class="coop-form-section coop-profile-config-state" role="status"><u-loading-icon size="20" /><text>正在读取门店资料要求</text></view>
-            <view v-else-if="formConfigError" class="coop-form-section coop-profile-config-error" role="alert"><text>{{ formConfigError }}</text><button :disabled="locked" @tap="loadProfileForm">重新读取</button></view>
+        <view
+            v-if="!editing && (profile?.id || member.member_id) && hasSection('promotion')"
+            class="coop-profile-card coop-profile-promotion"
+            ><button
+                class="coop-profile-promotion__main"
+                hover-class="coop-profile-pressed"
+                @tap="$emit('promotion','overview')"
+                ><image
+                    v-if="toolPicture('entryImage')"
+                    class="coop-profile-tool__image"
+                    :src="toolPicture('entryImage')"
+                    mode="aspectFit" /><CoopBusinessIcon v-else name="invite" :color="iconColor" /><view
+                    class="coop-profile-promotion__copy"
+                    ><text class="coop-profile-promotion__title">{{ text('buttonText','推广中心') }}</text
+                    ><text
+                        v-if="appearance.subtitle"
+                        class="coop-profile-promotion__hint"
+                        >{{ appearance.subtitle }}</text
+                    ></view
+                ><u-icon name="arrow-right" size="12" :color="subtleColor" /></button
+            ><view class="coop-profile-promotion__links"
+                ><button
+                    v-if="shown('showInviter')"
+                    hover-class="coop-profile-pressed"
+                    @tap="$emit('promotion','upstream')"
+                    ><u-icon name="account" size="17" :color="iconColor" /><text>邀请关系</text
+                    ><u-icon name="arrow-right" size="11" :color="subtleColor" /></button
+                ><button hover-class="coop-profile-pressed" @tap="$emit('promotion','application')"
+                    ><u-icon
+                        name="man-add"
+                        size="17"
+                        :color="iconColor" /><text>{{ text('secondaryText','服务商申请') }}</text
+                    ><u-icon name="arrow-right" size="11" :color="subtleColor" /></button></view
+        ></view>
+        <view v-if="!editing && profile?.blocked_at && !displayOnly" class="coop-task-rule"
+            >合作已停用：{{ profile.block_reason || '请联系平台核对' }}。历史记录和已形成收益仍保留。</view
+        >
+        <CoopMembershipEntry
+            v-if="!editing && profile?.id && hasSection('benefits') && shown('showMembership')"
+            :profile="profile"
+            :appearance="appearance"
+            :embedded="displayOnly"
+            @open="$emit('membership')"
+        />
+        <CoopTaskSheet
+            v-if="!displayOnly && editing && !canEdit"
+            :page="page"
+            :show="true"
+            title="门店资料"
+            full
+            @close="close"
+            ><view class="coop-form-section"
+                ><view class="coop-section-title">资料由门店负责人管理</view
+                ><view class="coop-muted"
+                    >你可以处理负责人授权的协作业务，不能修改门店资质、付款或 ERP 授权。</view
+                ></view
+            ></CoopTaskSheet
+        >
+        <CoopTaskSheet
+            v-if="!displayOnly && canEdit"
+            :page="page"
+            :show="editing || visible || onboarding"
+            :inactive="regionOpen"
+            :title="onboarding ? '完善门店资料' : '门店资料'"
+            :busy="locked"
+            :scroll-into-view="scrollTarget"
+            full
+            @close="close"
+        >
+            <view v-if="formConfigLoading" class="coop-form-section coop-profile-config-state" role="status"
+                ><u-loading-icon size="20" /><text>正在读取门店资料要求</text></view
+            >
+            <view v-else-if="formConfigError" class="coop-form-section coop-profile-config-error" role="alert"
+                ><text>{{ formConfigError }}</text
+                ><button :disabled="locked" @tap="loadProfileForm">重新读取</button></view
+            >
             <view class="coop-form-section">
-                <view v-if="onboarding" class="coop-onboarding-join" @tap="joinExisting"><text>已有门店？使用主体码加入</text><u-icon name="arrow-right" size="13" color="#6e89ac" /></view>
+                <view v-if="onboarding" class="coop-onboarding-join" @tap="joinExisting"
+                    ><text>已有门店？使用主体码加入</text><u-icon name="arrow-right" size="13" color="#6e89ac"
+                /></view>
                 <view class="coop-section-title">门店信息</view>
-                <view id="coop-profile-name" class="coop-form-column"><text>门店名称</text><u-input v-model="form.name" :custom-style="cooperationInputStyle" maxlength="120" placeholder="门店对外名称" :disabled="locked" /><view v-if="fieldError('name')" class="coop-profile-field-error" role="alert">{{ fieldError('name') }}</view></view>
-                <view class="coop-profile-contact-row"><view id="coop-profile-contact" class="coop-form-column"><text>联系人</text><u-input v-model="form.contact_name" :custom-style="cooperationInputStyle" maxlength="60" placeholder="联系人姓名" :disabled="locked" /><view v-if="fieldError('contact')" class="coop-profile-field-error" role="alert">{{ fieldError('contact') }}</view></view><view id="coop-profile-mobile" class="coop-form-column"><text>联系电话</text><u-input v-model="form.mobile" :custom-style="cooperationInputStyle" type="number" maxlength="20" placeholder="门店联系电话" :disabled="locked" /><view v-if="fieldError('mobile')" class="coop-profile-field-error" role="alert">{{ fieldError('mobile') }}</view></view></view>
-                <view id="coop-profile-region" class="coop-form-column"><text>门店所在地区</text><CoopRegionFields v-model="region" :min-level="3" :disabled="locked" @overlay="regionOpen = $event" /><view v-if="fieldError('region')" class="coop-profile-field-error" role="alert">{{ fieldError('region') }}</view></view>
-                <view id="coop-profile-address" class="coop-form-column"><text>详细地址</text><u-textarea v-model="form.address" :height="64" :auto-height="true" maxlength="500" placeholder="街道、门牌和楼层" :disabled="locked" /><view v-if="fieldError('address')" class="coop-profile-field-error" role="alert">{{ fieldError('address') }}</view></view>
+                <view id="coop-profile-name" class="coop-form-column"
+                    ><text>门店名称</text
+                    ><u-input
+                        v-model="form.name"
+                        :custom-style="cooperationInputStyle"
+                        maxlength="120"
+                        placeholder="门店对外名称"
+                        :disabled="locked"
+                    /><view
+                        v-if="fieldError('name')"
+                        class="coop-profile-field-error"
+                        role="alert"
+                        >{{ fieldError('name') }}</view
+                    ></view
+                >
+                <view class="coop-profile-contact-row"
+                    ><view id="coop-profile-contact" class="coop-form-column"
+                        ><text>联系人</text
+                        ><u-input
+                            v-model="form.contact_name"
+                            :custom-style="cooperationInputStyle"
+                            maxlength="60"
+                            placeholder="联系人姓名"
+                            :disabled="locked"
+                        /><view
+                            v-if="fieldError('contact')"
+                            class="coop-profile-field-error"
+                            role="alert"
+                            >{{ fieldError('contact') }}</view
+                        ></view
+                    ><view id="coop-profile-mobile" class="coop-form-column"
+                        ><text>联系电话</text
+                        ><u-input
+                            v-model="form.mobile"
+                            :custom-style="cooperationInputStyle"
+                            type="number"
+                            maxlength="20"
+                            placeholder="门店联系电话"
+                            :disabled="locked"
+                        /><view
+                            v-if="fieldError('mobile')"
+                            class="coop-profile-field-error"
+                            role="alert"
+                            >{{ fieldError('mobile') }}</view
+                        ></view
+                    ></view
+                >
+                <view id="coop-profile-region" class="coop-form-column"
+                    ><text>门店所在地区</text
+                    ><CoopRegionFields
+                        v-model="region"
+                        :min-level="3"
+                        :disabled="locked"
+                        @overlay="regionOpen = $event"
+                    /><view
+                        v-if="fieldError('region')"
+                        class="coop-profile-field-error"
+                        role="alert"
+                        >{{ fieldError('region') }}</view
+                    ></view
+                >
+                <view id="coop-profile-address" class="coop-form-column"
+                    ><text>详细地址</text
+                    ><u-textarea
+                        v-model="form.address"
+                        :height="64"
+                        :auto-height="true"
+                        maxlength="500"
+                        placeholder="街道、门牌和楼层"
+                        :disabled="locked"
+                    /><view
+                        v-if="fieldError('address')"
+                        class="coop-profile-field-error"
+                        role="alert"
+                        >{{ fieldError('address') }}</view
+                    ></view
+                >
                 <view v-if="inviterEditable" class="coop-form-column coop-profile-inviter">
-                    <view class="coop-profile-inviter__label"><text>邀请人推广 ID <text class="coop-profile-inviter__optional">选填</text></text><button aria-label="查看推广ID填写说明" :disabled="locked" @tap="inviterHelpOpen = !inviterHelpOpen"><u-icon name="question-circle" size="18" color="#8593a5" /></button></view>
-                    <u-input v-model="form.inviter_member_no" :custom-style="cooperationInputStyle" type="text" maxlength="255" placeholder="填写邀请人在推广中心的 ID" :disabled="locked" />
-                    <view v-if="onboardingInviter.current_inviter" class="coop-profile-inviter__help">当前邀请人：{{ onboardingInviter.current_inviter.name || onboardingInviter.current_inviter.member_no }}，留空保留</view>
-                    <view v-if="inviterHelpOpen" class="coop-profile-inviter__help">请让邀请人在推广中心复制 ID 发给你。仅首次保存时填写，保存后不可更改；加入已有门店请使用上方的主体码入口。</view>
+                    <view class="coop-profile-inviter__label"
+                        ><text>邀请人推广 ID <text class="coop-profile-inviter__optional">选填</text></text
+                        ><button
+                            aria-label="查看推广ID填写说明"
+                            :disabled="locked"
+                            @tap="inviterHelpOpen = !inviterHelpOpen"
+                            ><u-icon name="question-circle" size="18" color="#8593a5" /></button
+                    ></view>
+                    <u-input
+                        v-model="form.inviter_member_no"
+                        :custom-style="cooperationInputStyle"
+                        type="text"
+                        maxlength="255"
+                        placeholder="填写邀请人在推广中心的 ID"
+                        :disabled="locked"
+                    />
+                    <view v-if="onboardingInviter.current_inviter" class="coop-profile-inviter__help"
+                        >当前邀请人：{{ onboardingInviter.current_inviter.name || onboardingInviter.current_inviter.member_no
+                        }}，留空保留</view
+                    >
+                    <view v-if="inviterHelpOpen" class="coop-profile-inviter__help"
+                        >请让邀请人在推广中心复制 ID
+                        发给你。仅首次保存时填写，保存后不可更改；加入已有门店请使用上方的主体码入口。</view
+                    >
                 </view>
-                <view v-else-if="!profile.id && onboardingInviter.current_inviter" class="coop-profile-inviter__bound"><text>邀请人</text><view><text>{{ onboardingInviter.current_inviter.name || onboardingInviter.current_inviter.member_no }}</text><text>已确认</text></view></view>
+                <view v-else-if="!profile.id && onboardingInviter.current_inviter" class="coop-profile-inviter__bound"
+                    ><text>邀请人</text
+                    ><view
+                        ><text
+                            >{{ onboardingInviter.current_inviter.name || onboardingInviter.current_inviter.member_no }}</text
+                        ><text>已确认</text></view
+                    ></view
+                >
             </view>
-            <view v-if="formConfigReady && documentFields.length" class="coop-form-section"><view class="coop-section-title">照片与资质</view><view v-for="field in documentFields" :id="'coop-profile-' + field.key" :key="formScope + ':' + field.key"><CoopStorefrontUpload v-if="field.key === 'storefront_image'" v-model="form.storefront_image" :required="field.required" :disabled="locked" @pending="uploading = $event" /><template v-else><CoopBusinessLicenseUpload v-if="editing || visible || onboarding" v-model="form.business_license_token" :required="field.required" :disabled="locked" @pending="licenseUploading = $event" /></template><view v-if="fieldError(field.key)" class="coop-profile-field-error" role="alert">{{ fieldError(field.key) }}</view></view></view>
-            <view v-if="formConfigReady && extraForm.enabled" id="coop-profile-extra" class="coop-form-section"><view class="coop-section-title">{{ extraForm.title || '补充资料' }}</view><view v-if="extraForm.values_notice" class="coop-capability-help">{{ extraForm.values_notice }}</view><CoopDiyForm :key="formConfig.version + ':' + formScope" ref="extraFormRef" :form_id="extraForm.form_id" :definition="extraForm.definition" :initial_values="extraForm.values" :cache_scope="formScope" :cache_enabled="false" :embedded="true" :require_ready="true" form_border="none" @ready="extraReady = $event !== false" @error="extraFormFailed" /><view v-if="fieldError('extra')" class="coop-profile-field-error" role="alert">{{ fieldError('extra') }}</view></view>
+            <view v-if="formConfigReady && documentFields.length" class="coop-form-section"
+                ><view class="coop-section-title">照片与资质</view
+                ><view
+                    v-for="field in documentFields"
+                    :id="'coop-profile-' + field.key"
+                    :key="formScope + ':' + field.key"
+                    ><CoopStorefrontUpload
+                        v-if="field.key === 'storefront_image'"
+                        v-model="form.storefront_image"
+                        :required="field.required"
+                        :disabled="locked"
+                        @pending="uploading = $event"
+                    /><template v-else
+                        ><CoopBusinessLicenseUpload
+                            v-if="editing || visible || onboarding"
+                            v-model="form.business_license_token"
+                            :required="field.required"
+                            :disabled="locked"
+                            @pending="licenseUploading = $event" /></template
+                    ><view
+                        v-if="fieldError(field.key)"
+                        class="coop-profile-field-error"
+                        role="alert"
+                        >{{ fieldError(field.key) }}</view
+                    ></view
+                ></view
+            >
+            <view v-if="formConfigReady && extraForm.enabled" id="coop-profile-extra" class="coop-form-section"
+                ><view class="coop-section-title">{{ extraForm.title || '补充资料' }}</view
+                ><view v-if="extraForm.values_notice" class="coop-capability-help">{{ extraForm.values_notice }}</view
+                ><CoopDiyForm
+                    :key="formConfig.version + ':' + formScope"
+                    ref="extraFormRef"
+                    :form_id="extraForm.form_id"
+                    :definition="extraForm.definition"
+                    :initial_values="extraForm.values"
+                    :cache_scope="formScope"
+                    :cache_enabled="false"
+                    :embedded="true"
+                    :require_ready="true"
+                    form_border="none"
+                    @ready="extraReady = $event !== false"
+                    @error="extraFormFailed"
+                /><view
+                    v-if="fieldError('extra')"
+                    class="coop-profile-field-error"
+                    role="alert"
+                    >{{ fieldError('extra') }}</view
+                ></view
+            >
             <view id="coop-profile-capabilities" class="coop-form-section">
-                <view class="coop-form-column"><text>经营业务与交付能力（可多选）</text><view class="coop-capability-help">不同业务分别登记。未选择的业务或空能力不会视为全部能力。</view><view v-for="business in businesses" :key="business.key" class="coop-business-capability"><view class="coop-business-capability__heading" @tap="toggleBusiness(business.key)"><CoopSelectionMark :selected="selectedBusinesses.includes(business.key)" /><text>{{ business.name }}</text></view><view v-if="selectedBusinesses.includes(business.key)" class="coop-business-capability__selection" @tap="openModelCatalog(business.key)"><text>{{ (capabilityChoices[business.key] || []).length ? '已选 ' + capabilityChoices[business.key].length + ' 项' : '选择可交付' + businessDimensionLabel(business) }}</text><u-icon name="arrow-right" size="13" color="#8092aa" /></view></view><view v-if="!businesses.length" class="coop-capability-help">平台尚未开放业务能力，请联系平台配置。</view></view>
-                <view v-if="disabledCapabilities.length" class="coop-form-column"><text>已停用业务（只读保留）</text><view v-for="capability in disabledCapabilities" :key="capability.business_type" class="coop-disabled-capability"><view><text>{{ capability.business_name }}</text><text>已停用 · 已登记 {{ capability.option_ids.length }} 项</text></view><u-icon name="lock" size="16" color="#8b97a8" /></view><view class="coop-capability-help">已有能力按原记录保留，不影响修改门店资料。业务停用期间不能新增或扩大能力。</view></view>
-                <view v-if="fieldError('capabilities')" class="coop-profile-field-error" role="alert">{{ fieldError('capabilities') }}</view>
+                <view class="coop-form-column"
+                    ><text>经营业务与交付能力（可多选）</text
+                    ><view class="coop-capability-help">不同业务分别登记。未选择的业务或空能力不会视为全部能力。</view
+                    ><view v-for="business in businesses" :key="business.key" class="coop-business-capability"
+                        ><view class="coop-business-capability__heading" @tap="toggleBusiness(business.key)"
+                            ><CoopSelectionMark
+                                :selected="selectedBusinesses.includes(business.key)"
+                            /><text>{{ business.name }}</text></view
+                        ><view
+                            v-if="selectedBusinesses.includes(business.key)"
+                            class="coop-business-capability__selection"
+                            @tap="openModelCatalog(business.key)"
+                            ><text
+                                >{{ (capabilityChoices[business.key] || []).length ? '已选 ' + capabilityChoices[business.key].length + ' 项' : '选择可交付' + businessDimensionLabel(business) }}</text
+                            ><u-icon name="arrow-right" size="13" color="#8092aa" /></view></view
+                    ><view v-if="!businesses.length" class="coop-capability-help"
+                        >平台尚未开放业务能力，请联系平台配置。</view
+                    ></view
+                >
+                <view v-if="disabledCapabilities.length" class="coop-form-column"
+                    ><text>已停用业务（只读保留）</text
+                    ><view
+                        v-for="capability in disabledCapabilities"
+                        :key="capability.business_type"
+                        class="coop-disabled-capability"
+                        ><view
+                            ><text>{{ capability.business_name }}</text
+                            ><text>已停用 · 已登记 {{ capability.option_ids.length }} 项</text></view
+                        ><u-icon name="lock" size="16" color="#8b97a8" /></view
+                    ><view class="coop-capability-help"
+                        >已有能力按原记录保留，不影响修改门店资料。业务停用期间不能新增或扩大能力。</view
+                    ></view
+                >
+                <view
+                    v-if="fieldError('capabilities')"
+                    class="coop-profile-field-error"
+                    role="alert"
+                    >{{ fieldError('capabilities') }}</view
+                >
             </view>
-            <view v-if="erpVisible" class="coop-form-section coop-profile-erp"><u-collapse :border="false"><u-collapse-item title="ERP 库存同步" :label="profile.connection?.connected ? connectionProviderName + ' · ' + connectionLabel : '选填'" name="erp-settings" icon="grid" :disabled="locked"><view class="coop-form-column"><template v-if="profile.connection?.connected"><view class="coop-connected-source"><view class="coop-connection-source"><text>{{ connectionProviderName }}</text><text class="coop-connection-state" :class="{ 'is-paused': profile.connection.channel_enabled === false || !profile.connection.enabled }">{{ profile.connection.channel_enabled === false ? '渠道已关闭' : profile.connection.enabled ? '自动同步开启' : '自动同步暂停' }}</text></view><text role="button" aria-label="管理ERP连接" @tap="manageConnection">管理连接 ›</text></view></template><template v-else><picker :range="providerOptions" range-key="name" :value="providerIndex" :disabled="locked" @change="selectProvider(Number($event.detail.value))"><view class="coop-picker-field">{{ providerOptions[providerIndex]?.name || '暂不连接 ERP' }} ›</view></picker><view v-if="providerOptions[providerIndex]?.disabled" class="coop-muted">原渠道已关闭，原库存和接入资料仍保留。</view></template></view><view class="coop-profile-help-body"><view>登记的是可交付能力，不代表当前有现货。</view><view>手工型号与 ERP 库存参考可以同时使用。保存门店资料不会切换现有 ERP 账号。</view><view>需要暂停自动同步或更换账号时，进入“管理连接”操作。</view></view></u-collapse-item></u-collapse></view>
-            <view v-if="onboarding" class="coop-profile-promotion-entry" role="button" :aria-disabled="locked" @tap="openPromotion"><u-icon name="share" size="18" color="#587eaf" /><text>推广中心</text><u-icon name="arrow-right" size="13" color="#8b9ab0" /></view>
-            <template #footer><view v-if="localError || error" class="coop-inline-error coop-submit-error" role="alert" aria-live="polite">{{ localError || error }}</view><view v-if="draftNotice" class="coop-profile-draft-notice" role="status">{{ draftNotice }}</view><u-button type="primary" shape="circle" :custom-style="cooperationButtonStyle" :text="licenseUploading ? '营业执照上传中' : uploading ? '门头图片上传中' : '保存门店资料'" :loading="locked || formConfigLoading" :disabled="locked || !formConfigReady || extraForm.enabled && !extraReady" @click="submit" /></template>
+            <view v-if="erpVisible" class="coop-form-section coop-profile-erp"
+                ><u-collapse :border="false"
+                    ><u-collapse-item
+                        title="ERP 库存同步"
+                        :label="profile.connection?.connected ? connectionProviderName + ' · ' + connectionLabel : '选填'"
+                        name="erp-settings"
+                        icon="grid"
+                        :disabled="locked"
+                        ><view class="coop-form-column"
+                            ><template v-if="profile.connection?.connected"
+                                ><view class="coop-connected-source"
+                                    ><view class="coop-connection-source"
+                                        ><text>{{ connectionProviderName }}</text
+                                        ><text
+                                            class="coop-connection-state"
+                                            :class="{ 'is-paused': profile.connection.channel_enabled === false || !profile.connection.enabled }"
+                                            >{{ profile.connection.channel_enabled === false ? '渠道已关闭' : profile.connection.enabled ? '自动同步开启' : '自动同步暂停' }}</text
+                                        ></view
+                                    ><text role="button" aria-label="管理ERP连接" @tap="manageConnection"
+                                        >管理连接 ›</text
+                                    ></view
+                                ></template
+                            ><template v-else
+                                ><picker
+                                    :range="providerOptions"
+                                    range-key="name"
+                                    :value="providerIndex"
+                                    :disabled="locked"
+                                    @change="selectProvider(Number($event.detail.value))"
+                                    ><view class="coop-picker-field"
+                                        >{{ providerOptions[providerIndex]?.name || '暂不连接 ERP' }} ›</view
+                                    ></picker
+                                ><view v-if="providerOptions[providerIndex]?.disabled" class="coop-muted"
+                                    >原渠道已关闭，原库存和接入资料仍保留。</view
+                                ></template
+                            ></view
+                        ><view class="coop-profile-help-body"
+                            ><view>登记的是可交付能力，不代表当前有现货。</view
+                            ><view>手工型号与 ERP 库存参考可以同时使用。保存门店资料不会切换现有 ERP 账号。</view
+                            ><view>需要暂停自动同步或更换账号时，进入“管理连接”操作。</view></view
+                        ></u-collapse-item
+                    ></u-collapse
+                ></view
+            >
+            <view
+                v-if="onboarding"
+                class="coop-profile-promotion-entry"
+                role="button"
+                :aria-disabled="locked"
+                @tap="openPromotion"
+                ><u-icon name="share" size="18" color="#587eaf" /><text>推广中心</text
+                ><u-icon name="arrow-right" size="13" color="#8b9ab0"
+            /></view>
+            <template #footer
+                ><view
+                    v-if="localError || error"
+                    class="coop-inline-error coop-submit-error"
+                    role="alert"
+                    aria-live="polite"
+                    >{{ localError || error }}</view
+                ><view v-if="draftNotice" class="coop-profile-draft-notice" role="status">{{ draftNotice }}</view
+                ><u-button
+                    type="primary"
+                    shape="circle"
+                    :custom-style="cooperationButtonStyle"
+                    :text="licenseUploading ? '营业执照上传中' : uploading ? '门头图片上传中' : '保存门店资料'"
+                    :loading="locked || formConfigLoading"
+                    :disabled="locked || !formConfigReady || extraForm.enabled && !extraReady"
+                    @click="submit"
+            /></template>
         </CoopTaskSheet>
     </view>
 </template>
@@ -314,7 +740,9 @@ defineExpose({ open, close, clearDraft })
 .coop-profile-theme.is-diy .coop-form-section+.coop-form-section { border-top:1px solid #f0f1f2; }
 .coop-profile-theme.is-diy .coop-muted { color:var(--lead-diy-text,#606266); }
 </style>
-<style scoped>.coop-disabled-capability { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 0; border-bottom: 1px solid #edf1f6; }.coop-disabled-capability>view { display: flex; flex-direction: column; gap: 5px; min-width: 0; }.coop-disabled-capability text:first-child { font-size: 14px; color: #62758d; }.coop-disabled-capability text:last-child { font-size: 12px; color: #8a97a8; }</style>
+<style scoped>
+.coop-disabled-capability { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 0; border-bottom: 1px solid #edf1f6; }.coop-disabled-capability>view { display: flex; flex-direction: column; gap: 5px; min-width: 0; }.coop-disabled-capability text:first-child { font-size: 14px; color: #62758d; }.coop-disabled-capability text:last-child { font-size: 12px; color: #8a97a8; }
+</style>
 <style scoped lang="scss">
 @import './cooperation-shared';
 @include hsx-coop-form-section;
@@ -368,6 +796,9 @@ defineExpose({ open, close, clearDraft })
 .coop-profile-identity { flex: 1; min-width: 0; }.coop-profile-identity .coop-muted { margin-top: 7rpx; }.coop-profile-identity .coop-profile-badges { margin: 12rpx 0 0; }
 .coop-connected-source { display: flex; justify-content: space-between; align-items: center; gap: 18rpx; font-size: 26rpx; color: #5d7189; background: #edf3fa; padding: 20rpx; border-radius: 8rpx; }.coop-connected-source>text:last-child { flex: none; color: var(--primary-color, #d93833); font-size: 23rpx; }
 .coop-profile-card--identity { padding: 28rpx 24rpx 0; }.coop-profile-title { padding: 10rpx 6rpx 26rpx; }.coop-profile-badges>text { padding: 4rpx 11rpx; }.coop-profile-tools { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 16rpx; margin: 0 0 8rpx; }.coop-form-section { border-radius: 12rpx; margin: 20rpx 24rpx; border: 1rpx solid #e8edf4; }.coop-profile-name { color: #26364d; }.coop-profile-identity .coop-muted { color: #8492a5; }
-.coop-connection-source { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 5px; }.coop-connection-source>text:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; font-weight: 550; color: #3e587b; }.coop-connection-state { font-size: 11px; color: #668678; line-height: 18px; }.coop-connection-state.is-paused { color: #a18458; }.coop-connected-source { gap: 12px; padding: 13px 14px; border-radius: 8px; background: #f1f6fd; }.coop-connected-source>text:last-child { min-height: 44px; display: flex; align-items: center; font-size: 12px; }.coop-profile-help { border-top: 1px solid #edf1f6; margin-top: 14px; }.coop-profile-help :deep(.u-cell__body) { padding: 11px 0; }.coop-profile-help :deep(.u-cell__title-text) { color: #7b8da5; font-size: 12px; }.coop-profile-help :deep(.u-collapse-item__content__text) { padding: 0; }.coop-profile-help-body { color: #7b8ba1; font-size: 12px; line-height: 1.8; padding: 0 0 10px; }.coop-profile-help-body>view+view { margin-top: 7px; }</style>
+.coop-connection-source { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 5px; }.coop-connection-source>text:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; font-weight: 550; color: #3e587b; }.coop-connection-state { font-size: 11px; color: #668678; line-height: 18px; }.coop-connection-state.is-paused { color: #a18458; }.coop-connected-source { gap: 12px; padding: 13px 14px; border-radius: 8px; background: #f1f6fd; }.coop-connected-source>text:last-child { min-height: 44px; display: flex; align-items: center; font-size: 12px; }.coop-profile-help { border-top: 1px solid #edf1f6; margin-top: 14px; }.coop-profile-help :deep(.u-cell__body) { padding: 11px 0; }.coop-profile-help :deep(.u-cell__title-text) { color: #7b8da5; font-size: 12px; }.coop-profile-help :deep(.u-collapse-item__content__text) { padding: 0; }.coop-profile-help-body { color: #7b8ba1; font-size: 12px; line-height: 1.8; padding: 0 0 10px; }.coop-profile-help-body>view+view { margin-top: 7px; }
+</style>
 
-<style scoped>.coop-capability-help { font-size: 12px; line-height: 1.8; color: #7b8ba1; margin: 8px 0 12px; }.coop-business-capability { border-bottom: 1px solid #edf1f6; padding: 10px 0; }.coop-business-capability__heading { display: flex; align-items: center; gap: 10px; min-height: 44px; font-size: 14px; color: #344a65; }.coop-business-capability__selection { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 44px; margin-left: 30px; color: var(--primary-color,#3478cc); font-size: 13px; }</style>
+<style scoped>
+.coop-capability-help { font-size: 12px; line-height: 1.8; color: #7b8ba1; margin: 8px 0 12px; }.coop-business-capability { border-bottom: 1px solid #edf1f6; padding: 10px 0; }.coop-business-capability__heading { display: flex; align-items: center; gap: 10px; min-height: 44px; font-size: 14px; color: #344a65; }.coop-business-capability__selection { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 44px; margin-left: 30px; color: var(--primary-color,#3478cc); font-size: 13px; }
+</style>
