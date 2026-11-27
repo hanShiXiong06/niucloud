@@ -62,8 +62,10 @@ final class PayIndexUpgrade
     public function apply(): array
     {
         $connection=Db::connect();
-        $connection->connect();
-        if($connection->getPdo()->inTransaction())throw new RuntimeException('索引DDL不能在业务事务内执行');
+        // connect() only fills the pool; getPdo() returns the active link, which the first master query sets.
+        $connection->query('SELECT 1',[],true);$pdo=$connection->getPdo();
+        if(!$pdo)throw new RuntimeException('数据库连接未建立，未执行');
+        if($pdo->inTransaction())throw new RuntimeException('索引DDL不能在业务事务内执行');
         $plan=$this->check();if(!$plan['pending_statements'])return $plan+['applied'=>[],'message'=>'索引均已存在，未重复执行'];
         $scope=(string)$connection->getConfig('database').':'.(string)$connection->getConfig('prefix');
         $key='lead_pay_index:'.substr(hash('sha256',$scope),0,40);

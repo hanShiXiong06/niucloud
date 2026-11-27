@@ -22,7 +22,8 @@ $check(str_contains($service,'RefundDict::WAIT,RefundDict::DEALING,RefundDict::S
 $check(str_contains($service,"\$row['status']!=='held'")&&str_contains($service,'已有账本记录'),'resume rejects already-settled/recorded credits');
 $check(str_contains($service,"'status'=>'pending','review_required'=>0")&&str_contains($service,"'resumed'"),'resume is an auditable state change, not another account credit');
 $check(str_contains(file_get_contents($plugin.'/app/event.php'),'PromotionRefundSuccess'),'refund listener registered through framework hook');
-$check(str_contains(file_get_contents($plugin.'/Addon.php'),'promotionStatus')&&str_contains(file_get_contents($plugin.'/app/dict/schedule/schedule.php'),'hsx_lead_promotion_settle'),'separate scheduled settlement is registered and preserved/default-off');
+$addonSource=file_get_contents($plugin.'/Addon.php');
+$check(str_contains($addonSource,"'hsx_lead_promotion_settle'")&&str_contains($addonSource,'ScheduleDict::OFF')&&str_contains(file_get_contents($plugin.'/app/dict/schedule/schedule.php'),'hsx_lead_promotion_settle'),'separate scheduled settlement is registered and preserved/default-off');
 $sql=file_get_contents($plugin.'/sql/install.sql');
 $check(substr_count($sql,'CREATE TABLE IF NOT EXISTS `{{prefix}}hsx_lead_promotion_reward`')===1,'one new reward audit table only');
 $check(str_contains($sql,'UNIQUE KEY `uk_site_order_level` (`site_id`,`coop_order_id`,`commission_level`)'),'database enforces per-site per-order per-level source idempotency');

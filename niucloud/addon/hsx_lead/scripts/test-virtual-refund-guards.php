@@ -53,7 +53,9 @@ namespace addon\hsx_lead\app\service\virtualpay { final class VirtualPayOrderSer
 namespace addon\hsx_lead\app\service\cooperation {
     use think\facade\Db;
     final class Rules {public static function cents($n):int{return(int)round((float)$n*100);}public static function amount(int$n):string{return number_format($n/100,2,'.','');}}
-    final class PaymentService {public const TRADE_TYPE='hsx_lead_cooperation';}
+    final class PaymentService {public const TRADE_TYPE='hsx_lead_cooperation';
+        // Mirrors the real PaymentService::receiptMatches (shared receipt check used by refund code).
+        public static function receiptMatches(?array$pay,array$order):bool{return$pay!==null&&$pay!==[]&&(int)$pay['status']===(int)\app\dict\pay\PayDict::STATUS_FINISH&&(string)$pay['main_type']===\app\dict\pay\PayDict::MEMBER&&(int)$pay['main_id']===(int)$order['member_id']&&Rules::cents((string)$pay['money'])===Rules::cents((string)$order['amount']);}}
     final class PromotionService {public static function lockSite(int$site):void{}}
     final class Store {
         public static function query(string$table,int$site){return Db::name('hsx_lead_'.$table)->where('site_id',$site);}
