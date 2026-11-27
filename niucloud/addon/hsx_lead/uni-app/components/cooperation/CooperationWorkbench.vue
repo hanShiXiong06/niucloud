@@ -379,6 +379,7 @@ import FrameworkTabbar from '@/components/tabbar/tabbar.vue'
 import { useLogin } from '@/hooks/useLogin'
 import { useCooperationSubscribe } from '../../composables/useCooperationSubscribe'
 import { useCooperation } from '../../composables/useCooperation'
+import { useLeadPaging } from '../../composables/useLeadPaging'
 import { cooperationAccess, cooperationOrder, cooperationPageUrls, coopError, coopMoney, coopRequestId, type CooperationTab, type CoopRow, type LeadAction } from '../../api/cooperation'
 import CoopState from './CoopState.vue'
 import CoopGuestWorkspace from './CoopGuestWorkspace.vue'
@@ -412,69 +413,33 @@ ui.direction.value = props.initialDirection
 const paymentOrder = ref<CoopRow>({}), paymentCompleted = ref(false)
 const commissionRef = ref<any>(null), paymentHelpReady = ref(false)
 const visitorServices = ref<{ key: string; name: string; dimension?: string }[]>([]), visitorEnabled = ref<boolean | null>(null), visitorLoading = ref(false), visitorError = ref('')
-const leadPagingRef = ref<any>(null), leadPagingRevision = ref(0), leadKeyword = ref(''), leadFirstPageReady = ref(false)
 const managedDeliveries = computed(() => !props.task && ui.tab.value === 'deliveries')
 const leadListVisible = computed(() => managedDeliveries.value && ui.loggedIn.value && ui.ready.value && !!ui.profile.value.id)
 // Keep role controls/dock in the same positions while the initial identity's
 // metadata loads. They become usable only after its profile is verified.
 const leadControlsVisible = computed(() => managedDeliveries.value && ui.loggedIn.value && (!ui.ready.value || !!ui.profile.value.id))
-type LeadPagingQuery = { page: number; size: number; from: string; readingList: boolean; signature: string }
-let leadPagingEpoch = 0, pageActive = true, leadPagingPlanned = false, pendingLeadPaging: LeadPagingQuery | null = null, interruptedLeadPaging: LeadPagingQuery | null = null, appliedLeadSignature = ''
+let pageActive = true
 const countdownActive = ref(true)
 const pendingEntryReady = ref(false)
-const leadPagingSignature = () => JSON.stringify([identity, ui.direction.value, ui.query.keyword, ui.query.status])
-// The request hook owns rows. Do not accept z-paging's delayed model emissions as
-// business data; an old instance can emit after its nextTick/setTimeout boundary.
-const leadPagingQuery = computed(() => { const revision = leadPagingRevision.value; return (page: number, size: number, from = '') => queryLeads(page, size, from, revision) })
-async function finishLeadPaging(success: boolean) {
-    if (success && !ui.listError.value) { leadFirstPageReady.value = true; await leadPagingRef.value?.completeByNoMore([...ui.rows.value], !ui.canLoadMore.value) }
-    // With call-network-reject=false, z-paging intentionally leaves its failed
-    // completion promise pending. The request lifecycle must still finish.
-    else void leadPagingRef.value?.complete(false)
-}
-async function queryLeads(page: number, size: number, from = '', revision = leadPagingRevision.value) {
-    if (!pageActive || !leadListVisible.value || revision !== leadPagingRevision.value) return
-    leadPagingPlanned = false
-    // z-paging's footer increments pageNo even after a first-page failure. Never
-    // append until page one of this committed query has actually succeeded.
-    if (page > 1 && !leadFirstPageReady.value) return reloadLeads()
-    if (page === 1) { leadFirstPageReady.value = false; if (appliedLeadSignature !== leadPagingSignature()) { ui.rows.value = []; ui.total.value = 0; appliedLeadSignature = leadPagingSignature() } }
-    const epoch = ++leadPagingEpoch, request = { page, size, from, readingList: false, signature: leadPagingSignature() }
-    pendingLeadPaging = request
-    try {
-        if (page === 1 && from === 'user-pull-down' && !await ui.bootstrap()) { if (epoch === leadPagingEpoch && pageActive) await finishLeadPaging(false); return }
-        if (epoch !== leadPagingEpoch || !pageActive) return
-        ui.query.limit = size
-        if (page > 1) ui.query.page = page - 1
-        request.readingList = true
-        const success = await ui.loadLeads(page > 1)
-        if (epoch !== leadPagingEpoch || !pageActive || request.signature !== leadPagingSignature()) return
-        await finishLeadPaging(success)
-    } finally { if (pendingLeadPaging === request) pendingLeadPaging = null }
-}
-function reloadLeads() {
-    if (!pageActive || !managedDeliveries.value) return
-    leadPagingEpoch++; pendingLeadPaging = null; leadFirstPageReady.value = false
-    const signature = leadPagingSignature(), changed = appliedLeadSignature !== signature
-    if (changed) { ui.rows.value = []; ui.total.value = 0; ui.listError.value = '' }
-    appliedLeadSignature = signature
-    // Native component refs can arrive after the parent's nextTick. The keyed
-    // pager owns its one initial query from mounted; never silently drop it via
-    // an early optional ref.reload(), nor race that call against auto loading.
-    leadPagingPlanned = true
-    leadPagingRevision.value++
-}
-function searchLeads(value?: string | number) {
-    if (!leadListVisible.value || locked.value) return
-    // u-search emits its submitted value before its watched v-model can flush
-    // on H5/Weixin. Commit this event, not yesterday's draft, to the pager.
-    const keyword = String(typeof value === 'string' || typeof value === 'number' ? value : leadKeyword.value).trim()
-    const unchanged = ui.query.keyword === keyword
-    leadKeyword.value = keyword; ui.query.keyword = keyword
-    if (unchanged && (leadPagingPlanned || !!pendingLeadPaging || ui.listLoading.value)) return
-    return reloadLeads()
-}
-function clearLeadSearch() { return searchLeads('') }
+// Role-list paging lives in useLeadPaging; names below keep the template bindings unchanged.
+const leadPaging = useLeadPaging({
+    ui,
+    active: () => pageActive,
+    visible: () => leadListVisible.value,
+    managed: () => managedDeliveries.value,
+    locked: () => locked.value,
+    identity: () => identity
+})
+const {
+    pagingRef: leadPagingRef,
+    revision: leadPagingRevision,
+    keyword: leadKeyword,
+    query: leadPagingQuery,
+    reload: reloadLeads,
+    search: searchLeads,
+    clearSearch: clearLeadSearch,
+    filterStatus
+} = leadPaging
 function changeLeadDirection(direction: 'outgoing' | 'incoming') {
     if (locked.value || direction === ui.direction.value) return
     ui.direction.value = direction; leadKeyword.value = ''; ui.query.keyword = ''; ui.query.status = ''; ui.rows.value = []; ui.total.value = 0
@@ -563,18 +528,11 @@ async function initialize() {
         void subscribeState.prepare()
         const resumed = ui.ready.value, dirty = Number(uni.getStorageSync('hsx_lead_coop_changed') || 0)
         if (resumed && !dirty) {
-            const interrupted = interruptedLeadPaging
-            interruptedLeadPaging = null
+            const interrupted = leadPaging.takeInterrupted()
             await ui.resumeInterruptedReads()
-            if (interrupted && managedDeliveries.value && pageActive && interrupted.signature === leadPagingSignature()) {
-                if (interrupted.readingList) await finishLeadPaging(!ui.listError.value)
-                else await queryLeads(interrupted.page, interrupted.size, interrupted.from)
-            }
+            await leadPaging.resumeInterrupted(interrupted)
             if (disposed || turn !== resumeSequence) return
-            // Bootstrap readiness is not list readiness. A page can be hidden
-            // before its native pager mounts; resume that missing first read,
-            // but retain a completed empty page and an already planned query.
-            if (managedDeliveries.value && pageActive && !leadFirstPageReady.value && !leadPagingPlanned && !pendingLeadPaging && !ui.listLoading.value && !ui.listError.value) reloadLeads()
+            leadPaging.ensureFirstPage()
             if (!overlay.value && ['detail', 'select', 'commission'].includes(props.task)) overlay.value = ui.detail.value.id ? props.task : 'detail'
             if (paymentId.value) await verifyPayment()
             if (!props.task) await processEntryIntents()
@@ -651,7 +609,6 @@ function contactPaymentAdmin(nativeBusy = false) {
     }
     if (typeof payRef.value?.close === 'function') payRef.value.close()
 }
-function filterStatus(value: string) { if (!leadListVisible.value || locked.value || ui.query.status === value) return; ui.query.status = value; reloadLeads() }
 async function focusTasks(direction: 'outgoing' | 'incoming', status: string) { if (ui.listLoading.value) return; if (ui.direction.value !== direction) { ui.direction.value = direction; leadKeyword.value = ''; ui.query.keyword = '' }; ui.query.status = status; reloadLeads() }
 function editProfile() { openTask('profile-edit') }
 function openPromotion(tab = 'overview') { openTask('promotion', { tab }) }
@@ -864,7 +821,7 @@ watch(() => props.initialDirection, direction => { if (props.task || ui.tab.valu
 watch(() => [props.initialPromotion, props.initialInviter] as const, ([show, mid]) => { if (!show) return; pendingPromotion = true; pendingInviter = Number(mid) || 0; void processEntryIntents() })
 watch(locked, value => { if (!value) void processEntryIntents() })
 onMounted(initialize)
-function pausePage() { pendingEntryReady.value = false; countdownActive.value = false; if (pendingLeadPaging) interruptedLeadPaging = { ...pendingLeadPaging, readingList: ui.listLoading.value }; pendingLeadPaging = null; leadPagingPlanned = false; visitorLoading.value = false; pageActive = false; leadPagingEpoch++; resumeSequence++; ui.pause(); starting = null }
+function pausePage() { pendingEntryReady.value = false; countdownActive.value = false; leadPaging.pause(); visitorLoading.value = false; pageActive = false; resumeSequence++; ui.pause(); starting = null }
 defineExpose({ resume: initialize, pause: pausePage, refresh, loadMore, openInvitation })
 onBeforeUnmount(() => { pendingEntryReady.value = false; countdownActive.value = false; disposed = true; ui.dispose(); orderRequests.clear() })
 </script>
