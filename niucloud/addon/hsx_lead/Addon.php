@@ -16,7 +16,7 @@ final class Addon
 {
     public function install(): bool
     {
-        CoreAddonInstallService::executeSql(__DIR__ . '/sql/install.sql');
+        CoreAddonInstallService::executeSql(__DIR__.'/sql/install.sql');
         NoticeConfigService::syncAssignedSites();
         $this->registerSchedule(true);
         return true;
@@ -24,7 +24,7 @@ final class Addon
 
     public function upgrade(): bool
     {
-        CoreAddonInstallService::executeSql(__DIR__ . '/sql/install.sql');
+        CoreAddonInstallService::executeSql(__DIR__.'/sql/install.sql');
         NoticeConfigService::syncAssignedSites();
         $this->registerSchedule(false);
         return true;
@@ -43,7 +43,7 @@ final class Addon
         $statuses = [];
         foreach ($keys as $key) {
             $existing = (new SysSchedule())->where([['addon', '=', 'hsx_lead'], ['key', '=', $key]])->findOrEmpty();
-            $statuses[$key] = $disable || $existing->isEmpty() ? ScheduleDict::OFF : (int)$existing['status'];
+            $statuses[$key] = $disable || $existing->isEmpty() ? ScheduleDict::OFF : (int) $existing['status'];
         }
         (new CoreScheduleInstallService())->installAddonSchedule('hsx_lead');
         foreach ($statuses as $key => $status) {
@@ -51,4 +51,3 @@ final class Addon
         }
     }
 }
-

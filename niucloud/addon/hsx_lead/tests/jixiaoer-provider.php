@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 // Synthetic fixtures only: no account credentials, network, database or ERP writes.
 error_reporting(E_ALL & ~E_DEPRECATED);
-require dirname(__DIR__, 3) . '/vendor/autoload.php';
+require dirname(__DIR__, 3).'/vendor/autoload.php';
 
 use addon\hsx_lead\app\provider\JixiaoerProvider;
 use addon\hsx_lead\app\provider\ProviderException;
@@ -13,7 +13,9 @@ use addon\hsx_lead\app\provider\TransportContract;
 final class JixiaoerFixtureTransport implements RequestTransportContract
 {
     public array $calls = [];
-    public function __construct(private array $responses) {}
+    public function __construct(private array $responses)
+    {
+    }
     public function post(string $endpoint, array $headers, array $body): array
     {
         throw new RuntimeException('Jixiaoer must not pretend form/query calls are JSON POST');
@@ -30,18 +32,19 @@ final class JixiaoerFixtureTransport implements RequestTransportContract
 $checks = 0;
 function jxCheck(bool $condition, string $description): void
 {
-    if (!$condition) throw new RuntimeException('FAIL: ' . $description);
+    if (!$condition) throw new RuntimeException('FAIL: '.$description);
     $GLOBALS['checks']++;
 }
 function jxFailure(callable $action, string $reason): ProviderException
 {
-    try { $action(); }
-    catch (ProviderException $error) {
-        jxCheck($error->reason() === $reason, 'safe failure reason ' . $reason);
+    try {
+        $action();
+    } catch (ProviderException $error) {
+        jxCheck($error->reason() === $reason, 'safe failure reason '.$reason);
         jxCheck($error->getPrevious() === null, 'provider failure never chains secret request/response objects');
         return $error;
     }
-    throw new RuntimeException('FAIL: expected safe failure ' . $reason);
+    throw new RuntimeException('FAIL: expected safe failure '.$reason);
 }
 function jxResponse(array|string $body, array $headers = [], int $status = 200): array
 {
@@ -116,19 +119,19 @@ foreach (['' => null, '***' => null, '-1' => null, '1.234' => null, '1e3' => nul
     jxCheck($provider->normalize(array_replace($row, ['listing' => array_replace($proof, ['sell_price' => (string) $price])]), $context)['retail_price'] === $expected, 'missing/masked/invalid/exact price behavior');
 }
 jxCheck($provider->normalize(array_replace($row, ['listing' => array_replace($proof, ['sell_price' => 2.1])]), $context)['retail_price'] === null, 'binary float input cannot be silently rounded');
-jxFailure(fn() => $provider->normalize(array_replace($row, ['listing' => null]), $context), 'schema_changed');
-jxFailure(fn() => $provider->normalize(array_replace($row, ['listing' => array_replace($proof, ['shop_id' => 'other-shop'])]), $context), 'schema_changed');
+jxFailure(fn () => $provider->normalize(array_replace($row, ['listing' => null]), $context), 'schema_changed');
+jxFailure(fn () => $provider->normalize(array_replace($row, ['listing' => array_replace($proof, ['shop_id' => 'other-shop'])]), $context), 'schema_changed');
 jxCheck($provider->normalize(array_replace($row, ['ext_json' => null]), $context)['capacity'] === null, 'missing specifications remain empty rather than guessed');
 $specs = [['key' => 'memory', 'value' => '128GB'], ['key' => 'color', 'value' => '蓝色']];
 jxCheck($provider->normalize(array_replace($row, ['ext_json' => $specs]), $context)['capacity'] === '128GB', 'already-decoded property lists use the same contract');
-jxFailure(fn() => $provider->normalize(array_replace($row, ['shop_id' => null]), $context), 'invalid_scope');
-jxFailure(fn() => $provider->normalize($row, array_replace($context, ['store_id' => 'other-shop'])), 'scope_mismatch');
-jxFailure(fn() => $provider->normalize($row, array_replace($context, ['tenant_id' => 'other-tenant'])), 'scope_mismatch');
-jxFailure(fn() => $provider->normalize(array_replace($row, ['stock_list_history_imei' => ['shop_id' => 'other-shop']]), $context), 'scope_mismatch');
-jxFailure(fn() => $provider->normalize(array_replace($row, ['stock_list_history_imei' => ['shop_id' => 'fixture-shop', 'goods_id' => 999]]), $context), 'scope_mismatch');
-jxFailure(fn() => $provider->normalize(array_replace($row, ['ext_json' => '{broken']), $context), 'schema_changed');
-jxFailure(fn() => $provider->normalize(array_replace($row, ['ext_json' => ['memory' => '128GB']]), $context), 'schema_changed');
-jxFailure(fn() => $provider->normalize(array_replace($row, ['ext_json' => [['key' => 'memory', 'value' => '128GB'], ['key' => 'memory', 'value' => '512GB']]]), $context), 'schema_changed');
+jxFailure(fn () => $provider->normalize(array_replace($row, ['shop_id' => null]), $context), 'invalid_scope');
+jxFailure(fn () => $provider->normalize($row, array_replace($context, ['store_id' => 'other-shop'])), 'scope_mismatch');
+jxFailure(fn () => $provider->normalize($row, array_replace($context, ['tenant_id' => 'other-tenant'])), 'scope_mismatch');
+jxFailure(fn () => $provider->normalize(array_replace($row, ['stock_list_history_imei' => ['shop_id' => 'other-shop']]), $context), 'scope_mismatch');
+jxFailure(fn () => $provider->normalize(array_replace($row, ['stock_list_history_imei' => ['shop_id' => 'fixture-shop', 'goods_id' => 999]]), $context), 'scope_mismatch');
+jxFailure(fn () => $provider->normalize(array_replace($row, ['ext_json' => '{broken']), $context), 'schema_changed');
+jxFailure(fn () => $provider->normalize(array_replace($row, ['ext_json' => ['memory' => '128GB']]), $context), 'schema_changed');
+jxFailure(fn () => $provider->normalize(array_replace($row, ['ext_json' => [['key' => 'memory', 'value' => '128GB'], ['key' => 'memory', 'value' => '512GB']]]), $context), 'schema_changed');
 
 $loginTransport = new JixiaoerFixtureTransport(jxLoginResponses());
 $login = (new JixiaoerProvider($loginTransport))->login(['username' => ' fixture-user ', 'password' => 'fixture-password']);
@@ -139,13 +142,13 @@ jxCheck($loginTransport->calls[0] === ['method' => 'POST', 'endpoint' => Jixiaoe
 jxCheck($loginTransport->calls[1]['method'] === 'GET' && $loginTransport->calls[1]['endpoint'] === JixiaoerProvider::IDENTITY_ENDPOINT, 'identity comes from the authenticated fixed page');
 jxCheck($loginTransport->calls[1]['headers']['Cookie'] === 'gql_repair_token=fixture-session-only', 'unrelated cookies are never forwarded');
 jxCheck(!str_contains(json_encode($login['identity']), 'password') && !isset($login['raw']), 'login public identity does not expose raw page or credentials');
-jxFailure(fn() => (new JixiaoerProvider(new JixiaoerFixtureTransport([jxResponse(['code' => 500, 'msg' => 'fixture-password'])])))->login(['username' => 'u', 'password' => 'p']), 'upstream_error');
-jxFailure(fn() => (new JixiaoerProvider(new JixiaoerFixtureTransport([jxResponse(['code' => 200, 'data' => []])])))->login(['username' => 'u', 'password' => 'p']), 'auth_required');
-jxFailure(fn() => (new JixiaoerProvider(new JixiaoerFixtureTransport([jxResponse(['code' => 200], ['Set-Cookie' => ['gql_repair_token=first', 'gql_repair_token=second']])])))->login(['username' => 'u', 'password' => 'p']), 'auth_required');
-jxFailure(fn() => (new JixiaoerProvider(new JixiaoerFixtureTransport(jxLoginResponses('<html><form>请登录</form></html>'))))->login(['username' => 'u', 'password' => 'p']), 'auth_required');
-jxFailure(fn() => (new JixiaoerProvider(new JixiaoerFixtureTransport(jxLoginResponses('<select id="base_shop_name"><option value="a" selected>A</option><option value="b" selected>B</option></select>'))))->login(['username' => 'u', 'password' => 'p']), 'auth_required');
-jxFailure(fn() => (new JixiaoerProvider(new JixiaoerFixtureTransport([jxResponse('', [], 302)])))->login(['username' => 'u', 'password' => 'p']), 'http_error');
-jxFailure(fn() => (new JixiaoerProvider(new JixiaoerFixtureTransport([])))->login(['username' => '', 'password' => 'p']), 'invalid_credentials');
+jxFailure(fn () => (new JixiaoerProvider(new JixiaoerFixtureTransport([jxResponse(['code' => 500, 'msg' => 'fixture-password'])])))->login(['username' => 'u', 'password' => 'p']), 'upstream_error');
+jxFailure(fn () => (new JixiaoerProvider(new JixiaoerFixtureTransport([jxResponse(['code' => 200, 'data' => []])])))->login(['username' => 'u', 'password' => 'p']), 'auth_required');
+jxFailure(fn () => (new JixiaoerProvider(new JixiaoerFixtureTransport([jxResponse(['code' => 200], ['Set-Cookie' => ['gql_repair_token=first', 'gql_repair_token=second']])])))->login(['username' => 'u', 'password' => 'p']), 'auth_required');
+jxFailure(fn () => (new JixiaoerProvider(new JixiaoerFixtureTransport(jxLoginResponses('<html><form>请登录</form></html>'))))->login(['username' => 'u', 'password' => 'p']), 'auth_required');
+jxFailure(fn () => (new JixiaoerProvider(new JixiaoerFixtureTransport(jxLoginResponses('<select id="base_shop_name"><option value="a" selected>A</option><option value="b" selected>B</option></select>'))))->login(['username' => 'u', 'password' => 'p']), 'auth_required');
+jxFailure(fn () => (new JixiaoerProvider(new JixiaoerFixtureTransport([jxResponse('', [], 302)])))->login(['username' => 'u', 'password' => 'p']), 'http_error');
+jxFailure(fn () => (new JixiaoerProvider(new JixiaoerFixtureTransport([])))->login(['username' => '', 'password' => 'p']), 'invalid_credentials');
 
 $scope = ['tenant_id' => 'fixture-shop', 'store_id' => 'fixture-shop', 'page_size' => 2];
 $auth = ['access_token' => 'fixture-session-only'];
@@ -205,7 +208,7 @@ jxCheck($stockTransport->calls[1]['data']['goods_id'] === 0 && $stockTransport->
     && !isset($stockTransport->calls[1]['data']['id']) && !isset($stockTransport->calls[1]['data']['zero_stock'])
     && !isset($stockTransport->calls[1]['data']['sort_name']), 'listed query reads global up IMEIs without per-model requests or unobserved filters');
 foreach (['order', 'time_start', 'time_end', 'category', 'brand_id', 'imei_remark', 'goods_id', 'goods_attributes_info_id', 'memory', 'color', 'fineness', 'fineness2', 'imei', 'platform', 'store', 'statusIn', 'tag', 'supplier_id', 'customer_id', 'admin_user_id'] as $key) {
-    jxCheck(array_key_exists($key, $stockTransport->calls[3]['data']), 'full stock query preserves required key ' . $key);
+    jxCheck(array_key_exists($key, $stockTransport->calls[3]['data']), 'full stock query preserves required key '.$key);
 }
 jxCheck($stockTransport->calls[3]['data']['time_start'] === JixiaoerProvider::DEFAULT_TIME_START
     && $stockTransport->calls[3]['data']['time_end'] === JixiaoerProvider::DEFAULT_TIME_END, 'stock uses verified full-period range rather than UI one-year default');
@@ -227,68 +230,73 @@ $repeatedSkipped = new JixiaoerProvider(new JixiaoerFixtureTransport([jxPage([$p
     jxPage([array_replace($listing, ['id' => 999])], 2), jxPage([array_replace($listing, ['id' => 999])], 2)]));
 $skipScope = array_replace($scope, ['page_size' => 1]);
 $skipFirst = jxAdvance($repeatedSkipped, $skipScope, 2);
-jxFailure(fn() => $repeatedSkipped->fetchPage($auth, $skipFirst['cursor'], $skipScope), 'schema_changed');
+jxFailure(fn () => $repeatedSkipped->fetchPage($auth, $skipFirst['cursor'], $skipScope), 'schema_changed');
 $wrongOffset = new JixiaoerProvider(new JixiaoerFixtureTransport([jxResponse(['code' => 200,
     'data' => ['list' => [$parent], 'total' => 1, 'offset' => 100]])]));
-jxFailure(fn() => $wrongOffset->fetchPage($auth, [], $scope), 'schema_changed');
+jxFailure(fn () => $wrongOffset->fetchPage($auth, [], $scope), 'schema_changed');
 
 // Every safety failure is local, typed and free of chained HTTP secrets.
 $drifting = new JixiaoerProvider(new JixiaoerFixtureTransport([jxPage([$parent, array_replace($parent, ['id' => 15])], 3), jxPage([$parent], 4)]));
 $beforeDrift = $drifting->fetchPage($auth, [], $scope);
-jxFailure(fn() => $drifting->fetchPage($auth, $beforeDrift['cursor'], $scope), 'schema_changed');
+jxFailure(fn () => $drifting->fetchPage($auth, $beforeDrift['cursor'], $scope), 'schema_changed');
 $listedDrift = new JixiaoerProvider(new JixiaoerFixtureTransport([jxPage([$parent], 1), jxPage([$listing, $secondListing], 3), jxPage([$thirdListing], 4)]));
 $beforeListedDrift = jxAdvance($listedDrift, $scope, 2);
-jxFailure(fn() => $listedDrift->fetchPage($auth, $beforeListedDrift['cursor'], $scope), 'schema_changed');
+jxFailure(fn () => $listedDrift->fetchPage($auth, $beforeListedDrift['cursor'], $scope), 'schema_changed');
 $stockDrift = new JixiaoerProvider(new JixiaoerFixtureTransport([jxPage([$parent], 1), jxPage([$listing], 1), jxPage([$row, $second], 3), jxPage([$third], 4)]));
 $beforeStockDrift = jxAdvance($stockDrift, $scope, 3);
-jxFailure(fn() => $stockDrift->fetchPage($auth, $beforeStockDrift['cursor'], $scope), 'schema_changed');
+jxFailure(fn () => $stockDrift->fetchPage($auth, $beforeStockDrift['cursor'], $scope), 'schema_changed');
 foreach ([['id' => 14, 'goods_id' => 999], ['id' => 14, 'status' => 2]] as $bad) {
     $badProvider = new JixiaoerProvider(new JixiaoerFixtureTransport([jxPage([$parent], 1), jxPage([array_replace($listing, $bad)], 1)]));
-    jxFailure(fn() => jxAdvance($badProvider, $scope, 2), isset($bad['goods_id']) ? 'scope_mismatch' : 'schema_changed');
+    jxFailure(fn () => jxAdvance($badProvider, $scope, 2), isset($bad['goods_id']) ? 'scope_mismatch' : 'schema_changed');
 }
 $duplicateListing = new JixiaoerProvider(new JixiaoerFixtureTransport([jxPage([$parent], 1), jxPage([$listing, $listing], 2)]));
-jxFailure(fn() => jxAdvance($duplicateListing, $scope, 2), 'schema_changed');
+jxFailure(fn () => jxAdvance($duplicateListing, $scope, 2), 'schema_changed');
 $duplicateStock = new JixiaoerProvider(new JixiaoerFixtureTransport([jxPage([$parent], 1), jxPage([$listing], 1), jxPage([$row, $second], 3), jxPage([$row], 3)]));
 $beforeDuplicate = jxAdvance($duplicateStock, $scope, 3);
-jxFailure(fn() => $duplicateStock->fetchPage($auth, $beforeDuplicate['cursor'], $scope), 'schema_changed');
+jxFailure(fn () => $duplicateStock->fetchPage($auth, $beforeDuplicate['cursor'], $scope), 'schema_changed');
 $unmatched = new JixiaoerProvider(new JixiaoerFixtureTransport([jxPage([$parent], 1), jxPage([$listing], 1), jxPage([$second], 1)]));
-jxFailure(fn() => jxAdvance($unmatched, $scope, 3), 'schema_changed');
+jxFailure(fn () => jxAdvance($unmatched, $scope, 3), 'schema_changed');
 $suffixOnly = new JixiaoerProvider(new JixiaoerFixtureTransport([jxPage([$parent], 1), jxPage([array_replace($listing, ['imei' => '012345'])], 1), jxPage([$row], 1)]));
-jxFailure(fn() => jxAdvance($suffixOnly, $scope, 3), 'schema_changed');
-foreach (['-1.00', '-0.' . str_repeat('0', 400) . '1', 'unknown', null] as $stockNumber) {
+jxFailure(fn () => jxAdvance($suffixOnly, $scope, 3), 'schema_changed');
+foreach (['-1.00', '-0.'.str_repeat('0', 400).'1', 'unknown', null] as $stockNumber) {
     $notInStock = new JixiaoerProvider(new JixiaoerFixtureTransport([jxPage([$parent], 1), jxPage([$listing], 1),
         jxPage([array_replace($row, ['stock_list_history_imei' => ['shop_id' => 'fixture-shop', 'stock_num' => $stockNumber]])], 1)]));
-    jxFailure(fn() => jxAdvance($notInStock, $scope, 3), 'schema_changed');
+    jxFailure(fn () => jxAdvance($notInStock, $scope, 3), 'schema_changed');
 }
 $negativeZero = new JixiaoerProvider(new JixiaoerFixtureTransport([jxPage([$parent], 1), jxPage([$listing], 1),
     jxPage([array_replace($row, ['stock_list_history_imei' => ['shop_id' => 'fixture-shop', 'stock_num' => '-0.00']])], 1)]));
 jxCheck(count(jxAdvance($negativeZero, $scope, 3)['rows']) === 1, 'negative-zero decimal is still exactly zero without binary floating conversion');
 $scopeFailure = new JixiaoerProvider(new JixiaoerFixtureTransport([jxPage([array_replace($parent, ['shop_id' => 'other-shop'])], 1)]));
-jxFailure(fn() => $scopeFailure->fetchPage($auth, [], $scope), 'scope_mismatch');
+jxFailure(fn () => $scopeFailure->fetchPage($auth, [], $scope), 'scope_mismatch');
 $stockScopeFailure = new JixiaoerProvider(new JixiaoerFixtureTransport([jxPage([$parent], 1), jxPage([$listing], 1),
     jxPage([array_replace($row, ['shop_id' => 'other-shop', 'stock_list_history_imei' => []])], 1)]));
-jxFailure(fn() => jxAdvance($stockScopeFailure, $scope, 3), 'scope_mismatch');
+jxFailure(fn () => jxAdvance($stockScopeFailure, $scope, 3), 'scope_mismatch');
 $driftScope = new JixiaoerProvider(new JixiaoerFixtureTransport([jxPage([$parent], 1)]));
 $saved = $driftScope->fetchPage($auth, [], $scope);
-jxFailure(fn() => $driftScope->fetchPage($auth, $saved['cursor'], array_replace($scope, ['page_size' => 1])), 'invalid_scope');
-jxFailure(fn() => $driftScope->fetchPage($auth, $saved['cursor'], $scope + ['query' => ['time_start' => '2020-01-01']]), 'invalid_scope');
-jxFailure(fn() => $driftScope->fetchPage($auth, array_replace($saved['cursor'], ['phase' => 'arbitrary']), $scope), 'invalid_scope');
-jxFailure(fn() => $driftScope->fetchPage($auth, array_replace($saved['cursor'], ['page' => 101]), $scope), 'invalid_scope');
-jxFailure(fn() => $driftScope->fetchPage($auth, array_replace($saved['cursor'], ['phase_page' => 0]), $scope), 'invalid_scope');
-jxFailure(fn() => $driftScope->fetchPage($auth, array_replace($saved['cursor'], ['listed' => str_repeat('a', 4194305)]), $scope), 'invalid_scope');
-jxFailure(fn() => $driftScope->fetchPage($auth, array_replace($saved['cursor'], ['seen_listed' => array_fill(0, 10001, true)]), $scope), 'invalid_scope');
+jxFailure(fn () => $driftScope->fetchPage($auth, $saved['cursor'], array_replace($scope, ['page_size' => 1])), 'invalid_scope');
+jxFailure(fn () => $driftScope->fetchPage($auth, $saved['cursor'], $scope + ['query' => ['time_start' => '2020-01-01']]), 'invalid_scope');
+jxFailure(fn () => $driftScope->fetchPage($auth, array_replace($saved['cursor'], ['phase' => 'arbitrary']), $scope), 'invalid_scope');
+jxFailure(fn () => $driftScope->fetchPage($auth, array_replace($saved['cursor'], ['page' => 101]), $scope), 'invalid_scope');
+jxFailure(fn () => $driftScope->fetchPage($auth, array_replace($saved['cursor'], ['phase_page' => 0]), $scope), 'invalid_scope');
+jxFailure(fn () => $driftScope->fetchPage($auth, array_replace($saved['cursor'], ['listed' => str_repeat('a', 4194305)]), $scope), 'invalid_scope');
+jxFailure(fn () => $driftScope->fetchPage($auth, array_replace($saved['cursor'], ['seen_listed' => array_fill(0, 10001, true)]), $scope), 'invalid_scope');
 $lastAllowedPage = new JixiaoerProvider(new JixiaoerFixtureTransport([jxPage([$listing, $secondListing], 3)]));
-jxFailure(fn() => $lastAllowedPage->fetchPage($auth, array_replace($saved['cursor'], ['page' => 100]), $scope), 'invalid_scope');
-jxFailure(fn() => (new JixiaoerProvider(new JixiaoerFixtureTransport([jxPage([$parent], 10001)])))->fetchPage($auth, [], array_replace($scope, ['page_size' => 1])), 'invalid_scope');
-jxFailure(fn() => (new JixiaoerProvider(new JixiaoerFixtureTransport([jxPage([$parent], 3)])))->fetchPage($auth, [], $scope), 'schema_changed');
-jxFailure(fn() => (new JixiaoerProvider(new JixiaoerFixtureTransport([jxPage([$parent, $parent], 2)])))->fetchPage($auth, [], $scope), 'schema_changed');
-jxFailure(fn() => (new JixiaoerProvider(new JixiaoerFixtureTransport([jxResponse(['code' => 401, 'msg' => 'fixture-session-only'])])))->fetchPage($auth, [], $scope), 'auth_required');
-jxFailure(fn() => (new JixiaoerProvider(new JixiaoerFixtureTransport([jxResponse('<html>请登录</html>')])))->fetchPage($auth, [], $scope), 'schema_changed');
-jxFailure(fn() => (new JixiaoerProvider(new JixiaoerFixtureTransport([])))->fetchPage(['access_token' => "bad\r\nheader"], [], $scope), 'invalid_credentials');
-jxFailure(fn() => (new JixiaoerProvider(new JixiaoerFixtureTransport([])))->fetchPage($auth, [], ['query' => ['writeback' => true]]), 'invalid_scope');
-jxFailure(fn() => (new JixiaoerProvider(new JixiaoerFixtureTransport([])))->fetchPage($auth, [], ['query' => ['time_start' => '2026-02-30']]), 'invalid_scope');
-jxFailure(fn() => (new JixiaoerProvider(new JixiaoerFixtureTransport([])))->fetchPage($auth, [], ['query' => ['time_start' => '2026-11-01', 'time_end' => '2026-10-30']]), 'invalid_scope');
-$jsonOnly = new class implements TransportContract { public function post(string $endpoint, array $headers, array $body): array { throw new RuntimeException('JSON-only transport must not be called'); } };
-jxFailure(fn() => (new JixiaoerProvider($jsonOnly))->login(['username' => 'u', 'password' => 'p']), 'unsupported_transport');
+jxFailure(fn () => $lastAllowedPage->fetchPage($auth, array_replace($saved['cursor'], ['page' => 100]), $scope), 'invalid_scope');
+jxFailure(fn () => (new JixiaoerProvider(new JixiaoerFixtureTransport([jxPage([$parent], 10001)])))->fetchPage($auth, [], array_replace($scope, ['page_size' => 1])), 'invalid_scope');
+jxFailure(fn () => (new JixiaoerProvider(new JixiaoerFixtureTransport([jxPage([$parent], 3)])))->fetchPage($auth, [], $scope), 'schema_changed');
+jxFailure(fn () => (new JixiaoerProvider(new JixiaoerFixtureTransport([jxPage([$parent, $parent], 2)])))->fetchPage($auth, [], $scope), 'schema_changed');
+jxFailure(fn () => (new JixiaoerProvider(new JixiaoerFixtureTransport([jxResponse(['code' => 401, 'msg' => 'fixture-session-only'])])))->fetchPage($auth, [], $scope), 'auth_required');
+jxFailure(fn () => (new JixiaoerProvider(new JixiaoerFixtureTransport([jxResponse('<html>请登录</html>')])))->fetchPage($auth, [], $scope), 'schema_changed');
+jxFailure(fn () => (new JixiaoerProvider(new JixiaoerFixtureTransport([])))->fetchPage(['access_token' => "bad\r\nheader"], [], $scope), 'invalid_credentials');
+jxFailure(fn () => (new JixiaoerProvider(new JixiaoerFixtureTransport([])))->fetchPage($auth, [], ['query' => ['writeback' => true]]), 'invalid_scope');
+jxFailure(fn () => (new JixiaoerProvider(new JixiaoerFixtureTransport([])))->fetchPage($auth, [], ['query' => ['time_start' => '2026-02-30']]), 'invalid_scope');
+jxFailure(fn () => (new JixiaoerProvider(new JixiaoerFixtureTransport([])))->fetchPage($auth, [], ['query' => ['time_start' => '2026-11-01', 'time_end' => '2026-10-30']]), 'invalid_scope');
+$jsonOnly = new class implements TransportContract {
+    public function post(string $endpoint, array $headers, array $body): array
+    {
+        throw new RuntimeException('JSON-only transport must not be called');
+    }
+};
+jxFailure(fn () => (new JixiaoerProvider($jsonOnly))->login(['username' => 'u', 'password' => 'p']), 'unsupported_transport');
 
-echo 'PASS ' . $checks . " Jixiaoer provider checks; synthetic HTTP fixtures only, no network/database/ERP mutations\n";
+echo 'PASS '.$checks." Jixiaoer provider checks; synthetic HTTP fixtures only, no network/database/ERP mutations\n";

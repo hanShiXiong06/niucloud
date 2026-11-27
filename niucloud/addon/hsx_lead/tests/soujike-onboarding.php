@@ -6,8 +6,8 @@ foreach (['curl_exec', 'curl_multi_exec', 'fsockopen', 'pfsockopen', 'stream_soc
     if (function_exists($function)) exit("Disable HTTP/network functions before isolated testing\n");
 }
 if (filter_var(ini_get('allow_url_fopen'), FILTER_VALIDATE_BOOLEAN)) exit("Disable allow_url_fopen before isolated testing\n");
-require __DIR__ . '/bootstrap.php';
-require_once dirname(__DIR__, 3) . '/vendor/autoload.php';
+require __DIR__.'/bootstrap.php';
+require_once dirname(__DIR__, 3).'/vendor/autoload.php';
 
 use addon\hsx_lead\app\provider\{ProviderRegistry, SoujikeProvider, TransportContract, ProviderException};
 use addon\hsx_lead\app\service\{Context, MerchantService, ConnectionService, SyncService};
@@ -18,7 +18,9 @@ use think\facade\{Db, Cache};
 final class SoujikeOnboardingMock implements TransportContract
 {
     public array $calls = [];
-    public function __construct(private array $responses) {}
+    public function __construct(private array $responses)
+    {
+    }
     public function post(string $endpoint, #[\SensitiveParameter] array $headers, #[\SensitiveParameter] array $body): array
     {
         sjkOnCheck(!Db::connect()->getPdo()->inTransaction(), 'ERP request occurs outside a database transaction');
@@ -31,16 +33,24 @@ final class SoujikeOnboardingMock implements TransportContract
         return $next;
     }
 }
-$checks = 0; $failed = false; $pdo = null; $schema = '';
+$checks = 0;
+$failed = false;
+$pdo = null;
+$schema = '';
 function sjkOnCheck(bool $condition, string $label): void
 {
-    if (!$condition) throw new RuntimeException('Assertion failed: ' . $label);
+    if (!$condition) throw new RuntimeException('Assertion failed: '.$label);
     $GLOBALS['checks']++;
 }
 function sjkOnDenied(callable $call, string $label): void
 {
-    try { $call(); } catch (CommonException|ProviderException $error) { sjkOnCheck(true, $label); return; }
-    throw new RuntimeException('Expected rejection: ' . $label);
+    try {
+        $call();
+    } catch (CommonException|ProviderException $error) {
+        sjkOnCheck(true, $label);
+        return;
+    }
+    throw new RuntimeException('Expected rejection: '.$label);
 }
 function sjkOnLogin(string $store = '9007199254740993', string $token = 'synthetic-sjk-token'): array
 {
@@ -81,7 +91,7 @@ try {
 
     $merchant = (new MerchantService($context))->save(0, ['name' => 'Synthetic Soujike merchant', 'contact_name' => 'Synthetic operator',
         'mobile' => '18800000001', 'province_id' => 910000, 'city_id' => 910100, 'district_id' => 910101, 'member_id' => 101, 'status' => 1]);
-    $id = (int)$merchant['id'];
+    $id = (int) $merchant['id'];
     $input = ['provider' => 'soujike', 'credentials' => $credentialInput, 'scope' => []];
     $mock = new SoujikeOnboardingMock([sjkOnLogin(), sjkOnStock()]);
     $service = new ConnectionService($context, new ProviderRegistry($mock));
@@ -94,7 +104,7 @@ try {
         'source store is derived exactly and account ID is never relabelled as tenant');
     sjkOnCheck($proof['preview']['identity']['basis'] === 'authenticated_profile_and_first_page', 'proof explains actual login/store and first-page basis');
     sjkOnCheck(Data::query('connection', $site)->count() === 0 && Data::query('inventory', $site)->count() === 0, 'probe neither activates connection nor publishes inventory');
-    $proofKey = 'hsx_lead.probe.' . hash('sha256', $proof['probe_token']);
+    $proofKey = 'hsx_lead.probe.'.hash('sha256', $proof['probe_token']);
     $cache = Cache::get($proofKey);
     sjkOnCheck(is_string($cache) && !str_contains($cache, $password) && !str_contains($cache, 'synthetic-sjk-token'), 'temporary proof is encrypted');
     sjkOnCheck(!preg_match('/synthetic-sjk-token|private-|synthetic-sjk-password/', json_encode($proof)), 'public preview excludes secrets and private response extras');
@@ -102,7 +112,7 @@ try {
     sjkOnCheck($active['scope'] === ['tenant_id' => '', 'store_id' => '9007199254740993'] && $active['requires_initial_sync'], 'activation binds authenticated source with unknown tenant and requires full synchronization');
     sjkOnCheck(($active['credentials']['username'] ?? '') === '18800000001' && !array_key_exists('password', $active['credentials']) && !array_key_exists('access_token', $active['credentials'])
         && !str_contains(json_encode($active), $password) && !str_contains(json_encode($active), 'synthetic-sjk-token'), 'GET returns public account/configured flags, never password or runtime token');
-    $connectionId = (int)$active['connection_id'];
+    $connectionId = (int) $active['connection_id'];
     $connection = Data::row('connection', $site, $connectionId);
     $saved = Cipher::decrypt($connection['credentials_cipher'], $site, $connectionId);
     sjkOnCheck($saved['auth_mode'] === 'password' && $saved['password'] === $password && $saved['access_token'] === 'synthetic-sjk-token', 'formal mode/password/runtime authorization are connection-bound encrypted JSON, not new schema fields');
@@ -119,9 +129,9 @@ try {
     $syncMock = new SoujikeOnboardingMock([sjkOnLogin(), sjkOnStock([$row])]);
     $sync = new SyncService(new ProviderRegistry($syncMock));
     $run = $sync->start($site, $id, 1);
-    $completed = $sync->advance($site, (int)$run['run_id']);
+    $completed = $sync->advance($site, (int) $run['run_id']);
     sjkOnCheck($completed['status'] === 'completed' && count($syncMock->calls) === 2, 'first complete generation automatically authorizes and publishes one synthetic source item');
-    $published = (int)Data::row('connection', $site, $connectionId)['published_run_id'];
+    $published = (int) Data::row('connection', $site, $connectionId)['published_run_id'];
     $stock = Data::query('inventory', $site)->where('sync_run_id', $published)->find();
     sjkOnCheck($stock['source_id'] === '9223372036854775808' && $stock['source_store_id'] === '9007199254740993' && $stock['tenant_id'] === '', 'inventory source keys preserve IDs and unknown tenant');
     sjkOnCheck($stock['price'] === '2000.01' && $stock['trade_price'] === '1900.00' && !str_contains($stock['snapshot_json'], 'private-'), 'published prices are exact and private source data is not stored');
@@ -141,9 +151,9 @@ try {
     $changedStore = new SoujikeOnboardingMock([sjkOnLogin('different-store')]);
     $changedSync = new SyncService(new ProviderRegistry($changedStore));
     $changedRun = $changedSync->start($site, $id, 1);
-    $failedRun = $changedSync->advance($site, (int)$changedRun['run_id']);
+    $failedRun = $changedSync->advance($site, (int) $changedRun['run_id']);
     sjkOnCheck($failedRun['status'] === 'failed' && count($changedStore->calls) === 1, 'login-derived store changes stop a scheduled read before stock request');
-    sjkOnCheck((int)Data::row('connection', $site, $connectionId)['published_run_id'] === $published, 'changed store failure preserves the previous complete generation');
+    sjkOnCheck((int) Data::row('connection', $site, $connectionId)['published_run_id'] === $published, 'changed store failure preserves the previous complete generation');
 
     $refreshMock = null;
     $response = static function (string $endpoint) use (&$refreshMock): array {
@@ -154,10 +164,10 @@ try {
     $refreshMock = new SoujikeOnboardingMock([$response, $response, $response]);
     $refreshSync = new SyncService(new ProviderRegistry($refreshMock));
     $refreshRun = $refreshSync->start($site, $id, 1);
-    $refreshFailed = $refreshSync->advance($site, (int)$refreshRun['run_id']);
+    $refreshFailed = $refreshSync->advance($site, (int) $refreshRun['run_id']);
     sjkOnCheck($refreshFailed['status'] === 'failed' && sjkOnEndpoints($refreshMock, SoujikeProvider::STOCK_ENDPOINT) === 1
         && end($refreshMock->calls)['endpoint'] === SoujikeProvider::LOGIN_ENDPOINT, '401 renewal validates the new authenticated store before any retry stock read');
-    sjkOnCheck(sjkOnEndpoints($refreshMock, SoujikeProvider::LOGIN_ENDPOINT) <= 2 && (int)Data::row('connection', $site, $connectionId)['published_run_id'] === $published, 'renewal is bounded and changed-store failure keeps old publication');
+    sjkOnCheck(sjkOnEndpoints($refreshMock, SoujikeProvider::LOGIN_ENDPOINT) <= 2 && (int) Data::row('connection', $site, $connectionId)['published_run_id'] === $published, 'renewal is bounded and changed-store failure keeps old publication');
 
     $renewMock = null;
     $renewResponse = static function (string $endpoint) use (&$renewMock, $row): array {
@@ -167,12 +177,12 @@ try {
     $renewMock = new SoujikeOnboardingMock([$renewResponse, $renewResponse, $renewResponse, $renewResponse]);
     $renewSync = new SyncService(new ProviderRegistry($renewMock));
     $renewRun = $renewSync->start($site, $id, 1);
-    $renewed = $renewSync->advance($site, (int)$renewRun['run_id']);
+    $renewed = $renewSync->advance($site, (int) $renewRun['run_id']);
     sjkOnCheck($renewed['status'] === 'completed' && sjkOnEndpoints($renewMock, SoujikeProvider::STOCK_ENDPOINT) === 2
         && sjkOnEndpoints($renewMock, SoujikeProvider::LOGIN_ENDPOINT) <= 2, 'same-store 401 refresh performs one bounded retry and can publish a complete result');
     sjkOnCheck(end($renewMock->calls)['headers'] === ['recovery-token' => 'synthetic-restored-auth'], 'retry stock request uses newly authorized token, never the expired token');
-    $published = (int)Data::row('connection', $site, $connectionId)['published_run_id'];
-    sjkOnCheck($published === (int)$renewRun['run_id'], 'only successful complete renewed generation becomes the published pointer');
+    $published = (int) Data::row('connection', $site, $connectionId)['published_run_id'];
+    sjkOnCheck($published === (int) $renewRun['run_id'], 'only successful complete renewed generation becomes the published pointer');
 
     $beforeManualEmpty = Data::row('connection', $site, $connectionId);
     $manualEmptyMock = new SoujikeOnboardingMock([sjkOnStock()]);
@@ -197,7 +207,7 @@ try {
     $manualFailMock = new SoujikeOnboardingMock([['code' => 401, 'msg' => 'private-token-expired']]);
     $manualSync = new SyncService(new ProviderRegistry($manualFailMock));
     $manualRun = $manualSync->start($site, $id, 1);
-    $manualFailed = $manualSync->advance($site, (int)$manualRun['run_id']);
+    $manualFailed = $manualSync->advance($site, (int) $manualRun['run_id']);
     sjkOnCheck($manualFailed['status'] === 'failed' && count($manualFailMock->calls) === 1
         && $manualFailMock->calls[0]['endpoint'] === SoujikeProvider::STOCK_ENDPOINT, 'expired token never loops login or turns into password mode');
 
@@ -211,11 +221,16 @@ try {
         'database' => 'owned random localhost schema', 'remote_calls' => 0, 'existing_business_rows_read' => 0]), PHP_EOL;
 } catch (Throwable $error) {
     $failed = true;
-    $message = $error instanceof PDOException ? 'isolated MySQL failure SQLSTATE ' . $error->getCode() : $error->getMessage();
-    fwrite(STDERR, 'FAIL ' . get_class($error) . ': ' . $message . ' at ' . basename($error->getFile()) . ':' . $error->getLine() . PHP_EOL);
+    $message = $error instanceof PDOException ? 'isolated MySQL failure SQLSTATE '.$error->getCode() : $error->getMessage();
+    fwrite(STDERR, 'FAIL '.get_class($error).': '.$message.' at '.basename($error->getFile()).':'.$error->getLine().PHP_EOL);
 } finally {
     if ($pdo instanceof PDO && $schema !== '') {
-        try { leadCleanup($pdo, $schema); } catch (Throwable $error) { $failed = true; fwrite(STDERR, "FAIL owned random schema cleanup requires attention\n"); }
+        try {
+            leadCleanup($pdo, $schema);
+        } catch (Throwable $error) {
+            $failed = true;
+            fwrite(STDERR, "FAIL owned random schema cleanup requires attention\n");
+        }
     }
 }
 exit($failed ? 1 : 0);

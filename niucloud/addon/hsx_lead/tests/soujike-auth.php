@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 // Pure contract regression: every ERP/HTTP response below is synthetic.
 error_reporting(E_ALL & ~E_DEPRECATED);
-require dirname(__DIR__, 3) . '/vendor/autoload.php';
+require dirname(__DIR__, 3).'/vendor/autoload.php';
 
 use addon\hsx_lead\app\provider\{SoujikeProvider, ProviderException, TransportContract, GuzzleJsonTransport, ProviderRegistry};
 use GuzzleHttp\{Client, HandlerStack, Middleware};
@@ -13,7 +13,9 @@ use GuzzleHttp\Psr7\Response;
 final class SoujikeAuthMock implements TransportContract
 {
     public array $calls = [];
-    public function __construct(private array $responses) {}
+    public function __construct(private array $responses)
+    {
+    }
     public function post(string $endpoint, #[\SensitiveParameter] array $headers, #[\SensitiveParameter] array $body): array
     {
         $this->calls[] = compact('endpoint', 'headers', 'body');
@@ -27,18 +29,20 @@ final class SoujikeAuthMock implements TransportContract
 $checks = 0;
 function sjkAuthCheck(bool $condition, string $label): void
 {
-    if (!$condition) throw new RuntimeException('FAIL: ' . $label);
+    if (!$condition) throw new RuntimeException('FAIL: '.$label);
     $GLOBALS['checks']++;
 }
 function sjkAuthFailure(callable $call, string $reason): ProviderException
 {
-    try { $call(); } catch (ProviderException $error) {
-        sjkAuthCheck($error->reason() === $reason, 'safe expected reason ' . $reason);
+    try {
+        $call();
+    } catch (ProviderException $error) {
+        sjkAuthCheck($error->reason() === $reason, 'safe expected reason '.$reason);
         sjkAuthCheck($error->getPrevious() === null, 'no sensitive upstream cause is chained');
         sjkAuthCheck(!preg_match('/private-|passwords|tokenValue|account-secret|recovery-token/i', $error->getMessage()), 'error message contains only locally-authored safe information');
         return $error;
     }
-    throw new RuntimeException('FAIL: expected rejection ' . $reason);
+    throw new RuntimeException('FAIL: expected rejection '.$reason);
 }
 function sjkAuthLogin(string $store = '9007199254740993', string $token = 'synthetic-login-token'): array
 {
@@ -107,16 +111,46 @@ foreach ($responseCases as $response) {
     sjkAuthCheck(count($bad->calls) === 1, 'failed normal login never retries or starts inventory reads');
 }
 foreach ([
-    static function (array $r): array { $r['data']['tokenInfo']['tokenValue'] = "bad\r\nprivate-token"; return $r; },
-    static function (array $r): array { $r['data']['tokenInfo']['tokenValue'] = ''; return $r; },
-    static function (array $r): array { $r['data']['tokenInfo']['tokenValue'] = []; return $r; },
-    static function (array $r): array { $r['data']['tokenInfo']['tokenName'] = 'Authorization'; return $r; },
-    static function (array $r): array { $r['data']['tokenInfo']['tokenName'] = "recovery-token\r\nX-Private"; return $r; },
-    static function (array $r): array { $r['data']['tokenInfo']['tokenName'] = []; return $r; },
-    static function (array $r): array { unset($r['data']['storeId']); return $r; },
-    static function (array $r): array { $r['data']['storeId'] = []; return $r; },
-    static function (array $r): array { $r['data']['storeInfo'] = 'private-string'; return $r; },
-    static function (array $r): array { $r['data']['storeInfo']['storeName'] = []; return $r; },
+    static function (array $r): array {
+        $r['data']['tokenInfo']['tokenValue'] = "bad\r\nprivate-token";
+        return $r;
+    },
+    static function (array $r): array {
+        $r['data']['tokenInfo']['tokenValue'] = '';
+        return $r;
+    },
+    static function (array $r): array {
+        $r['data']['tokenInfo']['tokenValue'] = [];
+        return $r;
+    },
+    static function (array $r): array {
+        $r['data']['tokenInfo']['tokenName'] = 'Authorization';
+        return $r;
+    },
+    static function (array $r): array {
+        $r['data']['tokenInfo']['tokenName'] = "recovery-token\r\nX-Private";
+        return $r;
+    },
+    static function (array $r): array {
+        $r['data']['tokenInfo']['tokenName'] = [];
+        return $r;
+    },
+    static function (array $r): array {
+        unset($r['data']['storeId']);
+        return $r;
+    },
+    static function (array $r): array {
+        $r['data']['storeId'] = [];
+        return $r;
+    },
+    static function (array $r): array {
+        $r['data']['storeInfo'] = 'private-string';
+        return $r;
+    },
+    static function (array $r): array {
+        $r['data']['storeInfo']['storeName'] = [];
+        return $r;
+    },
 ] as $mutate) {
     $bad = new SoujikeAuthMock([$mutate(sjkAuthLogin())]);
     sjkAuthFailure(static fn () => (new SoujikeProvider($bad))->login($credentials), 'schema_changed');
@@ -136,8 +170,8 @@ $stack->push(Middleware::history($history));
 $realTransport = new GuzzleJsonTransport(new Client(['handler' => $stack]));
 $actualLogin = (new SoujikeProvider($realTransport))->login($credentials);
 sjkAuthCheck($actualLogin['identity']['store_id'] === '9007199254740993' && count($history) === 1, 'fixed login endpoint passes the actual allowlisted Guzzle pipeline');
-sjkAuthCheck((string)$history[0]['request']->getUri() === SoujikeProvider::LOGIN_ENDPOINT && $history[0]['request']->getMethod() === 'POST', 'transport never selects a caller-supplied login URL or method');
-$sent = json_decode((string)$history[0]['request']->getBody(), true);
+sjkAuthCheck((string) $history[0]['request']->getUri() === SoujikeProvider::LOGIN_ENDPOINT && $history[0]['request']->getMethod() === 'POST', 'transport never selects a caller-supplied login URL or method');
+$sent = json_decode((string) $history[0]['request']->getBody(), true);
 sjkAuthCheck($sent === ['openId' => '', 'phoneNumber' => '18800000001', 'passwords' => $credentials['password']], 'actual encoded login retains the reference payload without extra fields');
 sjkAuthCheck($history[0]['options']['allow_redirects'] === false && $history[0]['options']['verify'] === true, 'login TLS remains verified and credentials are not redirected');
 

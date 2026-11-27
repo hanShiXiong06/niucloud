@@ -3,14 +3,16 @@ declare(strict_types=1);
 
 // Synthetic-only provider contract regression. No HTTP, account, file secrets or business database.
 error_reporting(E_ALL & ~E_DEPRECATED);
-require dirname(__DIR__, 3) . '/vendor/autoload.php';
+require dirname(__DIR__, 3).'/vendor/autoload.php';
 
 use addon\hsx_lead\app\provider\{AiguanjiProvider, InteractiveAuthProviderContract, ProviderException, RequestTransportContract, TransportContract};
 
 final class AiguanjiFixtureTransport implements RequestTransportContract
 {
     public array $calls = [];
-    public function __construct(private array $responses) {}
+    public function __construct(private array $responses)
+    {
+    }
     public function post(string $endpoint, array $headers, array $body): array
     {
         $this->calls[] = compact('endpoint', 'headers', 'body');
@@ -34,18 +36,20 @@ final class AiguanjiFixtureTransport implements RequestTransportContract
 $checks = 0;
 function checkAiguanji(bool $condition, string $description): void
 {
-    if (!$condition) throw new RuntimeException('FAIL: ' . $description);
+    if (!$condition) throw new RuntimeException('FAIL: '.$description);
     $GLOBALS['checks']++;
 }
 function failAiguanji(callable $call, string $reason): void
 {
-    try { $call(); } catch (ProviderException $error) {
-        checkAiguanji($error->reason() === $reason, 'explicit safe failure reason ' . $reason);
+    try {
+        $call();
+    } catch (ProviderException $error) {
+        checkAiguanji($error->reason() === $reason, 'explicit safe failure reason '.$reason);
         checkAiguanji($error->getPrevious() === null, 'upstream exception cannot expose credentials');
         checkAiguanji(!preg_match('/discard-|synthetic-secret|synthetic-company-session/', $error->getMessage()), 'safe exception text never echoes remote messages or transient credentials');
         return;
     }
-    throw new RuntimeException('FAIL: expected ' . $reason);
+    throw new RuntimeException('FAIL: expected '.$reason);
 }
 function aiguanjiPage(array $rows, int $total, int $page = 1, int $size = 2): array
 {
@@ -85,9 +89,9 @@ foreach (['' => null, '***' => null, '-1' => null, '1.001' => null, '1e3' => nul
     checkAiguanji($provider->normalize(array_replace($row, ['pre_sale_amount' => (string) $value]), $context)['retail_price'] === $expected, 'retail decimal preserves missing, zero, masked and invalid amounts without cost fallback');
 }
 checkAiguanji($provider->normalize(array_replace($row, ['pre_sale_amount' => 9000.01]), $context)['retail_price'] === null, 'untrusted binary float does not silently round into a price');
-failAiguanji(fn() => $provider->normalize(array_replace($row, ['status' => 47]), $context), 'scope_mismatch');
-failAiguanji(fn() => $provider->normalize($row, array_replace($context, ['store_id' => '43'])), 'scope_mismatch');
-failAiguanji(fn() => $provider->normalize($row, array_replace($context, ['tenant_id' => '43'])), 'scope_mismatch');
+failAiguanji(fn () => $provider->normalize(array_replace($row, ['status' => 47]), $context), 'scope_mismatch');
+failAiguanji(fn () => $provider->normalize($row, array_replace($context, ['store_id' => '43'])), 'scope_mismatch');
+failAiguanji(fn () => $provider->normalize($row, array_replace($context, ['tenant_id' => '43'])), 'scope_mismatch');
 
 $transport = new AiguanjiFixtureTransport([
     aiguanjiPage([$row, array_replace($row, ['id' => 102, 'warehouse_id' => 9])], 3),
@@ -108,20 +112,20 @@ checkAiguanji($empty['rows'] === [] && !$empty['has_more'] && $empty['cursor']['
 $bounded = new AiguanjiFixtureTransport([aiguanjiPage([], 0, 1, 20)]);
 (new AiguanjiProvider($bounded))->fetchPage($credentials, [], ['page_size' => 100]);
 checkAiguanji($bounded->calls[0]['body']['limit'] === 20, 'unverified large-page settings are conservatively bounded to the observed size');
-failAiguanji(fn() => (new AiguanjiProvider(new AiguanjiFixtureTransport([])))->fetchPage($credentials, [], ['page_size' => 101]), 'invalid_scope');
-failAiguanji(fn() => (new AiguanjiProvider(new AiguanjiFixtureTransport([])))->fetchPage($credentials, [], $scope + ['query' => ['status' => []]]), 'invalid_scope');
-failAiguanji(fn() => (new AiguanjiProvider(new AiguanjiFixtureTransport([])))->fetchPage($credentials, ['company_id' => '43'], $scope), 'scope_mismatch');
-failAiguanji(fn() => (new AiguanjiProvider(new AiguanjiFixtureTransport([aiguanjiPage([$row, $row], 2)])))->fetchPage($credentials, [], $scope), 'schema_changed');
-failAiguanji(fn() => (new AiguanjiProvider(new AiguanjiFixtureTransport([aiguanjiPage([$row, array_replace($row, ['id' => 102, 'company_id' => 43])], 2)])))->fetchPage($credentials, [], $scope), 'scope_mismatch');
-failAiguanji(fn() => (new AiguanjiProvider(new AiguanjiFixtureTransport([aiguanjiPage([array_replace($row, ['status' => 47])], 1)])))->fetchPage($credentials, [], $scope), 'scope_mismatch');
-failAiguanji(fn() => (new AiguanjiProvider(new AiguanjiFixtureTransport([aiguanjiPage([$row], 2)])))->fetchPage($credentials, [], $scope), 'schema_changed');
-failAiguanji(fn() => (new AiguanjiProvider(new AiguanjiFixtureTransport([aiguanjiPage([$row], 1)])))->fetchPage($credentials, ['total' => 2], $scope), 'schema_changed');
-failAiguanji(fn() => (new AiguanjiProvider(new AiguanjiFixtureTransport([array_replace_recursive(aiguanjiPage([$row], 1), ['data' => ['has_more' => true]])])))->fetchPage($credentials, [], $scope), 'schema_changed');
+failAiguanji(fn () => (new AiguanjiProvider(new AiguanjiFixtureTransport([])))->fetchPage($credentials, [], ['page_size' => 101]), 'invalid_scope');
+failAiguanji(fn () => (new AiguanjiProvider(new AiguanjiFixtureTransport([])))->fetchPage($credentials, [], $scope + ['query' => ['status' => []]]), 'invalid_scope');
+failAiguanji(fn () => (new AiguanjiProvider(new AiguanjiFixtureTransport([])))->fetchPage($credentials, ['company_id' => '43'], $scope), 'scope_mismatch');
+failAiguanji(fn () => (new AiguanjiProvider(new AiguanjiFixtureTransport([aiguanjiPage([$row, $row], 2)])))->fetchPage($credentials, [], $scope), 'schema_changed');
+failAiguanji(fn () => (new AiguanjiProvider(new AiguanjiFixtureTransport([aiguanjiPage([$row, array_replace($row, ['id' => 102, 'company_id' => 43])], 2)])))->fetchPage($credentials, [], $scope), 'scope_mismatch');
+failAiguanji(fn () => (new AiguanjiProvider(new AiguanjiFixtureTransport([aiguanjiPage([array_replace($row, ['status' => 47])], 1)])))->fetchPage($credentials, [], $scope), 'scope_mismatch');
+failAiguanji(fn () => (new AiguanjiProvider(new AiguanjiFixtureTransport([aiguanjiPage([$row], 2)])))->fetchPage($credentials, [], $scope), 'schema_changed');
+failAiguanji(fn () => (new AiguanjiProvider(new AiguanjiFixtureTransport([aiguanjiPage([$row], 1)])))->fetchPage($credentials, ['total' => 2], $scope), 'schema_changed');
+failAiguanji(fn () => (new AiguanjiProvider(new AiguanjiFixtureTransport([array_replace_recursive(aiguanjiPage([$row], 1), ['data' => ['has_more' => true]])])))->fetchPage($credentials, [], $scope), 'schema_changed');
 foreach ([5 => 'auth_required', 2 => 'client_version_changed', 10 => 'auth_challenge', 1 => 'upstream_error'] as $code => $reason) {
     $fixture = new AiguanjiFixtureTransport([['code' => $code, 'msg' => 'discard-private-password']]);
-    failAiguanji(fn() => (new AiguanjiProvider($fixture))->fetchPage($credentials, [], $scope), $reason);
+    failAiguanji(fn () => (new AiguanjiProvider($fixture))->fetchPage($credentials, [], $scope), $reason);
 }
-failAiguanji(fn() => $provider->fetchPage(['access_token' => "token\r\nheader"], [], $scope), 'invalid_credentials');
+failAiguanji(fn () => $provider->fetchPage(['access_token' => "token\r\nheader"], [], $scope), 'invalid_credentials');
 
 $profile = ['code' => 0, 'data' => ['user' => ['id' => 99, 'name' => 'discard-user-name', 'mobile' => '13800000000',
     'company' => ['id' => 42, 'name' => '合成公司', 'balance' => '999.99', 'contacts' => ['mobile' => 'discard-private']],
@@ -137,26 +141,28 @@ checkAiguanji(!preg_match('/discard-|balance|mobile|password|"user"|"teams"|"cac
 $invalidInputs = [[], ['username' => ''], ['username' => '1380000000'], ['username' => '138000000000'], ['username' => '138 00000000'], ['username' => 13800000000]];
 foreach ($invalidInputs as $input) {
     $fixture = new AiguanjiFixtureTransport([]);
-    failAiguanji(fn() => (new AiguanjiProvider($fixture))->login($input + ['access_token' => 'synthetic-token']), 'invalid_credentials');
+    failAiguanji(fn () => (new AiguanjiProvider($fixture))->login($input + ['access_token' => 'synthetic-token']), 'invalid_credentials');
     checkAiguanji($fixture->calls === [], 'invalid account format is rejected before any upstream request');
 }
 $fixture = new AiguanjiFixtureTransport([]);
-failAiguanji(fn() => (new AiguanjiProvider($fixture))->login(['username' => '13800000000', 'access_token' => "bad\r\nvalue"]), 'invalid_credentials');
+failAiguanji(fn () => (new AiguanjiProvider($fixture))->login(['username' => '13800000000', 'access_token' => "bad\r\nvalue"]), 'invalid_credentials');
 checkAiguanji($fixture->calls === [], 'invalid authorization cannot reach the transport');
-failAiguanji(fn() => (new AiguanjiProvider(new AiguanjiFixtureTransport([$profile])))->login(['username' => '13900000000', 'access_token' => 'synthetic-token']), 'scope_mismatch');
+failAiguanji(fn () => (new AiguanjiProvider(new AiguanjiFixtureTransport([$profile])))->login(['username' => '13900000000', 'access_token' => 'synthetic-token']), 'scope_mismatch');
 foreach ([null, [], [['id' => 42, 'name' => '公司一'], ['id' => 43, 'name' => '公司二']], ['id' => null, 'name' => '公司'], ['id' => 0, 'name' => '公司'], ['id' => 'not-an-id', 'name' => '公司'], ['id' => 42, 'name' => ''], ['id' => 42, 'name' => str_repeat('x', 121)]] as $company) {
-    $bad = $profile; $bad['data']['user']['company'] = $company;
-    failAiguanji(fn() => (new AiguanjiProvider(new AiguanjiFixtureTransport([$bad])))->login(['username' => '13800000000', 'access_token' => 'synthetic-token']), 'schema_changed');
+    $bad = $profile;
+    $bad['data']['user']['company'] = $company;
+    failAiguanji(fn () => (new AiguanjiProvider(new AiguanjiFixtureTransport([$bad])))->login(['username' => '13800000000', 'access_token' => 'synthetic-token']), 'schema_changed');
 }
 foreach ([null, '138****0000', 13800000000] as $phone) {
-    $bad = $profile; $bad['data']['user']['mobile'] = $phone;
-    failAiguanji(fn() => (new AiguanjiProvider(new AiguanjiFixtureTransport([$bad])))->login(['username' => '13800000000', 'access_token' => 'synthetic-token']), is_string($phone) ? 'scope_mismatch' : 'schema_changed');
+    $bad = $profile;
+    $bad['data']['user']['mobile'] = $phone;
+    failAiguanji(fn () => (new AiguanjiProvider(new AiguanjiFixtureTransport([$bad])))->login(['username' => '13800000000', 'access_token' => 'synthetic-token']), is_string($phone) ? 'scope_mismatch' : 'schema_changed');
 }
 foreach ([5, 401, 403] as $code) {
-    failAiguanji(fn() => (new AiguanjiProvider(new AiguanjiFixtureTransport([['code' => $code, 'msg' => 'discard-password']])))->login(['username' => '13800000000', 'access_token' => 'synthetic-token']), 'auth_required');
+    failAiguanji(fn () => (new AiguanjiProvider(new AiguanjiFixtureTransport([['code' => $code, 'msg' => 'discard-password']])))->login(['username' => '13800000000', 'access_token' => 'synthetic-token']), 'auth_required');
 }
 $badShape = ['code' => 0, 'data' => ['token' => 'wrong-login-path']];
-failAiguanji(fn() => (new AiguanjiProvider(new AiguanjiFixtureTransport([$badShape])))->login(['username' => '13800000000', 'access_token' => 'synthetic-token']), 'schema_changed');
+failAiguanji(fn () => (new AiguanjiProvider(new AiguanjiFixtureTransport([$badShape])))->login(['username' => '13800000000', 'access_token' => 'synthetic-token']), 'schema_changed');
 
 // Unlisted records can validate real field mappings without becoming eligible stock.
 $pending = array_replace($row, ['status' => 47, 'status_text' => '待审核(销售)', 'pre_sale_amount' => 0,
@@ -173,13 +179,13 @@ checkAiguanji($inspect['normalized']['capacity'] === '256G' && $inspect['normali
 checkAiguanji($inspect['normalized']['safe_snapshot']['selected_attr']['电池健康度'] === '95%' &&
     $inspect['normalized']['safe_snapshot']['selected_attr']['充电次数'] === '180', 'battery text and cycle count remain separate exact source attributes');
 checkAiguanji(!preg_match('/discard-|cost_price|"user"|"remark"/', json_encode($inspect)), 'unlisted inspection uses the same sensitive-data whitelist');
-failAiguanji(fn() => $provider->normalize($pending, $context), 'scope_mismatch');
+failAiguanji(fn () => $provider->normalize($pending, $context), 'scope_mismatch');
 checkAiguanji($provider->inspectSnapshot($row, $context)['normalized'] === $provider->normalize($row, $context), 'listed normalization and inspection reuse one mapping implementation');
 checkAiguanji($provider->inspectSnapshot(array_replace($pending, ['status' => 99]), $context)['eligibility']['listed'] === false, 'unknown numerical status never defaults to listed');
 foreach ([null, [], 'not-status', -1, 55.0] as $status) {
-    failAiguanji(fn() => $provider->inspectSnapshot(array_replace($pending, ['status' => $status]), $context), 'schema_changed');
+    failAiguanji(fn () => $provider->inspectSnapshot(array_replace($pending, ['status' => $status]), $context), 'schema_changed');
 }
-failAiguanji(fn() => $provider->inspectSnapshot($pending, array_replace($context, ['tenant_id' => 'different-company'])), 'scope_mismatch');
+failAiguanji(fn () => $provider->inspectSnapshot($pending, array_replace($context, ['tenant_id' => 'different-company'])), 'scope_mismatch');
 
 // Normal image CAPTCHA authorization: all responses here are synthetic, not solved challenges.
 function aiguanjiCaptcha(string $type = 'image/jpeg', string $body = "\xff\xd8\xffsynthetic-image", array $extra = []): array
@@ -200,21 +206,24 @@ checkAiguanji($captchaTransport->calls[0]['method'] === 'GET' && $captchaTranspo
 checkAiguanji(preg_match('/^0\.[0-9]{16}$/D', $captchaTransport->calls[0]['data']['v']) === 1, 'cache-buster follows the observed ordinary decimal format');
 foreach ([['image/png', "\x89PNG\r\n\x1a\nsynthetic"], ['image/gif', 'GIF89asynthetic'], ['image/gif', 'GIF87asynthetic']] as [$type, $bytes]) {
     $result = (new AiguanjiProvider(new AiguanjiFixtureTransport([aiguanjiCaptcha($type, $bytes)])))->beginAuthorization();
-    checkAiguanji(str_starts_with($result['public']['captcha_image'], 'data:' . $type . ';base64,'), 'only supported raster image types are accepted');
+    checkAiguanji(str_starts_with($result['public']['captcha_image'], 'data:'.$type.';base64,'), 'only supported raster image types are accepted');
 }
 foreach ([aiguanjiCaptcha('image/svg+xml', '<svg onload="alert(1)"/>'), aiguanjiCaptcha('text/html', '<html>private</html>'),
     aiguanjiCaptcha('image/jpeg', '<html>not-image</html>'), aiguanjiCaptcha('image/png', "\xff\xd8\xffwrong-mime"),
-    aiguanjiCaptcha('image/jpeg', "\xff\xd8\xff" . str_repeat('x', 131070)),
+    aiguanjiCaptcha('image/jpeg', "\xff\xd8\xff".str_repeat('x', 131070)),
     aiguanjiCaptcha('image/jpeg', "\xff\xd8\xffsynthetic", ['content-type' => ['image/png']])] as $invalidCaptcha) {
-    failAiguanji(fn() => (new AiguanjiProvider(new AiguanjiFixtureTransport([$invalidCaptcha])))->beginAuthorization(), 'schema_changed');
+    failAiguanji(fn () => (new AiguanjiProvider(new AiguanjiFixtureTransport([$invalidCaptcha])))->beginAuthorization(), 'schema_changed');
 }
-failAiguanji(fn() => (new AiguanjiProvider(new AiguanjiFixtureTransport([aiguanjiCaptcha('image/jpeg', "\xff\xd8\xffimage",
+failAiguanji(fn () => (new AiguanjiProvider(new AiguanjiFixtureTransport([aiguanjiCaptcha('image/jpeg', "\xff\xd8\xffimage",
     ['sEt-CoOkIe' => ['session=discard-private; Path=/']])])))->beginAuthorization(), 'auth_challenge');
-failAiguanji(fn() => (new AiguanjiProvider(new AiguanjiFixtureTransport([['status' => 302, 'headers' => ['Location' => ['https://example.test/steal']], 'body' => 'discard']])))->beginAuthorization(), 'auth_challenge');
+failAiguanji(fn () => (new AiguanjiProvider(new AiguanjiFixtureTransport([['status' => 302, 'headers' => ['Location' => ['https://example.test/steal']], 'body' => 'discard']])))->beginAuthorization(), 'auth_challenge');
 $jsonOnly = new class implements TransportContract {
-    public function post(string $endpoint, array $headers, array $body): array { throw new RuntimeException('No request expected'); }
+    public function post(string $endpoint, array $headers, array $body): array
+    {
+        throw new RuntimeException('No request expected');
+    }
 };
-failAiguanji(fn() => (new AiguanjiProvider($jsonOnly))->beginAuthorization(), 'unsupported_transport');
+failAiguanji(fn () => (new AiguanjiProvider($jsonOnly))->beginAuthorization(), 'unsupported_transport');
 
 $state = $challenge['state'];
 $authCredentials = ['username' => '13800000000'];
@@ -230,34 +239,37 @@ checkAiguanji($authTransport->calls[0]['method'] === 'POST' && $authTransport->c
 checkAiguanji($authTransport->calls[0]['data'] === ['mobile' => '13800000000', 'password' => $answer['password'], 'code' => '19A8',
     'device_id' => $state['device_id']], 'login sends ordinary password literally plus the human-entered CAPTCHA and integration identity');
 checkAiguanji(count($authTransport->calls) === 2 && $authTransport->calls[1]['headers']['Authorization'] === 'synthetic-new-token', 'successful token is verified via exactly one profile read, not accepted blindly');
-$otherProfile = $profile; $otherProfile['data']['user']['mobile'] = '13900000000'; $otherProfile['data']['user']['company'] = ['id' => 77, 'name' => '另一合成公司'];
+$otherProfile = $profile;
+$otherProfile['data']['user']['mobile'] = '13900000000';
+$otherProfile['data']['user']['company'] = ['id' => 77, 'name' => '另一合成公司'];
 $other = (new AiguanjiProvider(new AiguanjiFixtureTransport([['code' => 0, 'data' => ['token' => 'synthetic-other-token']], $otherProfile])))
     ->authorize(['username' => '13900000000'], $state, $answer);
 checkAiguanji($other['identity']['tenant_id'] === '77' && $other['credentials']['username'] === '13900000000', 'another account and company use the same adapter without fixed identifiers');
 foreach ([null, '', [], str_repeat('x', 4097)] as $password) {
     $mock = new AiguanjiFixtureTransport([]);
-    failAiguanji(fn() => (new AiguanjiProvider($mock))->authorize($authCredentials, $state, array_replace($answer, ['password' => $password])), 'invalid_credentials');
+    failAiguanji(fn () => (new AiguanjiProvider($mock))->authorize($authCredentials, $state, array_replace($answer, ['password' => $password])), 'invalid_credentials');
     checkAiguanji($mock->calls === [], 'invalid transient password never reaches upstream');
 }
 foreach ([null, '', [], '123', '12345', '12-4', "12\n4"] as $code) {
     $mock = new AiguanjiFixtureTransport([]);
-    failAiguanji(fn() => (new AiguanjiProvider($mock))->authorize($authCredentials, $state, array_replace($answer, ['code' => $code])), 'invalid_captcha');
+    failAiguanji(fn () => (new AiguanjiProvider($mock))->authorize($authCredentials, $state, array_replace($answer, ['code' => $code])), 'invalid_captcha');
     checkAiguanji($mock->calls === [], 'invalid CAPTCHA input never reaches upstream');
 }
 foreach ([[], array_replace($state, ['device_id' => 'untrusted']), array_replace($state, ['stage' => 'skip-captcha']), array_replace($state, ['version' => 2])] as $badState) {
-    failAiguanji(fn() => (new AiguanjiProvider(new AiguanjiFixtureTransport([])))->authorize($authCredentials, $badState, $answer), 'invalid_challenge');
+    failAiguanji(fn () => (new AiguanjiProvider(new AiguanjiFixtureTransport([])))->authorize($authCredentials, $badState, $answer), 'invalid_challenge');
 }
-failAiguanji(fn() => (new AiguanjiProvider(new AiguanjiFixtureTransport([])))->authorize($authCredentials, $state, $answer + ['company_id' => 42]), 'invalid_challenge');
+failAiguanji(fn () => (new AiguanjiProvider(new AiguanjiFixtureTransport([])))->authorize($authCredentials, $state, $answer + ['company_id' => 42]), 'invalid_challenge');
 foreach ([['code' => 1, 'msg' => '验证码错误 discard-secret'], ['code' => 10, 'msg' => 'CAPTCHA expired discard-secret']] as $failure) {
-    failAiguanji(fn() => (new AiguanjiProvider(new AiguanjiFixtureTransport([$failure])))->authorize($authCredentials, $state, $answer), 'invalid_captcha');
+    failAiguanji(fn () => (new AiguanjiProvider(new AiguanjiFixtureTransport([$failure])))->authorize($authCredentials, $state, $answer), 'invalid_captcha');
 }
-failAiguanji(fn() => (new AiguanjiProvider(new AiguanjiFixtureTransport([['code' => 1, 'msg' => '密码错误 discard-secret']])))->authorize($authCredentials, $state, $answer), 'invalid_credentials');
-failAiguanji(fn() => (new AiguanjiProvider(new AiguanjiFixtureTransport([['code' => 0, 'data' => ['access_token' => 'wrong-key']]])))->authorize($authCredentials, $state, $answer), 'schema_changed');
-failAiguanji(fn() => (new AiguanjiProvider(new AiguanjiFixtureTransport([['code' => 0, 'data' => ['token' => 'synthetic-token']], $otherProfile])))->authorize($authCredentials, $state, $answer), 'scope_mismatch');
+failAiguanji(fn () => (new AiguanjiProvider(new AiguanjiFixtureTransport([['code' => 1, 'msg' => '密码错误 discard-secret']])))->authorize($authCredentials, $state, $answer), 'invalid_credentials');
+failAiguanji(fn () => (new AiguanjiProvider(new AiguanjiFixtureTransport([['code' => 0, 'data' => ['access_token' => 'wrong-key']]])))->authorize($authCredentials, $state, $answer), 'schema_changed');
+failAiguanji(fn () => (new AiguanjiProvider(new AiguanjiFixtureTransport([['code' => 0, 'data' => ['token' => 'synthetic-token']], $otherProfile])))->authorize($authCredentials, $state, $answer), 'scope_mismatch');
 
 $choices = ['code' => 3, 'data' => ['token' => 'synthetic-company-session', 'teams' => [
     ['id' => 42, 'name' => '合成公司一', 'balance' => 'discard-balance'], ['id' => 43, 'name' => '合成公司二', 'contact' => 'discard-contact']]]];
-$companyProfile = $profile; $companyProfile['data']['user']['company'] = ['id' => 43, 'name' => '合成公司二'];
+$companyProfile = $profile;
+$companyProfile['data']['user']['company'] = ['id' => 43, 'name' => '合成公司二'];
 $companyTransport = new AiguanjiFixtureTransport([$choices, ['code' => 0, 'data' => ['token' => 'synthetic-company-token']], $companyProfile]);
 $companyProvider = new AiguanjiProvider($companyTransport);
 $choose = $companyProvider->authorize($authCredentials, $state, $answer);
@@ -272,15 +284,16 @@ checkAiguanji($companyTransport->calls[1]['data'] === ['mobile' => '13800000000'
     'device_id' => $state['device_id'], 'company_id' => '43', 'token' => 'synthetic-company-session'], 'company continuation follows the observed same-form submission with temporary token');
 foreach ([null, '', '44', '42.0', [], -1] as $id) {
     $mock = new AiguanjiFixtureTransport([]);
-    failAiguanji(fn() => (new AiguanjiProvider($mock))->authorize($authCredentials, $choose['state'], ['company_id' => $id]), 'invalid_challenge');
+    failAiguanji(fn () => (new AiguanjiProvider($mock))->authorize($authCredentials, $choose['state'], ['company_id' => $id]), 'invalid_challenge');
     checkAiguanji($mock->calls === [], 'foreign or malformed company cannot trigger a login attempt');
 }
-failAiguanji(fn() => (new AiguanjiProvider(new AiguanjiFixtureTransport([])))->authorize(['username' => '13900000000'], $choose['state'], ['company_id' => '43']), 'scope_mismatch');
-failAiguanji(fn() => (new AiguanjiProvider(new AiguanjiFixtureTransport([['code' => 0, 'data' => ['token' => 'synthetic-token']], $profile])))->authorize($authCredentials, $choose['state'], ['company_id' => '43']), 'scope_mismatch');
+failAiguanji(fn () => (new AiguanjiProvider(new AiguanjiFixtureTransport([])))->authorize(['username' => '13900000000'], $choose['state'], ['company_id' => '43']), 'scope_mismatch');
+failAiguanji(fn () => (new AiguanjiProvider(new AiguanjiFixtureTransport([['code' => 0, 'data' => ['token' => 'synthetic-token']], $profile])))->authorize($authCredentials, $choose['state'], ['company_id' => '43']), 'scope_mismatch');
 foreach ([null, [], [['id' => 42, 'name' => 'A'], ['id' => 42, 'name' => 'B']], [['company_id' => 42, 'company_name' => 'unverified-path']],
     [['id' => 42, 'name' => '']], [['id' => 42, 'name' => "name\ninvalid"]]] as $teams) {
-    $bad = $choices; $bad['data']['teams'] = $teams;
-    failAiguanji(fn() => (new AiguanjiProvider(new AiguanjiFixtureTransport([$bad])))->authorize($authCredentials, $state, $answer), 'schema_changed');
+    $bad = $choices;
+    $bad['data']['teams'] = $teams;
+    failAiguanji(fn () => (new AiguanjiProvider(new AiguanjiFixtureTransport([$bad])))->authorize($authCredentials, $state, $answer), 'schema_changed');
 }
 
 // Upstream login sometimes uses a non-200 HTTP status for an ordinary business rejection.
@@ -292,44 +305,47 @@ function aiguanjiLoginHttp(int $status, array $response): array
 foreach ([400, 401, 403, 422, 500] as $status) {
     foreach ([['code' => 1, 'msg' => '验证码错误 discard-private'], ['code' => '1', 'msg' => 'CAPTCHA expired discard-private']] as $rejection) {
         $fixture = new AiguanjiFixtureTransport([aiguanjiLoginHttp($status, $rejection)]);
-        failAiguanji(fn() => (new AiguanjiProvider($fixture))->authorize($authCredentials, $state, $answer), 'invalid_captcha');
+        failAiguanji(fn () => (new AiguanjiProvider($fixture))->authorize($authCredentials, $state, $answer), 'invalid_captcha');
         checkAiguanji(count($fixture->calls) === 1, 'non-200 CAPTCHA rejection is not retried and never invokes profile verification');
     }
     $fixture = new AiguanjiFixtureTransport([aiguanjiLoginHttp($status, ['code' => 1, 'msg' => '账号密码错误 discard-private'])]);
-    failAiguanji(fn() => (new AiguanjiProvider($fixture))->authorize($authCredentials, $state, $answer), 'invalid_credentials');
+    failAiguanji(fn () => (new AiguanjiProvider($fixture))->authorize($authCredentials, $state, $answer), 'invalid_credentials');
     checkAiguanji(count($fixture->calls) === 1, 'non-200 password rejection is not retried');
     $fixture = new AiguanjiFixtureTransport([aiguanjiLoginHttp($status, ['code' => 0, 'data' => ['token' => 'discard-fake-token']]), $profile]);
-    failAiguanji(fn() => (new AiguanjiProvider($fixture))->authorize($authCredentials, $state, $answer), 'http_error');
+    failAiguanji(fn () => (new AiguanjiProvider($fixture))->authorize($authCredentials, $state, $answer), 'http_error');
     checkAiguanji(count($fixture->calls) === 1, 'a token and code zero on non-200 never become authorized or reach profile');
     $fixture = new AiguanjiFixtureTransport([aiguanjiLoginHttp($status, ['code' => 1, 'msg' => 'discard-private-error'])]);
-    failAiguanji(fn() => (new AiguanjiProvider($fixture))->authorize($authCredentials, $state, $answer), 'http_error');
+    failAiguanji(fn () => (new AiguanjiProvider($fixture))->authorize($authCredentials, $state, $answer), 'http_error');
     $rawChoice = (new AiguanjiProvider(new AiguanjiFixtureTransport([aiguanjiLoginHttp($status, $choices)])))
         ->authorize($authCredentials, $state, $answer);
     checkAiguanji($rawChoice['status'] === 'choose_company' && $rawChoice['public'] === $choose['public'], 'an explicit strict company challenge remains a challenge, not authorized, on supported failure statuses');
 }
 $fixture = new AiguanjiFixtureTransport([aiguanjiLoginHttp(429, $choices)]);
-failAiguanji(fn() => (new AiguanjiProvider($fixture))->authorize($authCredentials, $state, $answer), 'rate_limited');
+failAiguanji(fn () => (new AiguanjiProvider($fixture))->authorize($authCredentials, $state, $answer), 'rate_limited');
 checkAiguanji(count($fixture->calls) === 1, 'rate limiting dominates other body contents and never automatically retries');
 foreach ([201, 302, 307, 404, 502] as $status) {
     $fixture = new AiguanjiFixtureTransport([aiguanjiLoginHttp($status, ['code' => 0, 'data' => ['token' => 'discard-fake-token']])]);
-    failAiguanji(fn() => (new AiguanjiProvider($fixture))->authorize($authCredentials, $state, $answer), 'http_error');
+    failAiguanji(fn () => (new AiguanjiProvider($fixture))->authorize($authCredentials, $state, $answer), 'http_error');
     checkAiguanji(count($fixture->calls) === 1, 'unknown HTTP status never silently authorizes or follows a redirect');
 }
 foreach ([['code' => 0, 'msg' => '验证码错误 discard-private'], ['msg' => '验证码错误 discard-private'],
     ['code' => false, 'data' => $choices['data']], ['code' => -1, 'data' => $choices['data']]] as $invalidFailure) {
-    failAiguanji(fn() => (new AiguanjiProvider(new AiguanjiFixtureTransport([aiguanjiLoginHttp(500, $invalidFailure)])))
+    failAiguanji(fn () => (new AiguanjiProvider(new AiguanjiFixtureTransport([aiguanjiLoginHttp(500, $invalidFailure)])))
         ->authorize($authCredentials, $state, $answer), 'http_error');
 }
-$badCompanyFailure = $choices; $badCompanyFailure['data']['teams'] = [['id' => 42, 'name' => 'A'], ['id' => 42, 'name' => 'B']];
-failAiguanji(fn() => (new AiguanjiProvider(new AiguanjiFixtureTransport([aiguanjiLoginHttp(500, $badCompanyFailure)])))
+$badCompanyFailure = $choices;
+$badCompanyFailure['data']['teams'] = [['id' => 42, 'name' => 'A'], ['id' => 42, 'name' => 'B']];
+failAiguanji(fn () => (new AiguanjiProvider(new AiguanjiFixtureTransport([aiguanjiLoginHttp(500, $badCompanyFailure)])))
     ->authorize($authCredentials, $state, $answer), 'schema_changed');
 foreach (['<html>discard-upstream-private</html>', 'null', '[]', '{"code":', str_repeat('x', 131073)] as $bytes) {
-    failAiguanji(fn() => (new AiguanjiProvider(new AiguanjiFixtureTransport([
+    failAiguanji(fn () => (new AiguanjiProvider(new AiguanjiFixtureTransport([
         ['status' => 500, 'headers' => [], 'body' => $bytes]])))->authorize($authCredentials, $state, $answer), 'http_error');
 }
 $legacyTransport = new class([['code' => 0, 'data' => ['token' => 'synthetic-legacy-token']], $profile]) implements TransportContract {
     public array $calls = [];
-    public function __construct(private array $responses) {}
+    public function __construct(private array $responses)
+    {
+    }
     public function post(string $endpoint, array $headers, array $body): array
     {
         $this->calls[] = compact('endpoint', 'headers', 'body');
@@ -341,4 +357,4 @@ checkAiguanji($legacy['status'] === 'authorized' && count($legacyTransport->call
     $legacyTransport->calls[0]['endpoint'] === AiguanjiProvider::LOGIN_ENDPOINT, 'JSON-only legacy transports retain their strict HTTP-200 post contract');
 
 echo json_encode(['passed' => true, 'checks' => $checks, 'scope' => 'synthetic interactive authorization, profile, stock and independent snapshot contracts; no live requests or business data',
-    'remote_calls' => 0, 'database_writes' => 0], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . PHP_EOL;
+    'remote_calls' => 0, 'database_writes' => 0], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES).PHP_EOL;

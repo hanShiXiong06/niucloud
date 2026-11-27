@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 // Pure local runtime and privacy regression. No database or remote request.
 error_reporting(E_ALL & ~E_DEPRECATED);
-require dirname(__DIR__, 3) . '/vendor/autoload.php';
+require dirname(__DIR__, 3).'/vendor/autoload.php';
 
 use addon\hsx_lead\app\support\{PhpRuntime, Data, Cipher};
 use addon\hsx_lead\app\service\Context;
@@ -13,12 +13,16 @@ use addon\hsx_lead\app\auth\{TwoCaptchaRecognizer, CaptchaTransportContract};
 $checks = 0;
 function runtimeCheck(bool $condition, string $label): void
 {
-    if (!$condition) throw new RuntimeException('FAIL: ' . $label);
+    if (!$condition) throw new RuntimeException('FAIL: '.$label);
     $GLOBALS['checks']++;
 }
 function runtimeFailure(callable $call): Throwable
 {
-    try { $call(); } catch (Throwable $error) { return $error; }
+    try {
+        $call();
+    } catch (Throwable $error) {
+        return $error;
+    }
     throw new RuntimeException('FAIL: expected rejection');
 }
 function runtimeHidden(Throwable $error, string $marker, string $class, string $method): void
@@ -54,10 +58,10 @@ if (in_array('--unavailable-guard', $argv, true)) {
 }
 if (in_array('--preprotected-guard', $argv, true)) {
     runtimeCheck(PHP_VERSION_ID < 80200 && !function_exists('ini_set'), 'preprotected legacy engine cannot change runtime settings');
-    runtimeCheck((bool)ini_get('zend.exception_ignore_args'), 'server already omits stack arguments');
+    runtimeCheck((bool) ini_get('zend.exception_ignore_args'), 'server already omits stack arguments');
     $scope = PhpRuntime::guardSecrets();
     $scope->close();
-    runtimeCheck((bool)ini_get('zend.exception_ignore_args'), 'already-protected server needs no configuration mutation');
+    runtimeCheck((bool) ini_get('zend.exception_ignore_args'), 'already-protected server needs no configuration mutation');
     echo json_encode(['passed' => true, 'checks' => $checks, 'php' => PHP_VERSION,
         'scope' => 'preprotected legacy engine with ini_set disabled', 'remote_calls' => 0]), PHP_EOL;
     exit(0);
@@ -91,9 +95,9 @@ try {
     ini_set('zend.exception_ignore_args', '0');
     $first = PhpRuntime::guardSecrets();
     $second = PhpRuntime::guardSecrets();
-    runtimeCheck((bool)ini_get('zend.exception_ignore_args') === (PHP_VERSION_ID < 80200), 'legacy guard is active while new engine keeps native setting');
+    runtimeCheck((bool) ini_get('zend.exception_ignore_args') === (PHP_VERSION_ID < 80200), 'legacy guard is active while new engine keeps native setting');
     $first->close();
-    runtimeCheck((bool)ini_get('zend.exception_ignore_args') === (PHP_VERSION_ID < 80200), 'out-of-order outer release keeps remaining scope protected');
+    runtimeCheck((bool) ini_get('zend.exception_ignore_args') === (PHP_VERSION_ID < 80200), 'out-of-order outer release keeps remaining scope protected');
     $second->close();
     $second->close();
     runtimeCheck(ini_get('zend.exception_ignore_args') === '0', 'last release restores exact prior setting and double-close is harmless');
@@ -104,9 +108,9 @@ try {
     runtimeCheck(ini_get('zend.exception_ignore_args') === '0', 'direct validation failure restores trace setting');
     $error = runtimeFailure(static fn () => Data::secret(['password' => [$secret]], 'password', 100));
     runtimeHidden($error, $secret, Data::class, 'secret');
-    $error = runtimeFailure(static fn () => Cipher::decrypt($secret . '!', 1, 1));
+    $error = runtimeFailure(static fn () => Cipher::decrypt($secret.'!', 1, 1));
     runtimeHidden($error, $secret, Cipher::class, 'decrypt');
-    $error = runtimeFailure(static fn () => GuzzleJsonTransport::decode('{"token":"' . $secret . '"'));
+    $error = runtimeFailure(static fn () => GuzzleJsonTransport::decode('{"token":"'.$secret.'"'));
     runtimeHidden($error, $secret, GuzzleJsonTransport::class, 'decode');
     runtimeCheck($error instanceof ProviderException && $error->getPrevious() === null, 'JSON decoder failure never chains original response exception');
 
@@ -143,10 +147,10 @@ try {
     $scope->close();
     runtimeCheck(ini_get('zend.exception_ignore_args') === '1', 'pre-existing stricter setting is retained');
 
-    $source = file_get_contents(dirname(__DIR__) . '/app/middleware/SafeErrors.php');
+    $source = file_get_contents(dirname(__DIR__).'/app/middleware/SafeErrors.php');
     runtimeCheck(strpos($source, '$app->instance(Handle::class,$safe)') < strpos($source, 'PhpRuntime::guardSecrets()'), 'safe handler is installed before runtime protection may reject the request');
     runtimeCheck(str_contains($source, '$secretTrace->close()'), 'HTTP boundary explicitly closes runtime protection');
-    $job = file_get_contents(dirname(__DIR__) . '/app/job/SyncInventory.php');
+    $job = file_get_contents(dirname(__DIR__).'/app/job/SyncInventory.php');
     runtimeCheck(strpos($job, 'guardSecrets()') < strpos($job, '(new SyncService())') && str_contains($job, 'finally'), 'scheduled worker protects credentials and restores process settings');
 
     echo json_encode(['passed' => true, 'checks' => $checks, 'php' => PHP_VERSION,

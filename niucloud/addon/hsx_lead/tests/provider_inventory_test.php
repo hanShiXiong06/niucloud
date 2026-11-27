@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 // Pure local provider tests. Guzzle MockHandler and a fake transport perform no network or DB I/O.
 error_reporting(E_ALL & ~E_DEPRECATED);
-require dirname(__DIR__, 3) . '/vendor/autoload.php';
+require dirname(__DIR__, 3).'/vendor/autoload.php';
 
 use addon\hsx_lead\app\provider\GuzzleJsonTransport;
 use addon\hsx_lead\app\provider\ProviderException;
@@ -22,7 +22,9 @@ use GuzzleHttp\Psr7\Response;
 final class InventoryMockTransport implements TransportContract
 {
     public array $calls = [];
-    public function __construct(private array $responses) {}
+    public function __construct(private array $responses)
+    {
+    }
     public function post(string $endpoint, array $headers, array $body): array
     {
         $this->calls[] = compact('endpoint', 'headers', 'body');
@@ -35,17 +37,19 @@ final class InventoryMockTransport implements TransportContract
 $checks = 0;
 function verify(bool $condition, string $message): void
 {
-    if (!$condition) throw new RuntimeException('FAIL: ' . $message);
+    if (!$condition) throw new RuntimeException('FAIL: '.$message);
     $GLOBALS['checks']++;
 }
 function failure(callable $action, string $reason): ProviderException
 {
-    try { $action(); } catch (ProviderException $exception) {
-        verify($exception->reason() === $reason, 'safe failure reason ' . $reason);
+    try {
+        $action();
+    } catch (ProviderException $exception) {
+        verify($exception->reason() === $reason, 'safe failure reason '.$reason);
         verify($exception->getPrevious() === null, 'no previous exception can leak credentials');
         return $exception;
     }
-    throw new RuntimeException('FAIL: expected ' . $reason);
+    throw new RuntimeException('FAIL: expected '.$reason);
 }
 function stockPage(array $rows, int $num = 1, int $size = 2, bool $more = false): array
 {
@@ -53,7 +57,7 @@ function stockPage(array $rows, int $num = 1, int $size = 2, bool $more = false)
 }
 function skuPage(array $rows, int $total, int $num = 1, int $size = 2): array
 {
-    return ['code' => 200, 'data' => ['records' => $rows, 'total' => $total, 'current' => $num, 'size' => $size, 'pages' => (int)ceil($total / $size)]];
+    return ['code' => 200, 'data' => ['records' => $rows, 'total' => $total, 'current' => $num, 'size' => $size, 'pages' => (int) ceil($total / $size)]];
 }
 
 $wanjiRow = ['tenantId' => 742, 'shopId' => 6422, 'machineId' => '18307859', 'shopName' => '测试店',
@@ -90,7 +94,8 @@ foreach ([null, '', 0, 3, true, false, 2.0, [], '02', ' 2', 'sold'] as $unknownF
         && $listingItem['availability'] === 'unknown' && $listingItem['saleable_quantity'] === null,
         'unknown, malformed, padded or different Wanji values never default to an active listing');
 }
-$withoutMallFlag = $wanjiRow; unset($withoutMallFlag['storeMallFlag']);
+$withoutMallFlag = $wanjiRow;
+unset($withoutMallFlag['storeMallFlag']);
 verify($wanji->normalize($withoutMallFlag, $context)['listing_status'] === 'unknown', 'missing Wanji mall flag stays unknown');
 verify($normalized['images'] === ['https://example.test/cover.jpg'], 'deduplicate photos, exclude video and executable URLs');
 verify($normalized['fetched_at'] === $context['fetched_at'], 'preserve sync run timestamp');
@@ -99,18 +104,18 @@ verify(!preg_match('/AmountNot|totalCost|purchaseAmount|innerRemark|private-note
 verify($normalized['safe_snapshot']['publishPlatforms'] === ['小店(1)'], 'nested unapproved snapshot objects are discarded');
 verify($wanji->normalize($wanjiRow, array_replace($context, ['connection_id' => '13']))['source_key'] !== $normalized['source_key'], 'separate connections do not merge');
 verify($wanji->normalize(array_replace($wanjiRow, ['machineId' => '18307860']), $context)['source_key'] !== $normalized['source_key'], 'same IMEI does not merge independent source records');
-failure(fn() => $wanji->normalize(array_replace($wanjiRow, ['tenantId' => null]), $context), 'invalid_scope');
-failure(fn() => $wanji->normalize(array_replace($wanjiRow, ['machineId' => 1.234]), $context), 'invalid_scope');
-failure(fn() => $wanji->normalize($wanjiRow, array_replace($context, ['tenant_id' => 'other'])), 'scope_mismatch');
-failure(fn() => $wanji->normalize($wanjiRow, array_replace($context, ['store_id' => 'other'])), 'scope_mismatch');
-failure(fn() => $wanji->normalize($wanjiRow, array_replace($context, ['fetched_at' => 'tomorrow'])), 'invalid_scope');
+failure(fn () => $wanji->normalize(array_replace($wanjiRow, ['tenantId' => null]), $context), 'invalid_scope');
+failure(fn () => $wanji->normalize(array_replace($wanjiRow, ['machineId' => 1.234]), $context), 'invalid_scope');
+failure(fn () => $wanji->normalize($wanjiRow, array_replace($context, ['tenant_id' => 'other'])), 'scope_mismatch');
+failure(fn () => $wanji->normalize($wanjiRow, array_replace($context, ['store_id' => 'other'])), 'scope_mismatch');
+failure(fn () => $wanji->normalize($wanjiRow, array_replace($context, ['fetched_at' => 'tomorrow'])), 'invalid_scope');
 foreach (['' => null, '***' => null, '-1' => null, '1.001' => null, '1e3' => null, '0002.1' => '2.10', '0' => '0.00', '99999999999999.99' => '99999999999999.99'] as $input => $expected) {
     verify($wanji->normalize(array_replace($wanjiRow, ['retailAmount' => (string) $input]), $context)['retail_price'] === $expected, 'decimal mapping preserves missing/masked/invalid/zero/exact values');
 }
 verify($wanji->normalize(array_replace($wanjiRow, ['retailAmount' => 2000.01]), $context)['retail_price'] === null, 'untrusted binary float price is not silently rounded');
 
 $payload = rtrim(strtr(base64_encode('{"tenant_id":742,"password":"must-not-leak"}'), '+/', '-_'), '=');
-$jwt = 'fixture.' . $payload . '.signature';
+$jwt = 'fixture.'.$payload.'.signature';
 $loginTransport = new InventoryMockTransport([['code' => 200, 'msg' => null, 'data' => ['access_token' => $jwt, 'link' => 'unused', 'expires_in' => 7200, 'password' => 'must-not-leak']]]);
 $start = time();
 $login = (new WanjiProvider($loginTransport))->login(['username' => ' fixture-user ', 'password' => 'fixture-password', 'device_info' => 'fixture-device']);
@@ -120,8 +125,8 @@ verify($login['identity'] === ['tenant_id' => '742', 'store_id' => null, 'store_
 verify(!isset($login['password']) && !str_contains(json_encode($login['identity']), 'password'), 'safe identity has no credential fields');
 verify($loginTransport->calls[0]['body'] === ['username' => 'fixture-user', 'password' => 'fixture-password'], 'HTTPS login sends ordinary password string without mutation');
 verify($loginTransport->calls[0]['headers']['Platsource'] === 'MiniPrograms' && $loginTransport->calls[0]['headers']['DeviceInfo'] === 'fixture-device', 'known configurable client headers');
-failure(fn() => (new WanjiProvider(new InventoryMockTransport([['code' => 200, 'data' => ['token' => 'wrong-path']]])))->login(['username' => 'u', 'password' => 'p']), 'schema_changed');
-$invalidLogin = failure(fn() => (new WanjiProvider(new InventoryMockTransport([['code' => 500, 'msg' => 'fixture-password must-not-leak']])))->login(['username' => 'u', 'password' => 'p']), 'upstream_error');
+failure(fn () => (new WanjiProvider(new InventoryMockTransport([['code' => 200, 'data' => ['token' => 'wrong-path']]])))->login(['username' => 'u', 'password' => 'p']), 'schema_changed');
+$invalidLogin = failure(fn () => (new WanjiProvider(new InventoryMockTransport([['code' => 500, 'msg' => 'fixture-password must-not-leak']])))->login(['username' => 'u', 'password' => 'p']), 'upstream_error');
 verify(!str_contains($invalidLogin->getMessage(), 'must-not-leak'), 'upstream login messages are not exposed');
 $expiry = (new WanjiProvider(new InventoryMockTransport([['code' => 200, 'data' => ['access_token' => 'fixture-token', 'expires_in' => 720000000]]])))->login(['username' => 'u', 'password' => 'p']);
 verify($expiry['expires_in'] === 720000000 && $expiry['expires_at'] === null && $expiry['warnings'] !== [], 'unknown expiration units do not become distant future authorization');
@@ -135,13 +140,13 @@ verify($page1['has_more'] && !$page2['has_more'] && $page2['cursor'] === ['page'
 verify($transport->calls[0]['endpoint'] === WanjiProvider::STOCK_ENDPOINT && $transport->calls[0]['headers']['Authorization'] === 'Bearer fixture-token', 'stock calls only fixed read-only endpoint');
 verify($transport->calls[1]['body']['pageNum'] === 2 && $transport->calls[1]['body']['shopId'] === '6422', 'cursor and explicit store scope sent');
 verify(!str_contains(json_encode($page1['rows']), 'private-note') && !isset($page1['rows'][0]['purchaseAmountNot']), 'fetch boundary filters private source data before returning rows');
-failure(fn() => $provider->fetchPage(['access_token' => "bad\r\nheader"], [], $scope), 'invalid_credentials');
-failure(fn() => $provider->fetchPage(['access_token' => 'fixture'], [], ['page_size' => 101]), 'invalid_scope');
-failure(fn() => $provider->fetchPage(['access_token' => 'fixture'], [], ['query' => ['writeback' => true]]), 'invalid_scope');
-failure(fn() => (new WanjiProvider(new InventoryMockTransport([stockPage([$wanjiRow, $wanjiRow])])))->fetchPage(['access_token' => 'fixture'], [], $scope), 'schema_changed');
-failure(fn() => (new WanjiProvider(new InventoryMockTransport([stockPage([array_replace($wanjiRow, ['tenantId' => 743])])])))->fetchPage(['access_token' => 'fixture'], [], $scope), 'scope_mismatch');
-failure(fn() => (new WanjiProvider(new InventoryMockTransport([stockPage([], 1, 2, true)])))->fetchPage(['access_token' => 'fixture'], [], $scope), 'schema_changed');
-failure(fn() => (new WanjiProvider(new InventoryMockTransport([['code' => 401, 'msg' => 'secret']])))->fetchPage(['access_token' => 'fixture'], [], $scope), 'auth_required');
+failure(fn () => $provider->fetchPage(['access_token' => "bad\r\nheader"], [], $scope), 'invalid_credentials');
+failure(fn () => $provider->fetchPage(['access_token' => 'fixture'], [], ['page_size' => 101]), 'invalid_scope');
+failure(fn () => $provider->fetchPage(['access_token' => 'fixture'], [], ['query' => ['writeback' => true]]), 'invalid_scope');
+failure(fn () => (new WanjiProvider(new InventoryMockTransport([stockPage([$wanjiRow, $wanjiRow])])))->fetchPage(['access_token' => 'fixture'], [], $scope), 'schema_changed');
+failure(fn () => (new WanjiProvider(new InventoryMockTransport([stockPage([array_replace($wanjiRow, ['tenantId' => 743])])])))->fetchPage(['access_token' => 'fixture'], [], $scope), 'scope_mismatch');
+failure(fn () => (new WanjiProvider(new InventoryMockTransport([stockPage([], 1, 2, true)])))->fetchPage(['access_token' => 'fixture'], [], $scope), 'schema_changed');
+failure(fn () => (new WanjiProvider(new InventoryMockTransport([['code' => 401, 'msg' => 'secret']])))->fetchPage(['access_token' => 'fixture'], [], $scope), 'auth_required');
 $allTypesTransport = new InventoryMockTransport([stockPage([])]);
 (new WanjiProvider($allTypesTransport))->fetchPage(['access_token' => 'fixture'], [], $scope + ['omit_machine_type' => true]);
 verify(!isset($allTypesTransport->calls[0]['body']['machineType']), 'explicit all-types scope omits original enum instead of inventing one');
@@ -162,68 +167,72 @@ verify(!preg_match('/inlineRemark|private-internal|private-remark|"cost"/', json
 verify($sjk->normalize(array_replace($sku, ['firstResIsVideo' => true]), $sjkContext)['images'] === [], 'video-first resource is not a photo');
 verify($sjk->normalize(array_replace($sku, ['categoryName' => '']), $sjkContext)['title'] === $sku['productName'], 'empty category falls back to known product name');
 verify($sjk->login(['token' => 'fixture-token', 'store_id' => '36183'])['identity']['store_id'] === '36183', 'soujike explicit token fallback makes no account-password request');
-failure(fn() => $sjk->normalize($sku, ['connection_id' => '20']), 'invalid_scope');
+failure(fn () => $sjk->normalize($sku, ['connection_id' => '20']), 'invalid_scope');
 $sjkTransport = new InventoryMockTransport([skuPage([$sku, array_replace($sku, ['id' => '1654363600596014519'])], 3), skuPage([$sku], 3, 2)]);
 $sjk = new SoujikeProvider($sjkTransport);
 $sku1 = $sjk->fetchPage(['token' => 'fixture-token'], [], ['store_id' => '36183', 'page_size' => 2]);
 $sku2 = $sjk->fetchPage(['token' => 'fixture-token'], $sku1['cursor'], ['store_id' => '36183', 'page_size' => 2]);
 verify($sku1['has_more'] && !$sku2['has_more'], 'soujike data.total/current/size determines complete pagination');
-verify($sku1['cursor']['source_total']===3&&$sku2['cursor']['source_total']===3,'source total is carried across the complete pagination generation');
+verify($sku1['cursor']['source_total'] === 3 && $sku2['cursor']['source_total'] === 3, 'source total is carried across the complete pagination generation');
 verify($sjkTransport->calls[0]['headers'] === ['recovery-token' => 'fixture-token'] && !isset($sjkTransport->calls[0]['body']['showHome']), 'token sent only known recovery header and dedicated stock endpoint replaces homepage');
 verify($sjkTransport->calls[0]['body']['categoryIds'] === [] && $sjkTransport->calls[0]['body']['brandType'] === '', 'no hidden category or brand filtering');
-verify(array_key_exists('saleStatus',$sjkTransport->calls[0]['body'])&&$sjkTransport->calls[0]['body']['saleStatus']===null&&$sjkTransport->calls[0]['body']['isNew']===null&&$sjkTransport->calls[0]['body']['shopIds']===[], 'full stock read includes sold and all new-device states without confusing branch and store IDs');
-$listed=array_replace($sku,['shelfStatus'=>'1','shelfStatusName'=>'已上架','saleStatus'=>false,'freeWarehouseCount'=>0,'transferringCount'=>0,'transferStatus'=>0,'storage'=>null,'customerName'=>'private-customer','purchasePrice'=>'private-cost']);
-$inStock=$sjk->normalize($listed,$sjkContext);
-verify($inStock['listing_status']==='listed'&&$inStock['stock_status']==='in_stock'&&$inStock['availability']==='available', 'verified shelf and unsold status mark a normal source device available');
-verify($inStock['quantity']===null&&$inStock['saleable_quantity']==='1.000'&&$inStock['quantity_basis']==='listed_stock_device', 'single-device proof does not require a source quantity or misuse zero warehouse counters');
-verify($inStock['source_status']===['sale_status'=>false,'shelf_status'=>'1','shelf_status_name'=>'已上架'], 'raw source state types are retained without financial or client data');
-verify(!preg_match('/private-|freeWarehouseCount|purchasePrice|customerName/',json_encode($inStock)), 'private accounting and customer fields and unrelated counters are discarded');
-foreach([['2',false,'unlisted','in_stock','unavailable'],['1',true,'listed','out_of_stock','unavailable'],['2',true,'unlisted','out_of_stock','unavailable'],['0',false,'unknown','in_stock','unknown']] as [$shelf,$sold,$listing,$stock,$availability]){
-    $item=$sjk->normalize(array_replace($listed,['shelfStatus'=>$shelf,'saleStatus'=>$sold]),$sjkContext);
-    verify($item['listing_status']===$listing&&$item['stock_status']===$stock&&$item['availability']===$availability&&$item['saleable_quantity']===null,'non-sellable shelf/sold combination remains unavailable without invented quantity');
+verify(array_key_exists('saleStatus', $sjkTransport->calls[0]['body']) && $sjkTransport->calls[0]['body']['saleStatus'] === null && $sjkTransport->calls[0]['body']['isNew'] === null && $sjkTransport->calls[0]['body']['shopIds'] === [], 'full stock read includes sold and all new-device states without confusing branch and store IDs');
+$listed = array_replace($sku, ['shelfStatus' => '1', 'shelfStatusName' => '已上架', 'saleStatus' => false, 'freeWarehouseCount' => 0, 'transferringCount' => 0, 'transferStatus' => 0, 'storage' => null, 'customerName' => 'private-customer', 'purchasePrice' => 'private-cost']);
+$inStock = $sjk->normalize($listed, $sjkContext);
+verify($inStock['listing_status'] === 'listed' && $inStock['stock_status'] === 'in_stock' && $inStock['availability'] === 'available', 'verified shelf and unsold status mark a normal source device available');
+verify($inStock['quantity'] === null && $inStock['saleable_quantity'] === '1.000' && $inStock['quantity_basis'] === 'listed_stock_device', 'single-device proof does not require a source quantity or misuse zero warehouse counters');
+verify($inStock['source_status'] === ['sale_status' => false, 'shelf_status' => '1', 'shelf_status_name' => '已上架'], 'raw source state types are retained without financial or client data');
+verify(!preg_match('/private-|freeWarehouseCount|purchasePrice|customerName/', json_encode($inStock)), 'private accounting and customer fields and unrelated counters are discarded');
+foreach ([['2', false, 'unlisted', 'in_stock', 'unavailable'], ['1', true, 'listed', 'out_of_stock', 'unavailable'], ['2', true, 'unlisted', 'out_of_stock', 'unavailable'], ['0', false, 'unknown', 'in_stock', 'unknown']] as [$shelf,$sold,$listing,$stock,$availability]) {
+    $item = $sjk->normalize(array_replace($listed, ['shelfStatus' => $shelf, 'saleStatus' => $sold]), $sjkContext);
+    verify($item['listing_status'] === $listing && $item['stock_status'] === $stock && $item['availability'] === $availability && $item['saleable_quantity'] === null, 'non-sellable shelf/sold combination remains unavailable without invented quantity');
 }
-foreach([null,0,1,'0','1','false','true',[],2.0] as $sale){
-    $item=$sjk->normalize(array_replace($listed,['saleStatus'=>$sale]),$sjkContext);
-    verify($item['availability']!=='available'&&$item['stock_status']==='unknown'&&$item['saleable_quantity']===null,'unverified sale-status types never become current stock');
+foreach ([null, 0, 1, '0', '1', 'false', 'true', [], 2.0] as $sale) {
+    $item = $sjk->normalize(array_replace($listed, ['saleStatus' => $sale]), $sjkContext);
+    verify($item['availability'] !== 'available' && $item['stock_status'] === 'unknown' && $item['saleable_quantity'] === null, 'unverified sale-status types never become current stock');
 }
-foreach([null,0,3,true,false,1.0,[],'01',' 1'] as $shelf){
-    $item=$sjk->normalize(array_replace($listed,['shelfStatus'=>$shelf]),$sjkContext);
-    verify($item['availability']!=='available'&&$item['listing_status']==='unknown','unknown shelf enums never become listed stock');
+foreach ([null, 0, 3, true, false, 1.0, [], '01', ' 1'] as $shelf) {
+    $item = $sjk->normalize(array_replace($listed, ['shelfStatus' => $shelf]), $sjkContext);
+    verify($item['availability'] !== 'available' && $item['listing_status'] === 'unknown', 'unknown shelf enums never become listed stock');
 }
-foreach(['已下架','未上架','unknown-label',false,1,[]] as $name){
-    $item=$sjk->normalize(array_replace($listed,['shelfStatusName'=>$name]),$sjkContext);
-    verify($item['availability']==='unknown'&&$item['listing_status']==='unknown'&&$item['saleable_quantity']===null,'a conflicting or changed listing name cannot promote a row to sellable stock');
+foreach (['已下架', '未上架', 'unknown-label', false, 1, []] as $name) {
+    $item = $sjk->normalize(array_replace($listed, ['shelfStatusName' => $name]), $sjkContext);
+    verify($item['availability'] === 'unknown' && $item['listing_status'] === 'unknown' && $item['saleable_quantity'] === null, 'a conflicting or changed listing name cannot promote a row to sellable stock');
 }
-$changedTotal=skuPage([$listed,array_replace($listed,['id'=>'another-device'])],4,2);
-$totalError=failure(fn()=>(new SoujikeProvider(new InventoryMockTransport([$changedTotal])))->fetchPage(['token'=>'fixture'],['page'=>2,'source_total'=>3],['store_id'=>'36183','page_size'=>2]),'schema_changed');
-verify(str_contains($totalError->getMessage(),'总量发生变化'),'a page-to-page total change stops publication before interpreting rows');
-$invalidCursor=new InventoryMockTransport([]);
-failure(fn()=>(new SoujikeProvider($invalidCursor))->fetchPage(['token'=>'fixture'],['page'=>2,'source_total'=>'wrong'],['store_id'=>'36183','page_size'=>2]),'invalid_scope');
-verify($invalidCursor->calls===[],'invalid page-total proof is rejected before HTTP');
-failure(fn()=>$sjk->normalize(array_replace($listed,['storeId'=>'foreign']),$sjkContext),'scope_mismatch');
-$missingStore=$listed;unset($missingStore['storeId']);failure(fn()=>$sjk->normalize($missingStore,$sjkContext),'invalid_scope');
-failure(fn()=>(new SoujikeProvider(new InventoryMockTransport([skuPage([array_replace($listed,['storeId'=>'foreign'])],1)])))->fetchPage(['token'=>'fixture'],[],['store_id'=>'36183','page_size'=>2]),'scope_mismatch');
-$badPages=skuPage([$listed],1);$badPages['data']['pages']=2;
-failure(fn()=>(new SoujikeProvider(new InventoryMockTransport([$badPages])))->fetchPage(['token'=>'fixture'],[],['store_id'=>'36183','page_size'=>2]),'schema_changed');
-$gallery=array_replace($listed,['firstResIsVideo'=>true,'coverImage'=>'https://example.test/video.mp4','skuImageList'=>[['url'=>'https://example.test/video.mp4','id'=>'private-media-id'],['url'=>'https://example.test/real.jpg?size=300','name'=>'private-uploader'],['url'=>'https://example.test/unknown-resource'],['url'=>'javascript:alert(1)']]]);
-$galleryProvider=new SoujikeProvider(new InventoryMockTransport([skuPage([$gallery],1)]));
-$galleryRows=$galleryProvider->fetchPage(['token'=>'fixture'],[],['store_id'=>'36183','page_size'=>2]);
-$galleryItem=$galleryProvider->normalize($galleryRows['rows'][0],$sjkContext);
-verify($galleryItem['images']===['https://example.test/real.jpg?size=300']&&!preg_match('/video.mp4|private-media|private-uploader|unknown-resource|javascript/',json_encode($galleryItem)),'video-first gallery retains only subsequent proven images through fetch and normalization');
-failure(fn() => (new SoujikeProvider(new InventoryMockTransport([skuPage([$sku], 3)])))->fetchPage(['token' => 'fixture'], [], ['store_id' => '36183', 'page_size' => 2]), 'schema_changed');
-failure(fn() => (new ProviderRegistry())->get('unknown'), 'unsupported_provider');
+$changedTotal = skuPage([$listed, array_replace($listed, ['id' => 'another-device'])], 4, 2);
+$totalError = failure(fn () => (new SoujikeProvider(new InventoryMockTransport([$changedTotal])))->fetchPage(['token' => 'fixture'], ['page' => 2, 'source_total' => 3], ['store_id' => '36183', 'page_size' => 2]), 'schema_changed');
+verify(str_contains($totalError->getMessage(), '总量发生变化'), 'a page-to-page total change stops publication before interpreting rows');
+$invalidCursor = new InventoryMockTransport([]);
+failure(fn () => (new SoujikeProvider($invalidCursor))->fetchPage(['token' => 'fixture'], ['page' => 2, 'source_total' => 'wrong'], ['store_id' => '36183', 'page_size' => 2]), 'invalid_scope');
+verify($invalidCursor->calls === [], 'invalid page-total proof is rejected before HTTP');
+failure(fn () => $sjk->normalize(array_replace($listed, ['storeId' => 'foreign']), $sjkContext), 'scope_mismatch');
+$missingStore = $listed;
+unset($missingStore['storeId']);
+failure(fn () => $sjk->normalize($missingStore, $sjkContext), 'invalid_scope');
+failure(fn () => (new SoujikeProvider(new InventoryMockTransport([skuPage([array_replace($listed, ['storeId' => 'foreign'])], 1)])))->fetchPage(['token' => 'fixture'], [], ['store_id' => '36183', 'page_size' => 2]), 'scope_mismatch');
+$badPages = skuPage([$listed], 1);
+$badPages['data']['pages'] = 2;
+failure(fn () => (new SoujikeProvider(new InventoryMockTransport([$badPages])))->fetchPage(['token' => 'fixture'], [], ['store_id' => '36183', 'page_size' => 2]), 'schema_changed');
+$gallery = array_replace($listed, ['firstResIsVideo' => true, 'coverImage' => 'https://example.test/video.mp4', 'skuImageList' => [['url' => 'https://example.test/video.mp4', 'id' => 'private-media-id'], ['url' => 'https://example.test/real.jpg?size=300', 'name' => 'private-uploader'], ['url' => 'https://example.test/unknown-resource'], ['url' => 'javascript:alert(1)']]]);
+$galleryProvider = new SoujikeProvider(new InventoryMockTransport([skuPage([$gallery], 1)]));
+$galleryRows = $galleryProvider->fetchPage(['token' => 'fixture'], [], ['store_id' => '36183', 'page_size' => 2]);
+$galleryItem = $galleryProvider->normalize($galleryRows['rows'][0], $sjkContext);
+verify($galleryItem['images'] === ['https://example.test/real.jpg?size=300'] && !preg_match('/video.mp4|private-media|private-uploader|unknown-resource|javascript/', json_encode($galleryItem)), 'video-first gallery retains only subsequent proven images through fetch and normalization');
+failure(fn () => (new SoujikeProvider(new InventoryMockTransport([skuPage([$sku], 3)])))->fetchPage(['token' => 'fixture'], [], ['store_id' => '36183', 'page_size' => 2]), 'schema_changed');
+failure(fn () => (new ProviderRegistry())->get('unknown'), 'unsupported_provider');
 verify((new ProviderRegistry(new InventoryMockTransport([])))->get('wanjiguanjia')->key() === 'wanji', 'provider registry accepts documented alias');
 
-$sjkHistory=[];$sjkHandler=HandlerStack::create(new MockHandler([new Response(200,[],json_encode(skuPage([],0)))]));
+$sjkHistory = [];
+$sjkHandler = HandlerStack::create(new MockHandler([new Response(200, [], json_encode(skuPage([], 0)))]));
 $sjkHandler->push(Middleware::history($sjkHistory));
-$sjkHttp=new GuzzleJsonTransport(new Client(['handler'=>$sjkHandler]));
-$sjkHttp->post(SoujikeProvider::STOCK_ENDPOINT,['recovery-token'=>'synthetic-only'],['current'=>1,'size'=>2,'saleStatus'=>null,'isNew'=>null]);
-verify((string)$sjkHistory[0]['request']->getUri()==='https://www.dianddnet.cn/sjk-erp-service/api/sku/page'&&$sjkHistory[0]['request']->getMethod()==='POST','real transport explicitly permits only the verified new inventory request');
-verify(json_decode((string)$sjkHistory[0]['request']->getBody(),true)===['current'=>1,'size'=>2,'saleStatus'=>null,'isNew'=>null],'transport preserves JSON null filters rather than converting them to false or blank');
+$sjkHttp = new GuzzleJsonTransport(new Client(['handler' => $sjkHandler]));
+$sjkHttp->post(SoujikeProvider::STOCK_ENDPOINT, ['recovery-token' => 'synthetic-only'], ['current' => 1, 'size' => 2, 'saleStatus' => null, 'isNew' => null]);
+verify((string) $sjkHistory[0]['request']->getUri() === 'https://www.dianddnet.cn/sjk-erp-service/api/sku/page' && $sjkHistory[0]['request']->getMethod() === 'POST', 'real transport explicitly permits only the verified new inventory request');
+verify(json_decode((string) $sjkHistory[0]['request']->getBody(), true) === ['current' => 1, 'size' => 2, 'saleStatus' => null, 'isNew' => null], 'transport preserves JSON null filters rather than converting them to false or blank');
 
 // Transport options and decoding are exercised through the actual Guzzle request pipeline.
 $history = [];
-$rawResponse = '{"code":200,"id":9223372036854775808,"price":2000.01,"text":' . json_encode('20.01 "inside"') . ',"negative":-0.05,"exponent":1e3}';
+$rawResponse = '{"code":200,"id":9223372036854775808,"price":2000.01,"text":'.json_encode('20.01 "inside"').',"negative":-0.05,"exponent":1e3}';
 $handler = HandlerStack::create(new MockHandler([new Response(200, [], $rawResponse)]));
 $handler->push(Middleware::history($history));
 $http = new GuzzleJsonTransport(new Client(['handler' => $handler]));
@@ -233,30 +242,39 @@ verify($decoded['text'] === '20.01 "inside"', 'decimal rewriting never changes q
 verify(count($history) === 1 && $history[0]['request']->getMethod() === 'POST', 'one request, no retries');
 $options = $history[0]['options'];
 verify($options['allow_redirects'] === false && $options['verify'] === true && $options['timeout'] === 30 && $options['connect_timeout'] === 10, 'no redirects, verified TLS, bounded timeout');
-failure(fn() => $http->post('https://example.test/steal', ['Authorization' => 'Bearer fixture-token'], []), 'forbidden_endpoint');
+failure(fn () => $http->post('https://example.test/steal', ['Authorization' => 'Bearer fixture-token'], []), 'forbidden_endpoint');
 verify(count($history) === 1, 'unapproved endpoint never reaches HTTP client');
-failure(fn() => $http->post(WanjiProvider::STOCK_ENDPOINT, ['Authorization' => "bad\r\nheader"], []), 'invalid_credentials');
-foreach ([['not-json', 'schema_changed'], ['[]', 'schema_changed'], ['{"broken":', 'schema_changed']] as [$json, $reason]) failure(fn() => GuzzleJsonTransport::decode($json), $reason);
+failure(fn () => $http->post(WanjiProvider::STOCK_ENDPOINT, ['Authorization' => "bad\r\nheader"], []), 'invalid_credentials');
+foreach ([['not-json', 'schema_changed'], ['[]', 'schema_changed'], ['{"broken":', 'schema_changed']] as [$json, $reason]) failure(fn () => GuzzleJsonTransport::decode($json), $reason);
 $redirectHistory = [];
 $redirectHandler = HandlerStack::create(new MockHandler([new Response(302, ['Location' => 'https://example.test/steal'])]));
 $redirectHandler->push(Middleware::history($redirectHistory));
-failure(fn() => (new GuzzleJsonTransport(new Client(['handler' => $redirectHandler])))->post(WanjiProvider::STOCK_ENDPOINT, ['Authorization' => 'Bearer fixture-token'], []), 'http_error');
+failure(fn () => (new GuzzleJsonTransport(new Client(['handler' => $redirectHandler])))->post(WanjiProvider::STOCK_ENDPOINT, ['Authorization' => 'Bearer fixture-token'], []), 'http_error');
 verify(count($redirectHistory) === 1, 'redirect response is rejected without forwarding authorization');
 $expired = new GuzzleJsonTransport(new Client(['handler' => HandlerStack::create(new MockHandler([new Response(401, [], 'fixture-secret-response')]))]));
-failure(fn() => $expired->post(WanjiProvider::STOCK_ENDPOINT, [], []), 'auth_required');
+failure(fn () => $expired->post(WanjiProvider::STOCK_ENDPOINT, [], []), 'auth_required');
 $network = new GuzzleJsonTransport(new Client(['handler' => HandlerStack::create(new MockHandler([new ConnectException('fixture-secret-password', new Request('POST', WanjiProvider::STOCK_ENDPOINT))]))]));
-$networkError = failure(fn() => $network->post(WanjiProvider::STOCK_ENDPOINT, [], []), 'http_error');
+$networkError = failure(fn () => $network->post(WanjiProvider::STOCK_ENDPOINT, [], []), 'http_error');
 verify(!str_contains($networkError->getMessage(), 'fixture-secret'), 'network diagnostic never includes request or secret');
 $large = new GuzzleJsonTransport(new Client(['handler' => HandlerStack::create(new MockHandler([new Response(200, [], str_repeat(' ', 20 * 1024 * 1024 + 1))]))]));
-failure(fn() => $large->post(WanjiProvider::STOCK_ENDPOINT, [], []), 'response_too_large');
+failure(fn () => $large->post(WanjiProvider::STOCK_ENDPOINT, [], []), 'response_too_large');
 
 // The shared normalization contract validates explicit adapter proofs, never
 // arbitrary untrusted enum strings or guessed quantities from record presence.
 final class StockContractFixtureProvider extends \addon\hsx_lead\app\provider\AbstractProvider
 {
-    public function key(): string { return 'fixture'; }
-    public function login(array $credentials): array { return []; }
-    public function fetchPage(array $credentials, array $cursor, array $scope): array { return []; }
+    public function key(): string
+    {
+        return 'fixture';
+    }
+    public function login(array $credentials): array
+    {
+        return [];
+    }
+    public function fetchPage(array $credentials, array $cursor, array $scope): array
+    {
+        return [];
+    }
     public function normalize(array $row, array $context): array
     {
         return $this->common([], $context, array_replace(['id' => 'fixture-id', 'store_id' => 'fixture-store'], $row));
@@ -291,8 +309,8 @@ foreach ([null, '', '***', '-1', '1e3', '1.0001', 1.1, true, [], '999999999999']
     verify($item['quantity'] === null && $item['availability'] === 'unknown', 'unsupported or missing source quantities remain unknown');
 }
 foreach (['0' => '0.000', '2.5' => '2.500', '00012.003' => '12.003', '99999999999.999' => '99999999999.999'] as $sourceQuantity => $expectedQuantity) {
-    verify($stockContract->normalize(['quantity' => (string)$sourceQuantity], $stockContext)['quantity'] === $expectedQuantity,
+    verify($stockContract->normalize(['quantity' => (string) $sourceQuantity], $stockContext)['quantity'] === $expectedQuantity,
         'source quantity is an exact decimal within the existing database precision');
 }
 
-echo 'PASS ' . $checks . " read-only provider assertions; all HTTP mocked, no DB, no ERP mutation\n";
+echo 'PASS '.$checks." read-only provider assertions; all HTTP mocked, no DB, no ERP mutation\n";
